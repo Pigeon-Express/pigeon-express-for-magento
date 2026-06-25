@@ -1,0 +1,45 @@
+<!--
+  Pigeon Express: Office/APS location autocomplete.
+  Visible when shipping method is Office or APS. Selection from backend results only (no free text).
+-->
+<div class="pigeonexpress-location-autocomplete" data-bind="visible: isVisible(), if: isVisible()">
+    <div class="field pigeonexpress-location">
+        <label class="label" data-bind="attr: { for: uid }">
+            <span data-bind="i18n: 'Delivery location'"></span>
+        </label>
+        <div class="control">
+            <!-- Input only for search; selection must be from dropdown (no free text) -->
+            <input type="text"
+                   class="input-text"
+                   data-bind="
+                       value: searchQuery,
+                       valueUpdate: 'afterkeydown',
+                       event: { input: onSearchInput },
+                       attr: { placeholder: getPlaceholder() },
+                       visible: !selectedLocation()
+                   "
+                   autocomplete="off"
+                   role="combobox"
+                   aria-expanded="false"
+                   aria-haspopup="listbox" />
+            <span class="loading" data-bind="visible: isLoading">...</span>
+            <!-- Selected location: name + address (summary); Change clears and shows input again -->
+            <div class="pigeonexpress-selected" data-bind="visible: selectedLocation()">
+                <span data-bind="text: displayValue()"></span>
+                <button type="button" class="action clear" data-bind="click: clearSelection">
+                    <span data-bind="i18n: 'Change'"></span>
+                </button>
+            </div>
+            <ul class="pigeonexpress-results"
+                data-bind="visible: resultsVisible() && results().length > 0, foreach: results"
+                role="listbox">
+                <li role="option"
+                    data-bind="
+                        text: name + (address ? ', ' + address : ''),
+                        click: $parent.selectLocation.bind($parent, $data)
+                    "
+                    class="pigeonexpress-result-item"></li>
+            </ul>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,145 @@
+<?xml version="1.0"?>
+<!-- Pigeon Express Shipping - Offices and APS tables -->
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+    <table name="pigeonexpress_office" resource="default" engine="innodb" comment="Pigeon Express Offices">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="api_id" unsigned="true" nullable="false" comment="API Office ID"/>
+        <column xsi:type="varchar" name="name" length="255" nullable="false" comment="Office Name"/>
+        <column xsi:type="text" name="address" nullable="false" comment="Office Address"/>
+        <column xsi:type="int" name="city_id" unsigned="true" nullable="true" comment="City ID from API"/>
+        <column xsi:type="varchar" name="city" length="255" nullable="true" comment="City Name"/>
+        <column xsi:type="varchar" name="country" length="2" nullable="true" default="BG" comment="Country Code"/>
+        <column xsi:type="varchar" name="postcode" length="20" nullable="true" comment="Postcode"/>
+        <column xsi:type="decimal" name="latitude" scale="8" precision="10" nullable="true" comment="Latitude"/>
+        <column xsi:type="decimal" name="longitude" scale="8" precision="11" nullable="true" comment="Longitude"/>
+        <column xsi:type="smallint" name="is_active" unsigned="true" nullable="false" default="1" comment="Is Active"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_OFFICE_API_ID">
+            <column name="api_id"/>
+        </constraint>
+        <index referenceId="PIGEONEXPRESS_OFFICE_NAME" indexType="btree">
+            <column name="name"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_OFFICE_CITY" indexType="btree">
+            <column name="city"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_OFFICE_IS_ACTIVE" indexType="btree">
+            <column name="is_active"/>
+        </index>
+    </table>
+
+    <table name="pigeonexpress_aps" resource="default" engine="innodb" comment="Pigeon Express APS (Lockers)">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="api_id" unsigned="true" nullable="false" comment="API APS ID"/>
+        <column xsi:type="varchar" name="name" length="255" nullable="false" comment="APS Name"/>
+        <column xsi:type="text" name="address" nullable="false" comment="APS Address"/>
+        <column xsi:type="int" name="city_id" unsigned="true" nullable="true" comment="City ID from API"/>
+        <column xsi:type="varchar" name="city" length="255" nullable="true" comment="City Name"/>
+        <column xsi:type="varchar" name="country" length="2" nullable="true" default="BG" comment="Country Code"/>
+        <column xsi:type="varchar" name="postcode" length="20" nullable="true" comment="Postcode"/>
+        <column xsi:type="decimal" name="latitude" scale="8" precision="10" nullable="true" comment="Latitude"/>
+        <column xsi:type="decimal" name="longitude" scale="8" precision="11" nullable="true" comment="Longitude"/>
+        <column xsi:type="smallint" name="is_active" unsigned="true" nullable="false" default="1" comment="Is Active"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_APS_API_ID">
+            <column name="api_id"/>
+        </constraint>
+        <index referenceId="PIGEONEXPRESS_APS_NAME" indexType="btree">
+            <column name="name"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_APS_CITY" indexType="btree">
+            <column name="city"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_APS_IS_ACTIVE" indexType="btree">
+            <column name="is_active"/>
+        </index>
+    </table>
+
+    <table name="pigeonexpress_city" resource="default" engine="innodb" comment="Pigeon Express Cities">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="api_id" unsigned="true" nullable="false" comment="City ID from API"/>
+        <column xsi:type="varchar" name="name" length="255" nullable="false" default="" comment="City Name (Bulgarian)"/>
+        <column xsi:type="varchar" name="name_en" length="255" nullable="true" comment="City Name (English)"/>
+        <column xsi:type="varchar" name="postal_code" length="20" nullable="true" comment="Postal Code"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_CITY_API_ID">
+            <column name="api_id"/>
+        </constraint>
+        <index referenceId="PIGEONEXPRESS_CITY_NAME" indexType="btree">
+            <column name="name"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_CITY_POSTAL_CODE" indexType="btree">
+            <column name="postal_code"/>
+        </index>
+    </table>
+
+    <table name="pigeonexpress_quote_address" resource="default" engine="innodb" comment="Pigeon Express location per quote shipping address">
+        <column xsi:type="int" name="address_id" unsigned="true" nullable="false" comment="Quote Address ID (quote_address.address_id)"/>
+        <column xsi:type="varchar" name="pigeonexpress_delivery_type" length="32" nullable="true" comment="Delivery type: office, aps"/>
+        <column xsi:type="varchar" name="pigeonexpress_location_id" length="50" nullable="true" comment="Office/APS location ID"/>
+        <column xsi:type="varchar" name="pigeonexpress_location_name" length="255" nullable="true" comment="Location name"/>
+        <column xsi:type="text" name="pigeonexpress_location_address" nullable="true" comment="Location address"/>
+        <column xsi:type="text" name="pigeonexpress_instructions" nullable="true" comment="Delivery instructions"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="address_id"/>
+        </constraint>
+        <!-- No FK to quote_address: our plugin runs during quote save; the address row may not be committed yet -->
+    </table>
+
+    <table name="pigeonexpress_order_address" resource="default" engine="innodb" comment="Pigeon Express location per order shipping address">
+        <column xsi:type="int" name="address_id" unsigned="true" nullable="false" comment="Order Address ID (sales_order_address.entity_id)"/>
+        <column xsi:type="varchar" name="pigeonexpress_delivery_type" length="32" nullable="true" comment="Delivery type: office, aps"/>
+        <column xsi:type="varchar" name="pigeonexpress_location_id" length="50" nullable="true" comment="Office/APS location ID"/>
+        <column xsi:type="varchar" name="pigeonexpress_location_name" length="255" nullable="true" comment="Location name"/>
+        <column xsi:type="text" name="pigeonexpress_location_address" nullable="true" comment="Location address"/>
+        <column xsi:type="text" name="pigeonexpress_instructions" nullable="true" comment="Delivery instructions"/>
+        <column xsi:type="decimal" name="pigeonexpress_delivery_price" precision="12" scale="4" nullable="true" comment="Delivery price at order place"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="address_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="PIGEONEXPRESS_ORDER_ADDRESS_ADDRESS_ID_SALES_ORDER_ADDRESS_ENTITY_ID"
+                   table="pigeonexpress_order_address" column="address_id"
+                   referenceTable="sales_order_address" referenceColumn="entity_id" onDelete="CASCADE"/>
+    </table>
+
+    <table name="sales_order" resource="default">
+        <column xsi:type="decimal" name="pigeonexpress_cod_fee" precision="12" scale="4" nullable="true"
+                comment="Pigeon Express COD Fee (2.5% of subtotal)"/>
+    </table>
+
+    <table name="pigeonexpress_shipment" resource="default" engine="innodb" comment="Pigeon Express Shipments">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="order_id" unsigned="true" nullable="false" comment="Order ID (sales_order.entity_id)"/>
+        <column xsi:type="varchar" name="reference_number" length="100" nullable="true" comment="PE Reference Number (e.g. PGN-2026-00012345)"/>
+        <column xsi:type="varchar" name="tracking_number" length="100" nullable="true" comment="Tracking Number"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="sent" comment="Shipment Status"/>
+        <column xsi:type="decimal" name="delivery_price" precision="12" scale="4" nullable="true" comment="Delivery Price"/>
+        <column xsi:type="text" name="payload" nullable="true" comment="JSON of request sent to API"/>
+        <column xsi:type="text" name="response" nullable="true" comment="JSON of API response"/>
+        <column xsi:type="timestamp" name="sent_at" on_update="false" nullable="true" default="CURRENT_TIMESTAMP" comment="Sent At"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="PIGEONEXPRESS_SHIPMENT_ORDER_ID_SALES_ORDER_ENTITY_ID"
+                   table="pigeonexpress_shipment" column="order_id"
+                   referenceTable="sales_order" referenceColumn="entity_id" onDelete="CASCADE"/>
+        <index referenceId="PIGEONEXPRESS_SHIPMENT_ORDER_ID" indexType="btree">
+            <column name="order_id"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_SHIPMENT_REFERENCE_NUMBER" indexType="btree">
+            <column name="reference_number"/>
+        </index>
+    </table>
+</schema>

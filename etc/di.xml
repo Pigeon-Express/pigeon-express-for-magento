@@ -1,0 +1,147 @@
+<?xml version="1.0"?>
+<!-- Pigeon Express Shipping - DI -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- Custom log file: var/log/pigeonexpress.log -->
+    <type name="PigeonExpress\Shipping\Logger\Handler">
+        <arguments>
+            <argument name="filesystem" xsi:type="object">Magento\Framework\Filesystem\Driver\File</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Logger\Logger">
+        <arguments>
+            <argument name="name" xsi:type="string">PigeonExpress</argument>
+            <argument name="handlers" xsi:type="array">
+                <item name="pigeonexpress" xsi:type="object">PigeonExpress\Shipping\Logger\Handler</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Api\LocationsClient">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Api\RateClient">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Api\ShipmentClient">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\ShipmentSender">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Api\AddressResolver">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Rate\RateCollector">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Cron\SyncLocations">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\LocationSync">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Plugin\Shipping\ShippingLogPlugin">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Carrier\PigeonExpress">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Controller\Adminhtml\Order\Send">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <preference for="PigeonExpress\Shipping\Api\ConfigInterface"
+                type="PigeonExpress\Shipping\Model\Config\ConfigProvider"/>
+    <preference for="PigeonExpress\Shipping\Api\LocationsClientInterface"
+                type="PigeonExpress\Shipping\Model\Api\LocationsClient"/>
+    <preference for="PigeonExpress\Shipping\Api\RateClientInterface"
+                type="PigeonExpress\Shipping\Model\Api\RateClient"/>
+    <preference for="PigeonExpress\Shipping\Api\ShipmentClientInterface"
+                type="PigeonExpress\Shipping\Model\Api\ShipmentClient"/>
+    <preference for="PigeonExpress\Shipping\Api\ShipmentSenderInterface"
+                type="PigeonExpress\Shipping\Model\ShipmentSender"/>
+    <preference for="PigeonExpress\Shipping\Api\LocationSyncInterface"
+                type="PigeonExpress\Shipping\Model\LocationSync"/>
+    <preference for="PigeonExpress\Shipping\Api\LocationSearchInterface"
+                type="PigeonExpress\Shipping\Model\LocationSearch"/>
+<type name="Magento\Checkout\Model\ShippingInformationManagement">
+        <plugin name="pigeonexpress_validate_shipping" sortOrder="5"
+                type="PigeonExpress\Shipping\Plugin\Checkout\ShippingInformationManagementValidationPlugin"/>
+        <plugin name="pigeonexpress_save_address_extension" sortOrder="20"
+                type="PigeonExpress\Shipping\Plugin\Checkout\ShippingInformationManagementPlugin"/>
+    </type>
+    <type name="Magento\Quote\Model\Quote\Address\ToOrderAddress">
+        <plugin name="pigeonexpress_quote_to_order_address"
+                type="PigeonExpress\Shipping\Plugin\Quote\AddressToOrderAddressPlugin"/>
+    </type>
+    <type name="Magento\Quote\Model\QuoteManagement">
+        <plugin name="pigeonexpress_validate_place_order" sortOrder="10"
+                type="PigeonExpress\Shipping\Plugin\Quote\QuoteManagementPlugin"/>
+    </type>
+    <type name="Magento\Checkout\Block\Checkout\LayoutProcessor">
+        <plugin name="pigeonexpress_checkout_layout"
+                type="PigeonExpress\Shipping\Plugin\Checkout\LayoutProcessorPlugin"/>
+    </type>
+    <type name="Magento\Shipping\Model\Shipping">
+        <plugin name="pigeonexpress_shipping_log"
+                type="PigeonExpress\Shipping\Plugin\Shipping\ShippingLogPlugin"/>
+    </type>
+    <!-- Persist Pigeon Express location on quote address (so it survives into place-order request) -->
+    <type name="Magento\Quote\Model\Quote">
+        <plugin name="pigeonexpress_quote_get_shipping_address" sortOrder="10"
+                type="PigeonExpress\Shipping\Plugin\Quote\QuoteShippingAddressPlugin"/>
+    </type>
+    <type name="Magento\Quote\Model\Quote\Address">
+        <plugin name="pigeonexpress_quote_address_save" sortOrder="10"
+                type="PigeonExpress\Shipping\Plugin\Quote\QuoteAddressSavePlugin"/>
+    </type>
+    <type name="Magento\Quote\Model\ResourceModel\Quote\Address">
+        <plugin name="pigeonexpress_quote_address_load" sortOrder="10"
+                type="PigeonExpress\Shipping\Plugin\Quote\QuoteAddressLoadPlugin"/>
+    </type>
+    <!-- Persist Pigeon Express location on order address (for admin, emails, etc.) -->
+    <type name="Magento\Sales\Model\Order\Address">
+        <plugin name="pigeonexpress_order_address_save" sortOrder="10"
+                type="PigeonExpress\Shipping\Plugin\Sales\OrderAddressSavePlugin"/>
+    </type>
+    <type name="Magento\Sales\Model\ResourceModel\Order\Address">
+        <plugin name="pigeonexpress_order_address_load" sortOrder="10"
+                type="PigeonExpress\Shipping\Plugin\Sales\OrderAddressLoadPlugin"/>
+    </type>
+    <type name="Magento\Checkout\Model\CompositeConfigProvider">
+        <arguments>
+            <argument name="configProviders" xsi:type="array">
+                <item name="pigeonexpress_checkout" xsi:type="object">PigeonExpress\Shipping\Model\CheckoutConfigProvider</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="Magento\Quote\Model\Quote\Address\ToOrder">
+        <plugin name="pigeonexpress_cod_fee_to_order"
+                type="PigeonExpress\Shipping\Plugin\Quote\ToOrderPlugin"/>
+    </type>
+    <type name="Magento\Sales\Model\Order\Email\Sender\OrderSender">
+        <plugin name="pigeonexpress_order_email_template" sortOrder="10"
+                type="PigeonExpress\Shipping\Plugin\Sales\Order\Email\OrderSenderPlugin"/>
+    </type>
+</config>

@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <event name="sales_order_place_after">
+        <observer name="pigeonexpress_order_instructions" instance="PigeonExpress\Shipping\Observer\Sales\OrderPlaceAfter" />
+    </event>
+    <event name="email_order_set_template_vars_before">
+        <observer name="pigeonexpress_email_order_template_vars" instance="PigeonExpress\Shipping\Observer\Email\OrderTemplateVars" />
+    </event>
+</config>

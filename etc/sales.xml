@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Sales:etc/sales.xsd">
+    <section name="quote">
+        <group name="totals">
+            <item name="pigeonexpress_cod_fee"
+                  instance="PigeonExpress\Shipping\Model\Total\Quote\CodFee"
+                  sort_order="450"/>
+        </group>
+    </section>
+</config>

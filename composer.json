@@ -1,0 +1,23 @@
+{
+    "name": "pigeonexpress/module-shipping",
+    "description": "Pigeon Express courier shipping integration for Magento 2",
+    "type": "magento2-module",
+    "license": "OSL-3.0",
+    "require": {
+        "php": "~8.1.0||~8.2.0||~8.3.0",
+        "magento/framework": "*",
+        "magento/module-shipping": "*",
+        "magento/module-quote": "*",
+        "magento/module-store": "*",
+        "magento/module-config": "*",
+        "pigeonexpress/php-sdk": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "PigeonExpress\\Shipping\\": ""
+        },
+        "files": [
+            "registration.php"
+        ]
+    }
+}

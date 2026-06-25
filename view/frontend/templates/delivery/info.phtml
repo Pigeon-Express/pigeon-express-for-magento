@@ -1,0 +1,25 @@
+<?php
+/**
+ * @var \PigeonExpress\Shipping\Block\Delivery\Info $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<?php if ($block->isPigeonExpress()) : ?>
+<div class="pigeonexpress-delivery-info block">
+    <h3 class="pigeonexpress-delivery-info-title"><?= $escaper->escapeHtml(__('Delivery (Pigeon Express)')) ?></h3>
+    <dl class="pigeonexpress-delivery-details">
+        <dt class="pigeonexpress-delivery-type"><?= $escaper->escapeHtml(__('Type')) ?></dt>
+        <dd class="pigeonexpress-delivery-type-value"><?= $escaper->escapeHtml($block->getDeliveryTypeLabel()) ?></dd>
+        <?php if ($block->getLocationName() !== '' || $block->getLocationAddress() !== '') : ?>
+        <dt class="pigeonexpress-delivery-location"><?= $escaper->escapeHtml(__('Location')) ?></dt>
+        <dd class="pigeonexpress-delivery-location-value">
+            <?php if ($block->getLocationName() !== '') : ?>
+                <strong><?= $escaper->escapeHtml($block->getLocationName()) ?></strong>
+                <?php if ($block->getLocationAddress() !== '') : ?> — <?php endif; ?>
+            <?php endif; ?>
+            <?= $escaper->escapeHtml($block->getLocationAddress()) ?>
+        </dd>
+        <?php endif; ?>
+    </dl>
+</div>
+<?php endif; ?>

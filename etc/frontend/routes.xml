@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<!-- Checkout autocomplete: frontend route (customer session). -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:App/etc/routes.xsd">
+    <router id="standard">
+        <route id="pigeonexpress" frontName="pigeonexpress">
+            <module name="PigeonExpress_Shipping" before="Magento_Checkout"/>
+        </route>
+    </router>
+</config>

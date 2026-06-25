@@ -1,0 +1,63 @@
+<?xml version="1.0"?>
+<!--
+ * Pigeon Express Shipping - Default carrier configuration.
+ * Carrier code: pigeonexpress (avoids conflicts with other methods).
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <carriers>
+            <pigeonexpress>
+                <active>0</active>
+                <model>PigeonExpress\Shipping\Model\Carrier\PigeonExpress</model>
+                <title>Pigeon Express</title>
+                <name>Pigeon Express</name>
+                <specificerrmsg>This shipping method is currently unavailable. Please contact us.</specificerrmsg>
+                <sallowspecific>0</sallowspecific>
+                <showmethod>1</showmethod>
+                <!-- General (Stage 2: dynamic rates via API) -->
+                <api_key></api_key>
+                <api_secret></api_secret>
+                <test_mode>1</test_mode>
+                <enable_logging>0</enable_logging>
+                <cod_payment_methods></cod_payment_methods>
+                <!-- Additional Services -->
+                <service_special_packaging>0</service_special_packaging>
+                <service_return_at_my_expense>0</service_return_at_my_expense>
+                <service_requires_signature>0</service_requires_signature>
+                <service_declared_value>0</service_declared_value>
+                <service_return_receipt>0</service_return_receipt>
+                <service_return_documents>0</service_return_documents>
+                <!-- Delivery type: Address -->
+                <address_enabled>1</address_enabled>
+                <address_title>Address Delivery</address_title>
+                <address_note></address_note>
+                <address_pricing_mode>fixed</address_pricing_mode>
+                <address_flat_rate>0</address_flat_rate>
+                <address_review_and_test>no</address_review_and_test>
+                <!-- Delivery type: Office -->
+                <office_enabled>1</office_enabled>
+                <office_title>Office Delivery</office_title>
+                <office_note></office_note>
+                <office_pricing_mode>fixed</office_pricing_mode>
+                <office_flat_rate>0</office_flat_rate>
+                <office_review_and_test>no</office_review_and_test>
+                <!-- Delivery type: APS -->
+                <aps_enabled>1</aps_enabled>
+                <aps_title>APS (Parcel Locker)</aps_title>
+                <aps_note></aps_note>
+                <aps_pricing_mode>fixed</aps_pricing_mode>
+                <aps_flat_rate>0</aps_flat_rate>
+                <!-- Autocomplete: limit results from local DB (offices/APS) -->
+                <location_search_limit>20</location_search_limit>
+                <!-- Place of shipment (pickup) for rate calculation -->
+                <pickup_type>office</pickup_type>
+                <!-- Default dimensions/weight fallback (0 = hide method when product has no value) -->
+                <default_weight>0</default_weight>
+                <default_length>0</default_length>
+                <default_width>0</default_width>
+                <default_height>0</default_height>
+            </pigeonexpress>
+        </carriers>
+    </default>
+</config>

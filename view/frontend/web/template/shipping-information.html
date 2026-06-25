@@ -1,0 +1,48 @@
+<!--
+/**
+ * Override: show Pigeon Express location and comment under shipping method.
+ * @see Magento_Checkout/shipping-information
+ */
+-->
+<!-- ko if: (isVisible()) -->
+<div class="shipping-information">
+    <!-- ko if: typeof isStorePickup !== 'function' || !isStorePickup() -->
+    <div class="ship-to">
+        <div class="shipping-information-title">
+            <span data-bind="i18n: 'Ship To:'"></span>
+            <button class="action action-edit" data-bind="click: back">
+                <span data-bind="i18n: 'edit'"></span>
+            </button>
+        </div>
+        <div class="shipping-information-content">
+            <!-- ko foreach: getRegion('ship-to') -->
+            <!-- ko template: getTemplate() --><!-- /ko -->
+            <!--/ko-->
+        </div>
+    </div>
+    <!-- /ko -->
+    <div class="ship-via">
+        <div class="shipping-information-title">
+            <span data-bind="i18n: 'Shipping Method:'"></span>
+            <button class="action action-edit" data-bind="click: backToShippingMethod">
+                <span data-bind="i18n: 'edit'"></span>
+            </button>
+        </div>
+        <div class="shipping-information-content">
+            <span class="value" data-bind="text: getShippingMethodTitle()"></span>
+            <!-- ko if: isPigeonExpressShipping() && (getPigeonExpressLocation() || getPigeonExpressInstructions()) -->
+            <div class="pigeonexpress-shipping-details" style="margin-top: 8px;">
+                <!-- ko if: getPigeonExpressLocation() -->
+                <div class="pigeonexpress-location" data-bind="text: getPigeonExpressLocation()"></div>
+                <!-- /ko -->
+                <!-- ko if: getPigeonExpressInstructions() -->
+                <div class="pigeonexpress-instructions-note" style="margin-top: 4px; font-style: italic;">
+                    <span data-bind="i18n: 'Comment'"></span>: <span data-bind="text: getPigeonExpressInstructions()"></span>
+                </div>
+                <!-- /ko -->
+            </div>
+            <!-- /ko -->
+        </div>
+    </div>
+</div>
+<!--/ko-->

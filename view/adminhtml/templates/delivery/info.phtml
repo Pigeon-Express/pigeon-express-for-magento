@@ -1,0 +1,82 @@
+<?php
+/**
+ * Admin order view: Pigeon Express delivery details.
+ * @var \PigeonExpress\Shipping\Block\Delivery\Info $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<?php if ($block->isPigeonExpress()) : ?>
+<section class="admin__page-section pigeonexpress-delivery-info">
+    <div class="admin__page-section-title">
+        <span class="title"><?= $escaper->escapeHtml(__('Delivery (Pigeon Express)')) ?></span>
+    </div>
+    <div class="admin__page-section-content">
+        <table class="admin__table-secondary order-information-table">
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Delivery Type')) ?></th>
+                <td><?= $escaper->escapeHtml($block->getDeliveryTypeLabel()) ?></td>
+            </tr>
+            <?php if ($block->getLocationName() !== '' || $block->getLocationAddress() !== '') : ?>
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Location')) ?></th>
+                <td>
+                    <?php if ($block->getLocationName() !== '') : ?>
+                        <strong><?= $escaper->escapeHtml($block->getLocationName()) ?></strong>
+                        <?php if ($block->getLocationAddress() !== '') : ?><br/><?php endif; ?>
+                    <?php endif; ?>
+                    <?= $escaper->escapeHtml(nl2br((string)$block->getLocationAddress()), ['br']) ?>
+                </td>
+            </tr>
+            <?php endif; ?>
+            <?php if ($block->getFormattedDeliveryPrice() !== '') : ?>
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Delivery Price')) ?></th>
+                <td><?= /* @noEscape — formatPrice() returns trusted Magento HTML (currency span) */ $block->getFormattedDeliveryPrice() ?></td>
+            </tr>
+            <?php endif; ?>
+        </table>
+    </div>
+</section>
+
+<?php $existingShipment = $block->getExistingShipment(); ?>
+<?php if ($existingShipment) : ?>
+<section class="admin__page-section pigeonexpress-shipment-info">
+    <div class="admin__page-section-title">
+        <span class="title"><?= $escaper->escapeHtml(__('Pigeon Express Shipment')) ?></span>
+    </div>
+    <div class="admin__page-section-content">
+        <table class="admin__table-secondary">
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Reference Number')) ?></th>
+                <td><?= $escaper->escapeHtml($existingShipment->getReferenceNumber()) ?></td>
+            </tr>
+            <?php if ($existingShipment->getTrackingNumber()) : ?>
+            <tr>
+                <th><?= $escaper->escapeHtml(__('Tracking Number')) ?></th>
+                <td><?= $escaper->escapeHtml($existingShipment->getTrackingNumber()) ?></td>
+            </tr>
+            <?php endif; ?>
+        </table>
+    </div>
+</section>
+<?php elseif ($block->getSendUrl() !== '') : ?>
+<section class="admin__page-section pigeonexpress-send-section">
+    <div class="admin__page-section-content">
+        <form action="<?= $escaper->escapeUrl($block->getSendUrl()) ?>" method="post">
+            <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
+            <div style="margin-bottom:8px;">
+                <label for="pe_receiver_phone" style="display:block;font-weight:600;margin-bottom:4px;">
+                    <?= $escaper->escapeHtml(__('Receiver Phone')) ?>
+                </label>
+                <input type="text" id="pe_receiver_phone" name="receiver_phone"
+                       value="<?= $escaper->escapeHtmlAttr($block->getNormalizedReceiverPhone()) ?>"
+                       style="width:220px;" class="input-text"/>
+            </div>
+            <button type="submit" class="action-default scalable action-primary" title="<?= $escaper->escapeHtmlAttr(__('Send to Pigeon Express')) ?>">
+                <span><?= $escaper->escapeHtml(__('Send to Pigeon Express')) ?></span>
+            </button>
+        </form>
+    </div>
+</section>
+<?php endif; ?>
+<?php endif; ?>

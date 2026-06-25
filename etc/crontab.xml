@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- Pigeon Express Shipping - daily sync of Offices and APS -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Cron:etc/crontab.xsd">
+    <group id="pigeonexpress">
+        <job name="pigeonexpress_sync_locations"
+             instance="PigeonExpress\Shipping\Model\Cron\SyncLocations"
+             method="execute">
+            <schedule>0 2 * * *</schedule>
+            <!-- <schedule>* * * * *</schedule> -->
+        </job>
+    </group>
+</config>

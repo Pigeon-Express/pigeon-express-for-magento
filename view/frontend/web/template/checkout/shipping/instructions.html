@@ -1,0 +1,19 @@
+<!--
+  Pigeon Express: delivery instructions. Visible when Pigeon Express is selected.
+-->
+<div class="field pigeonexpress-instructions" data-bind="visible: isVisible(), if: isVisible()">
+    <label class="label" for="pigeonexpress-instructions">
+        <span data-bind="i18n: 'Delivery instructions'"></span>
+    </label>
+    <div class="control">
+        <textarea id="pigeonexpress-instructions"
+                  class="input-text"
+                  rows="3"
+                  data-bind="
+                      value: instructions,
+                      valueUpdate: 'afterkeydown',
+                      attr: { placeholder: $t('Optional instructions for the courier (e.g. door code, floor).') }
+                  "
+                  maxlength="500"></textarea>
+    </div>
+</div>

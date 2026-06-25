@@ -1,0 +1,52 @@
+/**
+ * Pigeon Express checkout: Office/APS location autocomplete (selection only, no free text).
+ */
+
+/* When Office or APS is selected, hide standard address fields (street, city, region, postcode, country). */
+body.pigeonexpress-office-or-aps-selected .field.street,
+body.pigeonexpress-office-or-aps-selected .field.city,
+body.pigeonexpress-office-or-aps-selected .field.region,
+body.pigeonexpress-office-or-aps-selected .field.region_id,
+body.pigeonexpress-office-or-aps-selected .field.postcode,
+body.pigeonexpress-office-or-aps-selected .field.zip,
+body.pigeonexpress-office-or-aps-selected .field.country,
+body.pigeonexpress-office-or-aps-selected .field.country_id {
+    display: none !important;
+}
+
+/* When Pigeon Express is selected, show telephone as required. */
+body.pigeonexpress-telephone-required .field.telephone .label:after {
+    content: ' *';
+    color: #e02b27;
+}
+
+/* When any Pigeon Express method is selected, hide all saved address cards except the last (new) one. */
+body.pigeonexpress-shipping-active .shipping-address-item:not(:last-child) {
+    display: none !important;
+}
+
+/* Shared autocomplete styles (location). */
+.pigeonexpress-location-autocomplete .pigeonexpress-results {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #ccc;
+    background: #fff;
+    max-height: 200px;
+    overflow-y: auto;
+    position: relative;
+    z-index: 100;
+}
+.pigeonexpress-location-autocomplete .pigeonexpress-result-item {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+}
+.pigeonexpress-location-autocomplete .pigeonexpress-result-item:hover {
+    background: #f5f5f5;
+}
+.pigeonexpress-location-autocomplete .pigeonexpress-selected {
+    margin-top: 0.5rem;
+}
+.pigeonexpress-location-autocomplete .loading {
+    margin-left: 0.5rem;
+}

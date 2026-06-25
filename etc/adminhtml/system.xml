@@ -1,0 +1,392 @@
+<?xml version="1.0"?>
+<!--
+ * Pigeon Express Shipping - Admin configuration.
+ * Store-view scoped where appropriate; prepared for rate quote, waybills, tracking.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="carriers" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="1000" translate="label">
+            <group id="pigeonexpress" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="200" translate="label">
+                <label>Pigeon Express</label>
+
+                <!-- General settings -->
+                <field id="active" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="10" translate="label" type="select">
+                    <label>Enable</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Enable or disable the Pigeon Express shipping carrier.</comment>
+                </field>
+                <field id="title" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="15" translate="label" type="text">
+                    <label>Carrier Title</label>
+                    <comment>Default carrier title (can be overridden per store).</comment>
+                </field>
+                <field id="name" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="16" translate="label" type="text">
+                    <label>Carrier Name</label>
+                </field>
+                <field id="api_key" showInDefault="1" showInStore="0" showInWebsite="1" sortOrder="20" translate="label" type="obscure">
+                    <label>API Key</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Pigeon Express API key (X-API-Key).</comment>
+                </field>
+                <field id="api_secret" showInDefault="1" showInStore="0" showInWebsite="1" sortOrder="21" translate="label" type="obscure">
+                    <label>API Secret</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                    <comment>Pigeon Express API secret (X-API-Secret). If empty, API Key is used for both.</comment>
+                </field>
+                <field id="test_mode" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="25" translate="label" type="select">
+                    <label>Test Mode</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Use test/sandbox environment when enabled.</comment>
+                </field>
+                <field id="enable_logging" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="30" translate="label" type="select">
+                    <label>Enable Logging / Error Handling</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Log API requests and errors for debugging.</comment>
+                </field>
+                <field id="specificerrmsg" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="35" translate="label" type="textarea">
+                    <label>Displayed Error Message</label>
+                    <comment>Message shown when the method is unavailable.</comment>
+                </field>
+                <field id="sallowspecific" showInDefault="0" showInStore="0" showInWebsite="0" sortOrder="40" translate="label" type="select">
+                    <label>Ship to Applicable Countries</label>
+                    <frontend_class>shipping-applicable-country</frontend_class>
+                    <source_model>Magento\Shipping\Model\Config\Source\Allspecificcountries</source_model>
+                </field>
+                <field id="specificcountry" showInDefault="0" showInStore="0" showInWebsite="0" sortOrder="45" translate="label" type="multiselect">
+                    <label>Ship to Specific Countries</label>
+                    <can_be_empty>1</can_be_empty>
+                    <source_model>Magento\Directory\Model\Config\Source\Country</source_model>
+                </field>
+
+                <!-- Additional Services -->
+                <field id="separator_additional_services" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="60" type="note">
+                    <label/>
+                    <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\Separator</frontend_model>
+                </field>
+                <field id="cod_payment_methods" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="60" translate="label" type="multiselect">
+                    <label>COD Payment Methods</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\PaymentMethods</source_model>
+                    <comment>Payment methods that trigger a COD fee (2.5% of subtotal, minimum 0.80). The fee is added to the shipping cost.</comment>
+                    <depends><field id="active">1</field></depends>
+                </field>
+                <field id="additional_services_note" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="61" type="note">
+                    <label>Additional Services</label>
+                    <comment>Global services applied to all shipments. You can see current prices on the Pigeon Express website or per your agreed terms.</comment>
+                </field>
+
+                <field id="service_return_at_my_expense" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="64" translate="label" type="select">
+                    <label>Paper Return Receipt</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Request for a paper return receipt (at sender's expense).</comment>
+                    <depends><field id="active">1</field></depends>
+                </field>
+                <field id="service_requires_signature" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="65" translate="label" type="select">
+                    <label>ID Verification and Document Signature</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Verify ID and sign documents electronically.</comment>
+                    <depends><field id="active">1</field></depends>
+                </field>
+                <field id="service_special_packaging" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="66" translate="label" type="select">
+                    <label>Special Packaging</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Requires special packaging (requires_special_packaging). Enable only after Pigeon Express activates this service.</comment>
+                    <depends><field id="active">1</field></depends>
+                </field>
+                <field id="service_declared_value" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="67" translate="label" type="text">
+                    <label>Declared Value</label>
+                    <comment>Fixed declared value amount sent to PE API (Разширена застраховка). Leave empty to disable.</comment>
+                    <depends><field id="active">1</field></depends>
+                    <validate>validate-number validate-zero-or-greater</validate>
+                </field>
+                <field id="service_return_receipt" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="68" translate="label" type="select">
+                    <label>Digital Return Receipt</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Request for a return receipt in electronic format.</comment>
+                    <depends><field id="active">1</field></depends>
+                </field>
+                <field id="service_return_documents" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="68" translate="label" type="select">
+                    <label>Service Return Documents</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Return of original documents from the recipient to the sender after signing.</comment>
+                    <depends><field id="active">1</field></depends>
+                </field>
+
+                <!-- Delivery type: Address -->
+                <field id="address_enabled" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="100" translate="label" type="select">
+                    <label>Address Delivery: Enable</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Enable delivery to address.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="address_title" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="101" translate="label" type="text">
+                    <label>Address Delivery: Title</label>
+                    <comment>Label shown at checkout for this delivery type.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="address_note" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="102" translate="label" type="textarea">
+                    <label>Address Delivery: Note / Description</label>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="address_pricing_mode" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="103" translate="label" type="select">
+                    <label>Address Delivery: Pricing Mode</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\PricingMode</source_model>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="address_flat_rate" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="104" translate="label" type="text">
+                    <label>Address Delivery: Flat Rate Price</label>
+                    <validate>validate-zero-or-greater validate-number</validate>
+                    <comment>Used only when Pricing Mode is Fixed.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="address_review_and_test" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="105" translate="label" type="select">
+                    <label>Address Delivery: Review and Test</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\ReviewAndTest</source_model>
+                    <comment>Allow recipient to review and test the shipment before payment (shipment_test_before_payment). Not available for APS.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+
+                <!-- Delivery type: Office -->
+                <field id="office_enabled" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="110" translate="label" type="select">
+                    <label>Office Delivery: Enable</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="office_title" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="111" translate="label" type="text">
+                    <label>Office Delivery: Title</label>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="office_note" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="112" translate="label" type="textarea">
+                    <label>Office Delivery: Note / Description</label>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="office_pricing_mode" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="113" translate="label" type="select">
+                    <label>Office Delivery: Pricing Mode</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\PricingMode</source_model>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="office_flat_rate" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="114" translate="label" type="text">
+                    <label>Office Delivery: Flat Rate Price</label>
+                    <validate>validate-zero-or-greater validate-number</validate>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="office_review_and_test" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="115" translate="label" type="select">
+                    <label>Office Delivery: Review and Test</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\ReviewAndTest</source_model>
+                    <comment>Allow recipient to review and test the shipment before payment (shipment_test_before_payment). Not available for APS.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+
+                <!-- Delivery type: APS -->
+                <field id="aps_enabled" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="120" translate="label" type="select">
+                    <label>APS (Parcel Locker): Enable</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="aps_title" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="121" translate="label" type="text">
+                    <label>APS (Parcel Locker): Title</label>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="aps_note" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="122" translate="label" type="textarea">
+                    <label>APS (Parcel Locker): Note / Description</label>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="aps_pricing_mode" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="123" translate="label" type="select">
+                    <label>APS (Parcel Locker): Pricing Mode</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\PricingMode</source_model>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="aps_flat_rate" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="124" translate="label" type="text">
+                    <label>APS (Parcel Locker): Flat Rate Price</label>
+                    <validate>validate-zero-or-greater validate-number</validate>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+
+                <field id="separator_location" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="128" type="note">
+                    <label/>
+                    <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\Separator</frontend_model>
+                </field>
+                <field id="location_search_limit" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="130" translate="label" type="text">
+                    <label>Location autocomplete: max results</label>
+                    <validate>validate-zero-or-greater validate-number</validate>
+                    <comment>Max number of Office/APS results in checkout autocomplete (e.g. 10–20).</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+
+                <!-- Place of shipment (pickup) for rate calculation -->
+                <field id="pickup_type" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="132" translate="label" type="select">
+                    <label>Place of shipment (pickup)</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupType</source_model>
+                    <comment>From where you hand over parcels to Pigeon Express. Used for rate calculation so pickup and delivery are different.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="pickup_office_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="133" translate="label" type="select">
+                    <label>Pickup office</label>
+                    <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\SearchableSelect</frontend_model>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupOffice</source_model>
+                    <comment>Pigeon Express office where you drop off shipments. Required when Place of shipment is Office.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                        <field id="pickup_type">office</field>
+                    </depends>
+                </field>
+                <field id="sync_button" sortOrder="150" type="button"
+                       showInDefault="1" showInStore="0" showInWebsite="0"
+                       translate="label">
+                    <label>Location Sync</label>
+                    <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\SyncButton</frontend_model>
+                    <comment>Schedules a manual sync of offices and APS lockers from Pigeon Express API. Runs on the next cron tick (~1 min).</comment>
+                </field>
+
+                <!-- Pickup address (when pickup type = Address) -->
+                <field id="pickup_address_city_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="134" translate="label" type="text">
+                    <label>Pickup address: City ID</label>
+                    <comment>PE city ID. Filled by autocomplete or enter manually.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                        <field id="pickup_type">address</field>
+                    </depends>
+                </field>
+                <field id="pickup_address_city_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="135" translate="label" type="text">
+                    <label>Pickup address: City (display)</label>
+                    <depends>
+                        <field id="active">1</field>
+                        <field id="pickup_type">address</field>
+                    </depends>
+                </field>
+                <field id="pickup_address_street_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label" type="text">
+                    <label>Pickup address: Street ID</label>
+                    <comment>PE street ID for selected city. Optional if using address line as additional_info.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                        <field id="pickup_type">address</field>
+                    </depends>
+                </field>
+                <field id="pickup_address_street_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="137" translate="label" type="text">
+                    <label>Pickup address: Street (display)</label>
+                    <depends>
+                        <field id="active">1</field>
+                        <field id="pickup_type">address</field>
+                    </depends>
+                </field>
+                <field id="pickup_address_street_number" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="138" translate="label" type="text">
+                    <label>Pickup address: Street number</label>
+                    <depends>
+                        <field id="active">1</field>
+                        <field id="pickup_type">address</field>
+                    </depends>
+                </field>
+                <field id="pickup_address_postal_code" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="139" translate="label" type="text">
+                    <label>Pickup address: Postal code</label>
+                    <depends>
+                        <field id="active">1</field>
+                        <field id="pickup_type">address</field>
+                    </depends>
+                </field>
+
+                <!-- Package dimensions mapping -->
+                <field id="dimensions_note" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="139" type="note">
+                    <label>Product Weight &amp; Dimensions</label>
+                    <comment>Select product attributes used for weight and dimensions. If weight attribute is not set, Magento standard weight field will be used. APS (Parcel Locker) delivery requires length, width and height — if any product is missing dimensions, APS will be hidden at checkout.</comment>
+                </field>
+                <field id="weight_attribute" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="139" translate="label" type="select">
+                    <label>Product Weight Attribute</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\ProductAttribute</source_model>
+                    <comment>Select product attribute used for package weight (kg). If empty, Magento standard weight field will be used.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="length_attribute" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="140" translate="label" type="select">
+                    <label>Product Length Attribute</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\ProductAttribute</source_model>
+                    <comment>Select product attribute used for package length (cm). If empty, a default value will be used.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="width_attribute" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="141" translate="label" type="select">
+                    <label>Product Width Attribute</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\ProductAttribute</source_model>
+                    <comment>Select product attribute used for package width (cm). If empty, a default value will be used.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="height_attribute" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="142" translate="label" type="select">
+                    <label>Product Height Attribute</label>
+                    <source_model>PigeonExpress\Shipping\Model\Config\Source\ProductAttribute</source_model>
+                    <comment>Select product attribute used for package height (cm). If empty, a default value will be used.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="default_weight" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="143" translate="label" type="text">
+                    <label>Default Weight (kg)</label>
+                    <comment>Used when a product has no weight value. Set to 0 to hide shipping methods for products without weight.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="default_length" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="144" translate="label" type="text">
+                    <label>Default Length (cm)</label>
+                    <comment>Used when a product has no length value. Set to 0 to hide shipping methods for products without dimensions.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="default_width" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="145" translate="label" type="text">
+                    <label>Default Width (cm)</label>
+                    <comment>Used when a product has no width value. Set to 0 to hide shipping methods for products without dimensions.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+                <field id="default_height" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="146" translate="label" type="text">
+                    <label>Default Height (cm)</label>
+                    <comment>Used when a product has no height value. Set to 0 to hide shipping methods for products without dimensions.</comment>
+                    <depends>
+                        <field id="active">1</field>
+                    </depends>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>
