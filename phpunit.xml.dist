@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Module local unit test config, for running the suite without Magento's
+  dev/tests/unit wrapper:
+
+      ../../../../vendor/bin/phpunit -c phpunit.xml.dist
+
+  Magento's own runner also works and is what CI should use:
+
+      vendor/bin/phpunit -c dev/tests/unit/phpunit.xml.dist \
+          app/code/PigeonExpress/Shipping/Test/Unit
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+         bootstrap="../../../../dev/tests/unit/framework/bootstrap.php"
+         colors="true"
+         cacheResult="false"
+         failOnRisky="true"
+         failOnWarning="true">
+    <testsuites>
+        <testsuite name="PigeonExpress_Shipping unit">
+            <directory suffix="Test.php">Test/Unit</directory>
+        </testsuite>
+    </testsuites>
+    <coverage>
+        <include>
+            <directory suffix=".php">Model</directory>
+            <directory suffix=".php">Controller</directory>
+            <directory suffix=".php">Plugin</directory>
+            <directory suffix=".php">Observer</directory>
+        </include>
+    </coverage>
+</phpunit>
