@@ -28,7 +28,8 @@ class CheckoutConfigProvider implements ConfigProviderInterface
         return [
             'pigeonexpress' => [
                 'cod_payment_methods' => $this->config->getCodPaymentMethods($storeId),
-                'cod_fee_percent'     => CodFee::FEE_PERCENT * 100,
+                // No fee rate is published here on purpose. The COD fee is whatever
+                // the API charges, and reaches the checkout as a total segment.
             ],
         ];
     }

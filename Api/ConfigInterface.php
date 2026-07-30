@@ -244,7 +244,9 @@ interface ConfigInterface
     public function getPickupAddressPostalCode(?int $storeId = null): ?string;
 
     /**
-     * Get list of payment method codes that trigger the COD fee (2.5% of subtotal).
+     * Get list of payment method codes that trigger the COD fee.
+     *
+     * The fee amount itself comes from the Pigeon Express API, never from config.
      *
      * @param int|null $storeId
      * @return string[]

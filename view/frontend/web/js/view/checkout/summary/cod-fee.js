@@ -1,6 +1,10 @@
 /**
- * Pigeon Express: show COD fee (2.5% of subtotal) in checkout summary
- * when the selected payment method is in the configured COD methods list.
+ * Pigeon Express: show the cash on delivery fee in the checkout summary when the
+ * selected payment method is in the configured COD methods list.
+ *
+ * The amount is whatever the Pigeon Express API charged, delivered as the
+ * pigeonexpress_cod_fee total segment. Nothing is calculated here: a rate
+ * computed in the browser would go stale the moment the carrier changed it.
  */
 define([
     'ko',
@@ -26,7 +30,6 @@ define([
             var self = this;
             // Config is injected via jsLayout component config by LayoutProcessorPlugin.
             var codMethods = this.cod_payment_methods || [];
-            var feePercent = this.cod_fee_percent || 2.5;
 
             function update(method) {
                 if (!method) {
@@ -44,18 +47,14 @@ define([
 
                 var methodCode = method.method || method;
                 if (codMethods.indexOf(methodCode) !== -1) {
+                    // Server side value only. If the segment is missing the API did
+                    // not charge a fee, so nothing is shown.
                     var segment = totals.getSegment('pigeonexpress_cod_fee');
-                    var fee;
-                    if (segment && segment.value > 0) {
-                        fee = segment.value;
-                    } else {
-                        var currentTotals = quote.getTotals()();
-                        var subtotal = currentTotals ? parseFloat(currentTotals.subtotal) : 0;
-                        fee = Math.round(subtotal * feePercent) / 100;
-                    }
+                    var fee = segment && segment.value > 0 ? parseFloat(segment.value) : 0;
+
                     self.feeValue(fee);
                     codFeeModel.fee(fee);
-                    self.isDisplayed(true);
+                    self.isDisplayed(fee > 0);
                 } else {
                     self.feeValue(0);
                     codFeeModel.fee(0);

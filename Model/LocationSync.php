@@ -11,6 +11,7 @@ namespace PigeonExpress\Shipping\Model;
 
 use Magento\Framework\DB\TransactionFactory;
 use Psr\Log\LoggerInterface;
+use PigeonExpress\Shipping\Api\AdditionalServicesClientInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\LocationSyncInterface;
 use PigeonExpress\Shipping\Api\LocationsClientInterface;
@@ -45,6 +46,12 @@ class LocationSync implements LocationSyncInterface
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var AdditionalServicesClientInterface */
+    private $additionalServicesClient;
+
+    /** @var AdditionalServiceRepository */
+    private $additionalServiceRepository;
+
     public function __construct(
         LocationsClientInterface $locationsClient,
         OfficeFactory $officeFactory,
@@ -54,7 +61,9 @@ class LocationSync implements LocationSyncInterface
         \PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory $cityCollectionFactory,
         TransactionFactory $transactionFactory,
         ConfigInterface $config,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        AdditionalServicesClientInterface $additionalServicesClient,
+        AdditionalServiceRepository $additionalServiceRepository
     ) {
         $this->locationsClient = $locationsClient;
         $this->officeFactory = $officeFactory;
@@ -65,6 +74,8 @@ class LocationSync implements LocationSyncInterface
         $this->transactionFactory = $transactionFactory;
         $this->config = $config;
         $this->logger = $logger;
+        $this->additionalServicesClient = $additionalServicesClient;
+        $this->additionalServiceRepository = $additionalServiceRepository;
     }
 
     /**
@@ -122,15 +133,46 @@ class LocationSync implements LocationSyncInterface
     }
 
     /**
+     * Refresh the additional services catalogue from GET /additional-services.
+     *
+     * Services that disappear from the API are flagged inactive rather than
+     * deleted, so any fee we resolved for them is not lost.
+     *
+     * @return array{created: int, updated: int, deactivated: int}
+     * @throws ApiException
+     */
+    public function syncAdditionalServices(): array
+    {
+        $rows = $this->additionalServicesClient->fetchAll(0);
+        $stats = $this->additionalServiceRepository->replaceCatalogue($rows);
+
+        if ($this->config->isLoggingEnabled()) {
+            $this->logger->info('[PigeonExpress] Sync additional services', $stats);
+        }
+
+        return $stats;
+    }
+
+    /**
      * @inheritdoc
      */
     public function syncAll(): array
     {
-        return [
+        $result = [
             'offices' => $this->syncOffices(),
             'aps'     => $this->syncAps(),
             'cities'  => $this->syncCities(),
         ];
+
+        // A catalogue failure must not discard a successful location sync.
+        try {
+            $result['additional_services'] = $this->syncAdditionalServices();
+        } catch (\Throwable $e) {
+            $this->logger->warning('[PigeonExpress] Additional services sync failed: ' . $e->getMessage());
+            $result['additional_services'] = ['created' => 0, 'updated' => 0, 'deactivated' => 0];
+        }
+
+        return $result;
     }
 
     /**

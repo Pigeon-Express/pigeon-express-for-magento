@@ -1,0 +1,3588 @@
+openapi: 3.0.3
+info:
+  title: Pigeon Express API
+  description: |
+    API for Bulgarian courier service Pigeon Express.
+
+    _Last updated: 2026-07-07_
+
+    ## Errors
+    All errors share a common JSON envelope: `{"success": false, "message": "..."}`.
+    Validation errors (HTTP 422) additionally carry an `errors` object keyed by field
+    name (dot notation for nested fields, e.g. `delivery_address.city_id`). Business-rule
+    violations also return 422 but with `message` only. Messages are in Bulgarian and may
+    change — rely on HTTP status codes and `errors` keys, not on message text.
+    See the ValidationError response component and the "Errors & Validation Reference"
+    section of EXTERNAL_API_DOCUMENTATION.md for the full catalogue.
+
+    This API allows you to:
+    - Search and retrieve cities, streets, and offices
+    - Calculate shipping costs
+    - Create shipments and get tracking information
+
+    ## Authentication
+    All requests require API Key and API Secret in headers.
+
+    ## Access & Environments
+    To obtain the base URLs for Production and Sandbox environments, as well as your API credentials (API Key and API Secret), please contact the Pigeon Express team.
+
+    - **Email**: support@pigeonexpress.com
+    - **Website**: https://pigeonexpress.com/
+  version: 1.0.0
+  license:
+    name: Proprietary
+    url: https://pigeonexpress.com/privacy
+
+tags:
+  - name: Cities
+    description: City operations
+  - name: Streets
+    description: Street operations
+  - name: Offices
+    description: Office and locker operations
+  - name: Shipments
+    description: Shipment operations
+  - name: Payments
+    description: COD payout operations
+  - name: Courier Requests
+    description: Courier pickup request operations
+
+security:
+  - ApiKeyAuth: []
+    ApiSecretAuth: []
+
+paths:
+  /v1/cities:
+    get:
+      tags:
+        - Cities
+      summary: List all cities
+      description: Returns paginated list of all serviced cities
+      operationId: listCities
+      parameters:
+        - name: name
+          in: query
+          description: Search by city name (ILIKE)
+          schema:
+            type: string
+        - name: postal_code
+          in: query
+          description: Search by postal code (prefix match)
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          description: Items per page (max 100)
+          schema:
+            type: integer
+            default: 100
+            maximum: 100
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X GET "{BASE_URL}/cities?page=1&per_page=100" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/cities?page=1&per_page=50",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $cities = json_decode($response, true);
+            curl_close($curl);
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+            $cities = $client->cities()->all(['page' => 1, 'per_page' => 50]);
+
+            foreach ($cities as $city) {
+                echo $city->getName() . "\n";
+            }
+        - lang: Java
+          label: Java
+          source: |
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/cities?page=1&per_page=50"))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .GET()
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+            System.out.println(response.body());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/City'
+                  meta:
+                    $ref: '#/components/schemas/Pagination'
+              example:
+                success: true
+                data:
+                  - id: 2459
+                    name: "Абланица"
+                    name_en: "Ablanitsa"
+                    type: "село"
+                    type_en: "village"
+                    postal_code: "5574"
+                    municipality: "Ловеч"
+                    municipality_en: "Lovech"
+                    district: "Ловеч"
+                    district_en: "Lovech"
+                    iso_code_2: "BG"
+                  - id: 798
+                    name: "Абланица"
+                    name_en: "Ablanitsa"
+                    type: "село"
+                    type_en: "village"
+                    postal_code: "4645"
+                    municipality: "Велинград"
+                    municipality_en: "Velingrad"
+                    district: "Пазарджик"
+                    district_en: "Pazardzhik"
+                    iso_code_2: "BG"
+                meta:
+                  current_page: 1
+                  per_page: 2
+                  total: 5275
+                  last_page: 2638
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/cities/{cityId}:
+    get:
+      tags:
+        - Cities
+      summary: Get city by ID
+      description: |
+        Returns a single city by its ID.
+
+        Only active cities are returned.
+      operationId: getCity
+      parameters:
+        - name: cityId
+          in: path
+          description: City ID
+          required: true
+          schema:
+            type: integer
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X GET "{BASE_URL}/cities/68134" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $cityId = 68134;
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/cities/{$cityId}",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $city = json_decode($response, true);
+            curl_close($curl);
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+            $city = $client->cities()->find(68134);
+
+            echo $city->getName();        // Sofia
+            echo $city->getMunicipality(); // Stolichna
+            echo $city->getPostCode();     // 1000
+        - lang: Java
+          label: Java
+          source: |
+            int cityId = 68134;
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/cities/" + cityId))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .GET()
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/City'
+              example:
+                success: true
+                data:
+                  id: 2556
+                  name: "Новаково"
+                  name_en: "Novakovo"
+                  type: "село"
+                  type_en: "village"
+                  postal_code: "4262"
+                  municipality: "Асеновград"
+                  municipality_en: "Asenovgrad"
+                  district: "Пловдив"
+                  district_en: "Plovdiv"
+                  iso_code_2: "BG"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/cities/{cityId}/streets:
+    get:
+      tags:
+        - Streets
+      summary: Get streets in city
+      description: Returns paginated list of streets in a city
+      operationId: getStreetsByCity
+      parameters:
+        - name: cityId
+          in: path
+          description: City ID
+          required: true
+          schema:
+            type: integer
+        - name: name
+          in: query
+          description: Search by street name (min 2 chars, supports Latin to Cyrillic transliteration)
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 100
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          description: Items per page (max 100)
+          schema:
+            type: integer
+            default: 100
+            maximum: 100
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X GET "{BASE_URL}/cities/68134/streets?page=1&per_page=100" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $cityId = 68134;
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/cities/{$cityId}/streets?page=1&per_page=50",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $streets = json_decode($response, true);
+            curl_close($curl);
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+            $streets = $client->streets()->byCity(68134, ['page' => 1, 'per_page' => 50]);
+
+            foreach ($streets as $street) {
+                echo $street->getType() . ' ' . $street->getName() . "\n";
+                // Output: Vitosha Boulevard
+            }
+        - lang: Java
+          label: Java
+          source: |
+            int cityId = 68134;
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/cities/" + cityId + "/streets?page=1&per_page=50"))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .GET()
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Street'
+                  meta:
+                    $ref: '#/components/schemas/StreetsPagination'
+              example:
+                success: true
+                data:
+                  - id: 406805
+                    name: "3-ТИ МАРТ"
+                    name_en: "3-TI MART"
+                    type: "улица"
+                    type_en: "Street"
+                    city_id: 2556
+                  - id: 406790
+                    name: "АЛЕН МАК"
+                    name_en: "ALEN MAK"
+                    type: "улица"
+                    type_en: "Street"
+                    city_id: 2556
+                meta:
+                  city_id: 2556
+                  city_name: "Новаково"
+                  city_name_en: "Novakovo"
+                  city_type: "село"
+                  city_type_en: "village"
+                  current_page: 1
+                  per_page: 2
+                  total: 58
+                  last_page: 29
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/offices:
+    get:
+      tags:
+        - Offices
+      summary: List and search offices
+      description: |
+        Returns list of offices and lockers with optional filtering.
+        Use query parameters to filter by type, city, name, or postal code.
+      operationId: listOffices
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          description: Items per page (max 100)
+          schema:
+            type: integer
+            default: 100
+            maximum: 100
+        - name: type
+          in: query
+          description: Filter by office type
+          schema:
+            type: string
+            enum:
+              - office
+              - locker
+        - name: name
+          in: query
+          description: Search by office name (case-insensitive)
+          schema:
+            type: string
+        - name: city_id
+          in: query
+          description: Filter by city ID
+          schema:
+            type: integer
+        - name: postal_code
+          in: query
+          description: Filter by postal code (prefix search)
+          schema:
+            type: string
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            # List all offices
+            curl -X GET "{BASE_URL}/offices" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+
+            # Filter by type
+            curl -X GET "{BASE_URL}/offices?type=locker" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+
+            # Search by city
+            curl -X GET "{BASE_URL}/offices?city_id=68134&type=office" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            // Build query parameters
+            $params = [
+                'city_id' => 68134,
+                'type' => 'office',
+                'per_page' => 50
+            ];
+            $query = http_build_query($params);
+
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/offices?{$query}",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $offices = json_decode($response, true);
+            curl_close($curl);
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+
+            // Get all offices
+            $offices = $client->offices()->all();
+
+            // Filter by type
+            $lockers = $client->offices()->all(['type' => 'locker']);
+
+            // Search in specific city
+            $sofiaOffices = $client->offices()->all([
+                'city_id' => 68134,
+                'type' => 'office'
+            ]);
+
+            foreach ($offices as $office) {
+                echo $office->getName() . ' - ' . $office->getAddress() . "\n";
+            }
+        - lang: Java
+          label: Java
+          source: |
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/offices?city_id=68134&type=office"))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .GET()
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Office'
+                  meta:
+                    $ref: '#/components/schemas/Pagination'
+              example:
+                success: true
+                data:
+                  - id: 1
+                    name: "Офис Варна Център"
+                    code: "VAR-001"
+                    type: "office"
+                    address: "ул. Примерска, № 10, Варна, 9000"
+                    city:
+                      id: 759
+                      name: "Варна"
+                      name_en: "Varna"
+                      type: "град"
+                      type_en: "city"
+                      postal_code: "9000"
+                      municipality: "Варна"
+                      municipality_en: "Varna"
+                      district: "Варна"
+                      district_en: "Varna"
+                      iso_code_2: "BG"
+                    postal_code: "9000"
+                    phone: "052123456"
+                    email: "varna@pigeon.bg"
+                    working_hours:
+                      monday: { open: "09:00", close: "18:00" }
+                      tuesday: { open: "09:00", close: "18:00" }
+                      wednesday: { open: "09:00", close: "18:00" }
+                      thursday: { open: "09:00", close: "18:00" }
+                      friday: { open: "09:00", close: "18:00" }
+                      saturday: { open: "10:00", close: "14:00" }
+                      sunday: null
+                    latitude: "43.2140504"
+                    longitude: "27.9147333"
+                  - id: 2
+                    name: "АПС Локер София Мол"
+                    code: "SOF-APS-001"
+                    type: "locker"
+                    address: "бул. Александър Стамболийски, № 101, София, 1000"
+                    city:
+                      id: 1
+                      name: "София"
+                      name_en: "Sofia"
+                      type: "град"
+                      type_en: "city"
+                      postal_code: "1000"
+                      municipality: "Столична"
+                      municipality_en: "Sofia City"
+                      district: "София-град"
+                      district_en: "Sofia City"
+                      iso_code_2: "BG"
+                    postal_code: "1000"
+                    phone: null
+                    email: null
+                    working_hours:
+                      monday: { open: "00:00", close: "23:59" }
+                      tuesday: { open: "00:00", close: "23:59" }
+                      wednesday: { open: "00:00", close: "23:59" }
+                      thursday: { open: "00:00", close: "23:59" }
+                      friday: { open: "00:00", close: "23:59" }
+                      saturday: { open: "00:00", close: "23:59" }
+                      sunday: { open: "00:00", close: "23:59" }
+                    latitude: "42.6977082"
+                    longitude: "23.3218675"
+                meta:
+                  current_page: 1
+                  per_page: 100
+                  total: 156
+                  last_page: 2
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/offices/{officeId}:
+    get:
+      tags:
+        - Offices
+      summary: Get office by ID
+      description: |
+        Returns a single office by its ID.
+
+        Only active offices are returned.
+      operationId: getOffice
+      parameters:
+        - name: officeId
+          in: path
+          description: Office ID
+          required: true
+          schema:
+            type: integer
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X GET "{BASE_URL}/offices/1001" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $officeId = 1001;
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/offices/{$officeId}",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $office = json_decode($response, true);
+            curl_close($curl);
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+            $office = $client->offices()->find(1001);
+
+            echo $office->getName();      // Sofia - Center
+            echo $office->getAddress();   // Vitosha Blvd 100
+            echo $office->getType();      // office
+
+            // Get working hours
+            foreach ($office->getWorkingHours() as $hours) {
+                echo $hours->getDay() . ': ' . $hours->getOpen() . ' - ' . $hours->getClose() . "\n";
+            }
+        - lang: Java
+          label: Java
+          source: |
+            int officeId = 1001;
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/offices/" + officeId))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .GET()
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Office'
+              example:
+                success: true
+                data:
+                  id: 125
+                  name: "Казанлък (офис)"
+                  code: "KAZ-001"
+                  type: "office"
+                  address: "Казанлък, 6100"
+                  city:
+                    id: 2282
+                    name: "Казанлък"
+                    name_en: "Kazanlak"
+                    type: "град"
+                    type_en: "city"
+                    postal_code: "6100"
+                    municipality: "Казанлък"
+                    municipality_en: "Kazanlak"
+                    district: "Стара Загора"
+                    district_en: "Stara Zagora"
+                    iso_code_2: "BG"
+                  postal_code: "6100"
+                  phone: "0876017844"
+                  email: null
+                  working_hours:
+                    - day: "monday"
+                      open: "09:00"
+                      close: "18:00"
+                    - day: "tuesday"
+                      open: "09:00"
+                      close: "18:00"
+                    - day: "wednesday"
+                      open: "09:00"
+                      close: "18:00"
+                    - day: "thursday"
+                      open: "09:00"
+                      close: "18:00"
+                    - day: "friday"
+                      open: "09:00"
+                      close: "18:00"
+                  latitude: null
+                  longitude: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/shipments/calculate:
+    post:
+      tags:
+        - Shipments
+      summary: Calculate shipping cost
+      description: Calculate shipping cost based on delivery parameters
+      operationId: calculateShipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CalculateShipmentRequest'
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X POST "{BASE_URL}/shipments/calculate" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "pickup_type": "office",
+                "pickup_office_id": 1001,
+                "delivery_type": "address",
+                "delivery_address": {
+                  "city_id": 68134,
+                  "street_id": 12345,
+                  "street_number": "100"
+                },
+                "packages": [{"weight": 1.5, "length": 30, "width": 20, "height": 15}],
+                "service_type": "standard",
+                "service_codes": {
+                  "cod_amount": 50.00,
+                  "sms_notification_receiver": true
+                }
+              }'
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $data = [
+                'pickup_type' => 'office',
+                'pickup_office_id' => 1001,
+                'delivery_type' => 'address',
+                'delivery_address' => [
+                    'city_id' => 68134,
+                    'street_id' => 12345,
+                    'street_number' => '100'
+                ],
+                'packages' => [['weight' => 1.5, 'length' => 30, 'width' => 20, 'height' => 15]],
+                'service_type' => 'standard',
+                'service_codes' => [
+                    'cod_amount' => 50.00,
+                    'sms_notification_receiver' => true
+                ]
+            ];
+
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/shipments/calculate",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($data),
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret",
+                    "Content-Type: application/json"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $calculation = json_decode($response, true);
+            curl_close($curl);
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+            use PigeonExpress\DTO\Request\CalculateShipmentRequest;
+            use PigeonExpress\DTO\Request\PackageData;
+            use PigeonExpress\DTO\Request\AddressData;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+
+            $request = new CalculateShipmentRequest();
+            $request->setPickupType('office')
+                    ->setPickupOfficeId(1001)
+                    ->setDeliveryType('address')
+                    ->setDeliveryAddress(
+                        (new AddressData())
+                            ->setCityId(68134)
+                            ->setStreetId(12345)
+                            ->setStreetNumber('100')
+                    )
+                    ->addPackage(
+                        (new PackageData())
+                            ->setWeight(1.5)
+                            ->setDimensions(30, 20, 15)
+                    )
+                    ->setServiceType('standard')
+                    ->setServiceCodes([
+                        'cod_amount' => 50.00,
+                        'sms_notification_receiver' => true
+                    ]);
+
+            $calculation = $client->shipments()->calculate($request);
+
+            echo "Shipping: " . $calculation->getShippingPrice() . " BGN\n";
+            echo "Total: " . $calculation->getTotalPrice() . " BGN\n";
+            echo "Delivery: " . $calculation->getEstimatedDeliveryDays() . " days\n";
+        - lang: Java
+          label: Java
+          source: |
+            String jsonBody = """
+                {
+                  "pickup_type": "office",
+                  "pickup_office_id": 1001,
+                  "delivery_type": "address",
+                  "delivery_address": {
+                    "city_id": 68134,
+                    "street_id": 12345,
+                    "street_number": "100"
+                  },
+                  "packages": [{"weight": 1.5, "length": 30, "width": 20, "height": 15}],
+                  "service_type": "standard",
+                  "service_codes": {
+                    "cod_amount": 50.00,
+                    "sms_notification_receiver": true
+                  }
+                }
+                """;
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/shipments/calculate"))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/ShipmentCalculation'
+              example:
+                success: true
+                data:
+                  shipping_price: 7.2
+                  total_service_fees: 6.06
+                  total_price: 13.26
+                  service_type: "standard"
+                  currency: "EUR"
+                  service_codes: ["sms_notification_receiver", "insurance_required"]
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /v1/shipments:
+    post:
+      tags:
+        - Shipments
+      summary: "Create shipment"
+      description: Create a new shipment and get tracking number
+      operationId: createShipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateShipmentRequest'
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X POST "{BASE_URL}/shipments" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "receiver_name": "Иван Петров",
+                "receiver_phone": "+359888123456",
+                "receiver_email": "ivan@example.com",
+                "pickup_type": "office",
+                "pickup_office_id": 1001,
+                "delivery_type": "address",
+                "delivery_address": {
+                  "city_id": 68134,
+                  "street_id": 12345,
+                  "street_number": "100",
+                  "floor": "3",
+                  "apartment": "12"
+                },
+                "packages": [{"weight": 1.5, "length": 30, "width": 20, "height": 15}],
+                "inventory_items": [{"description": "Книга", "quantity": 1}],
+                "service_type": "standard",
+                "who_pays": "receiver",
+                "service_codes": {
+                  "sms_notification_receiver": true,
+                  "declared_value": 150,
+                  "cod_amount": 50.00
+                },
+                "note": "Да се обади преди доставка"
+              }'
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $data = [
+                'receiver_name' => 'Иван Петров',
+                'receiver_phone' => '+359888123456',
+                'receiver_email' => 'ivan@example.com',
+                'pickup_type' => 'office',
+                'pickup_office_id' => 1001,
+                'delivery_type' => 'address',
+                'delivery_address' => [
+                    'city_id' => 68134,
+                    'street_id' => 12345,
+                    'street_number' => '100',
+                    'floor' => '3',
+                    'apartment' => '12'
+                ],
+                'packages' => [['weight' => 1.5, 'length' => 30, 'width' => 20, 'height' => 15]],
+                'inventory_items' => [['description' => 'Книга', 'quantity' => 1]],
+                'service_type' => 'standard',
+                'who_pays' => 'receiver',
+                'service_codes' => [
+                    'sms_notification_receiver' => true,
+                    'declared_value' => 150,
+                    'cod_amount' => 50.00
+                ],
+                'note' => 'Да се обади преди доставка'
+            ];
+
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/shipments",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($data),
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret",
+                    "Content-Type: application/json"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $shipment = json_decode($response, true);
+            curl_close($curl);
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+            use PigeonExpress\DTO\Request\CreateShipmentRequest;
+            use PigeonExpress\DTO\Request\PackageData;
+            use PigeonExpress\DTO\Request\AddressData;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+
+            $request = new CreateShipmentRequest();
+            $request->setReceiverName('Иван Петров')
+                    ->setReceiverPhone('+359888123456')
+                    ->setReceiverEmail('ivan@example.com')
+                    ->setPickupType('office')
+                    ->setPickupOfficeId(1001)
+                    ->setDeliveryType('address')
+                    ->setDeliveryAddress(
+                        (new AddressData())
+                            ->setCityId(68134)
+                            ->setStreetId(12345)
+                            ->setStreetNumber('100')
+                            ->setFloor('3')
+                            ->setApartment('12')
+                    )
+                    ->addPackage(
+                        (new PackageData())
+                            ->setWeight(1.5)
+                            ->setDimensions(30, 20, 15)
+                    )
+                    ->addInventoryItem('Книга', 1)
+                    ->setServiceType('standard')
+                    ->setWhoPays('receiver')
+                    ->setServiceCodes([
+                        'sms_notification_receiver' => true,
+                        'declared_value' => 150,
+                        'cod_amount' => 50.00
+                    ])
+                    ->setNote('Да се обади преди доставка');
+
+            $shipment = $client->shipments()->create($request);
+
+            echo "Reference: " . $shipment->getReferenceNumber() . "\n";
+            echo "Tracking: " . $shipment->getTrackingNumber() . "\n";
+        - lang: Java
+          label: Java
+          source: |
+            String jsonBody = """
+                {
+                  "receiver_name": "Иван Петров",
+                  "receiver_phone": "+359888123456",
+                  "receiver_email": "ivan@example.com",
+                  "pickup_type": "office",
+                  "pickup_office_id": 1001,
+                  "delivery_type": "address",
+                  "delivery_address": {
+                    "city_id": 68134,
+                    "street_id": 12345,
+                    "street_number": "100",
+                    "floor": "3",
+                    "apartment": "12"
+                  },
+                  "packages": [{"weight": 1.5, "length": 30, "width": 20, "height": 15}],
+                  "inventory_items": [{"description": "Книга", "quantity": 1}],
+                  "service_type": "standard",
+                  "who_pays": "receiver",
+                  "service_codes": {
+                    "sms_notification_receiver": true,
+                    "declared_value": 150,
+                    "cod_amount": 50.00
+                  },
+                  "note": "Да се обади преди доставка"
+                }
+                """;
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/shipments"))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Shipment'
+              example:
+                success: true
+                data:
+                  reference_number: "455791936383"
+                  status: "Регистрирана пратка"
+                  packages:
+                    - tracking_number: "455791936383-1"
+                      weight: "1.500"
+                      dimensions:
+                        length: "25.00"
+                        width: "15.00"
+                        height: "10.00"
+                  created_at: "2026-02-26T17:17:15+02:00"
+                  label_pdf: "JVBERi0xLjcKMSAwIG9iago8PCAvVHlwZSAvQ2F0...."
+                  label_content_type: "application/pdf"
+                  label_format: "default"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /v1/shipments/{referenceNumber}/track:
+    get:
+      tags:
+        - Shipments
+      summary: Track shipment
+      description: |
+        Get tracking history for a shipment.
+
+        The response includes the package list (`packages[].tracking_number` holds
+        the barcodes of the current shipment), the full status `tracking` history
+        (with a `note` per event), and the linked shipments along the chain
+        (`chain_before` / `chain_after`, e.g. an undelivered shipment and its
+        return-to-sender shipment). Each chain entry includes its own `packages`
+        array with the same structure as the root-level packages.
+
+        For tracking many shipments at once use the
+        bulk endpoint (`POST /v1/shipments/track/bulk`).
+
+        ## Public Tracking Page (no API credentials required)
+
+        For end-customer tracking (e.g. order confirmation emails, "Track your order" buttons,
+        QR codes on labels), use the public tracking page instead of this API endpoint:
+
+        ```
+        https://track.pigeonexpress.com/?tracking_number={tracking_number}
+        ```
+
+        Example: `https://track.pigeonexpress.com/?tracking_number=1234567890`
+
+        The public page does not require API credentials, is mobile-friendly, and auto-refreshes
+        as the shipment status changes. Use this API endpoint only for programmatic processing
+        in your own backend (e.g. webhooks, automation, dashboards).
+      operationId: trackShipment
+      externalDocs:
+        description: Public tracking page (for end customers, no auth required)
+        url: https://track.pigeonexpress.com/
+      parameters:
+        - name: referenceNumber
+          in: path
+          description: Shipment reference number
+          required: true
+          schema:
+            type: string
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X GET "{BASE_URL}/shipments/455123456789/track" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $referenceNumber = '455123456789';
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/shipments/{$referenceNumber}/track",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $tracking = json_decode($response, true);
+            curl_close($curl);
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+            $tracking = $client->shipments()->track('455123456789');
+
+            echo "Current status: " . $tracking->getCurrentStatus() . "\n";
+            echo "Tracking number: " . $tracking->getTrackingNumber() . "\n\n";
+
+            echo "History:\n";
+            foreach ($tracking->getEvents() as $event) {
+                echo $event->getTimestamp() . " - " . $event->getDescription() . "\n";
+                if ($event->getLocation()) {
+                    echo "  Location: " . $event->getLocation() . "\n";
+                }
+            }
+        - lang: Java
+          label: Java
+          source: |
+            String referenceNumber = "455123456789";
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/shipments/" + referenceNumber + "/track"))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .GET()
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/TrackingResponse'
+              example:
+                success: true
+                data:
+                  reference_number: "457381422479"
+                  external_reference: null
+                  note: "Пренасочена към пратка 457570198033"
+                  status: "Пренасочена"
+                  status_code: "shipment_redirected"
+                  created_at: "2026-05-29T17:54:26+03:00"
+                  expected_delivery_date: "2026-05-30T00:00:00+03:00"
+                  delivery_date: null
+                  packages:
+                    - tracking_number: "457381422479-1"
+                      weight: "1.000"
+                  tracking:
+                    - status: "Приета в офис"
+                      status_code: "shipment_accepted_in_office"
+                      note: "Начален статус при създаване"
+                      created_at: "2026-05-29T17:54:26+03:00"
+                    - status: "Пренасочена"
+                      status_code: "shipment_redirected"
+                      note: "Статус: Пренасочена"
+                      created_at: "2026-06-09T16:05:44+03:00"
+                  chain_before:
+                    - reference_number: "457362301385"
+                      external_reference: null
+                      status: "Пренасочена"
+                      status_code: "shipment_redirected"
+                      created_at: "2026-05-28T15:21:00+03:00"
+                      delivery_date: null
+                      packages:
+                        - tracking_number: "457362301385-1"
+                          weight: "1.000"
+                  chain_after:
+                    - reference_number: "457570198033"
+                      external_reference: null
+                      status: "В процес на доставка"
+                      status_code: "shipment_in_delivery"
+                      created_at: "2026-06-09T16:05:44+03:00"
+                      delivery_date: null
+                      packages:
+                        - tracking_number: "457570198033-1"
+                          weight: "1.000"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/shipments/track/bulk:
+    post:
+      tags:
+        - Shipments
+      summary: Bulk track shipments
+      description: |
+        Track up to 100 shipments in a single request.
+
+        Results are keyed by reference number. Each entry has a `found` flag:
+        found shipments return a status summary (reference_number, status,
+        status_code, created_at, expected_delivery_date, delivery_date), the
+        `tracking` status history, and the linked shipments in the chain
+        (`chain_before` / `chain_after`) — without the root-level `packages`
+        array, and the `tracking` events omit the `note` field; unknown or
+        unowned references return `found: false` with an `error` message.
+
+        `chain_before` and `chain_after` list shipments linked to the current one
+        along the chain (e.g. an undelivered shipment and its return-to-sender
+        shipment), created before and after it respectively. Each is an empty
+        array when there are no linked shipments. Chain entries do include their
+        own `packages` array (same structure as the single-track packages).
+
+        The HTTP status is always `200` on a successful request — per-shipment
+        outcomes are expressed via `found` (partial success).
+      operationId: bulkTrackShipment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - references
+              properties:
+                references:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  description: Reference numbers to track. Duplicates are ignored.
+                  items:
+                    type: string
+                    maxLength: 50
+            example:
+              references:
+                - "457341228749"
+                - "457341228750"
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X POST "{BASE_URL}/shipments/track/bulk" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret" \
+              -H "Content-Type: application/json" \
+              -d '{"references": ["457341228749", "457341228750"]}'
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/shipments/track/bulk",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret",
+                    "Content-Type: application/json"
+                ],
+                CURLOPT_POSTFIELDS => json_encode([
+                    "references" => ["457341228749", "457341228750"]
+                ]),
+            ]);
+            $response = curl_exec($curl);
+            $results = json_decode($response, true);
+            curl_close($curl);
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    additionalProperties: true
+                  meta:
+                    type: object
+                    properties:
+                      requested:
+                        type: integer
+                      found:
+                        type: integer
+                      not_found:
+                        type: integer
+              example:
+                success: true
+                data:
+                  "457341228749":
+                    found: true
+                    reference_number: "457341228749"
+                    status: "Непотърсена"
+                    status_code: "shipment_untracked"
+                    created_at: "2026-05-27T10:04:57+03:00"
+                    expected_delivery_date: "2026-05-28T00:00:00+03:00"
+                    delivery_date: null
+                    tracking:
+                      - status: "Регистрирана пратка"
+                        status_code: "shipment_registered"
+                        created_at: "2026-05-27T10:04:57+03:00"
+                      - status: "Приета в офис"
+                        status_code: "shipment_accepted_in_office"
+                        created_at: "2026-05-27T14:29:25+03:00"
+                      - status: "Непотърсена"
+                        status_code: "shipment_untracked"
+                        created_at: "2026-05-27T14:29:42+03:00"
+                    chain_before: []
+                    chain_after:
+                      - reference_number: "457344405725"
+                        external_reference: null
+                        status: "Връщане към подател"
+                        status_code: "shipment_returning_to_sender"
+                        created_at: "2026-05-27T14:29:42+03:00"
+                        delivery_date: null
+                        packages:
+                          - tracking_number: "457344405725-1"
+                            weight: "1.000"
+                  "457344405725":
+                    found: true
+                    reference_number: "457344405725"
+                    status: "Връщане към подател"
+                    status_code: "shipment_returning_to_sender"
+                    created_at: "2026-05-27T14:29:42+03:00"
+                    expected_delivery_date: "2026-05-28T00:00:00+03:00"
+                    delivery_date: null
+                    tracking:
+                      - status: "Връщане към подател"
+                        status_code: "shipment_returning_to_sender"
+                        created_at: "2026-05-27T14:29:42+03:00"
+                    chain_before:
+                      - reference_number: "457341228749"
+                        external_reference: null
+                        status: "Непотърсена"
+                        status_code: "shipment_untracked"
+                        created_at: "2026-05-27T10:04:57+03:00"
+                        delivery_date: null
+                        packages:
+                          - tracking_number: "457341228749-1"
+                            weight: "1.000"
+                    chain_after: []
+                  "457343604650":
+                    found: false
+                    error: "Пратката не е намерена."
+                meta:
+                  requested: 3
+                  found: 2
+                  not_found: 1
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /v1/shipments/{referenceNumber}/cancel:
+    post:
+      tags:
+        - Shipments
+      summary: Cancel shipment
+      description: |
+        Cancel a shipment. Only shipments with status `shipment_registered` can be cancelled.
+
+        **Requirements:**
+        - Shipment must be owned by the customer (verified via API credentials)
+        - Shipment status must be `shipment_registered`
+      operationId: cancelShipment
+      parameters:
+        - name: referenceNumber
+          in: path
+          description: Shipment reference number
+          required: true
+          schema:
+            type: string
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X POST "{BASE_URL}/shipments/455123456789/cancel" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $referenceNumber = '455123456789';
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/shipments/{$referenceNumber}/cancel",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $result = json_decode($response, true);
+            curl_close($curl);
+
+            if ($result['success']) {
+                echo "Shipment cancelled successfully\n";
+            }
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+            use PigeonExpress\Exceptions\PigeonExpressException;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+
+            try {
+                $result = $client->shipments()->cancel('455123456789');
+                echo "Shipment cancelled successfully\n";
+            } catch (PigeonExpressException $e) {
+                // Shipment already picked up or delivered
+                echo "Cannot cancel: " . $e->getMessage() . "\n";
+            }
+        - lang: Java
+          label: Java
+          source: |
+            String referenceNumber = "455123456789";
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("{BASE_URL}/shipments/" + referenceNumber + "/cancel"))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .POST(HttpRequest.BodyPublishers.noBody())
+                .build();
+            HttpResponse<String> response = client.send(request,
+                HttpResponse.BodyHandlers.ofString());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    properties:
+                      reference_number:
+                        type: string
+                      status:
+                        type: string
+                      status_code:
+                        type: string
+                      cancelled_at:
+                        type: string
+                        format: date-time
+              example:
+                success: true
+                data:
+                  reference_number: "455791936383"
+                  status: "Отказана"
+                  status_code: "shipment_cancelled"
+                  cancelled_at: "2026-02-26T17:18:10+02:00"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/shipments/{referenceNumber}/label:
+    get:
+      tags:
+        - Shipments
+      summary: Get shipping label
+      description: |
+        Get shipping label as PDF. By default, the PDF is displayed inline in the browser.
+        Use `?download=1` to force download instead of inline display.
+
+        Supported label formats:
+        - `default` — standard thermal PDF label, 100×90mm (returned when `format` is omitted)
+        - `pdf150` — PDF label, 100×150mm
+        - `zpl300` — ZPL for Zebra printers (300 DPI). Returned as `text/plain` raw ZPL string (NOT base64, NOT PDF), filename `.zpl`. Always sent as an attachment. Do not render as a PDF preview.
+        - `a4` — the standard label embedded into an A4 page, optimized for printing on a regular office printer. The downloaded filename gets an `-a4.pdf` suffix.
+
+        The `Content-Type` depends on the format: `application/pdf` for `default`/`pdf150`/`a4`, `text/plain` for `zpl300`.
+      operationId: getShipmentLabel
+      parameters:
+        - name: referenceNumber
+          in: path
+          description: Shipment reference number
+          required: true
+          schema:
+            type: string
+        - name: download
+          in: query
+          description: |
+            Force download instead of inline display.
+            - `false` (default): PDF is displayed in browser (Content-Disposition: inline)
+            - `true` or `1`: PDF is downloaded (Content-Disposition: attachment)
+          schema:
+            type: boolean
+            default: false
+        - name: format
+          in: query
+          required: false
+          description: |
+            Label format. Optional — omit for the standard thermal label. An absent or invalid value falls back to `default`.
+            - `default`: Standard thermal PDF label, 100×90mm — same as omitting the parameter
+            - `pdf150`: PDF label, 100×150mm
+            - `zpl300`: ZPL for Zebra printers (300 DPI), returned as raw `text/plain` string with a `.zpl` filename
+            - `a4`: Standard label embedded into an A4 page, suitable for printing on a regular office printer
+          schema:
+            type: string
+            enum:
+              - default
+              - pdf150
+              - zpl300
+              - a4
+            default: default
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            # View PDF label in browser (inline - default)
+            curl -X GET "{BASE_URL}/shipments/455123456789/label" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+
+            # Download PDF label (force download)
+            curl -X GET "{BASE_URL}/shipments/455123456789/label?download=1" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret" \
+              --output label.pdf
+
+            # Download A4 sized PDF label (for office printers)
+            curl -X GET "{BASE_URL}/shipments/455123456789/label?format=a4&download=1" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret" \
+              --output label-a4.pdf
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $referenceNumber = '455123456789';
+            $download = true; // false = inline (browser view), true = download
+
+            $url = "{BASE_URL}/shipments/{$referenceNumber}/label";
+            if ($download) {
+                $url .= '?download=1';
+            }
+
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $labelContent = curl_exec($curl);
+            curl_close($curl);
+
+            // Save to file
+            file_put_contents("label.pdf", $labelContent);
+
+            // Or output to browser for download
+            header("Content-Type: application/pdf");
+            header("Content-Disposition: attachment; filename=\"label.pdf\"");
+            echo $labelContent;
+        - lang: PHP
+          label: PHP SDK
+          source: |
+            <?php
+            use PigeonExpress\PigeonExpress;
+
+            $client = new PigeonExpress($apiKey, $apiSecret);
+
+            // Get PDF label content
+            $pdfContent = $client->shipments()->getLabel('455123456789');
+            file_put_contents('label.pdf', $pdfContent);
+
+            // Stream to browser for download
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="shipping-label.pdf"');
+            echo $client->shipments()->getLabel('455123456789');
+        - lang: Java
+          label: Java
+          source: |
+            String referenceNumber = "455123456789";
+            boolean download = true; // false = inline, true = download
+
+            String url = "{BASE_URL}/shipments/" + referenceNumber + "/label";
+            if (download) {
+                url += "?download=1";
+            }
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .header("X-API-Key", "your-api-key")
+                .header("X-API-Secret", "your-api-secret")
+                .GET()
+                .build();
+
+            // Save to file
+            HttpResponse<Path> response = client.send(request,
+                HttpResponse.BodyHandlers.ofFile(Path.of("label.pdf")));
+
+            System.out.println("Label saved to: " + response.body());
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            text/plain:
+              schema:
+                type: string
+                description: Raw ZPL string (returned when format=zpl300)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/shipment-statuses:
+    get:
+      tags:
+        - Shipments
+      summary: List shipment statuses
+      description: |
+        Returns list of available shipment statuses.
+
+        **Response fields:**
+        - `code` - unique status code
+        - `name` - translated status name
+      operationId: listShipmentStatuses
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X GET "{BASE_URL}/shipment-statuses" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/shipment-statuses",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $statuses = json_decode($response, true);
+            curl_close($curl);
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ShipmentStatus'
+              example:
+                success: true
+                data:
+                  - code: "shipment_registered"
+                    name: "Регистрирана пратка"
+                  - code: "shipment_redirection_requested"
+                    name: "Заявено пренасочване"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/additional-services:
+    get:
+      tags:
+        - Shipments
+      summary: "List additional services"
+      description: |
+        Returns list of all available additional services.
+
+        **Important:** The `code` field is what you should use as KEY in the `service_codes` object when creating shipments.
+        - For `input_type: "checkbox"`: use `true` as value
+        - For `input_type: "text"`: use numeric/string value (e.g., `declared_value`, `cod_amount`)
+        - For `input_type: "select"`: use `true` as value, but **only one service per `option_group` can be selected**
+
+        **Option Groups (mutually exclusive):**
+        Services with the same `option_group` are mutually exclusive - you can only select ONE from the group.
+        Example: `shipment_review` and `shipment_test_before_payment` both have `option_group: "shipment_view"`,
+        so you can use either `{"shipment_review": true}` OR `{"shipment_test_before_payment": true}`, but NOT both.
+      operationId: listAdditionalServices
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X GET "{BASE_URL}/additional-services" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/additional-services",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $services = json_decode($response, true);
+            curl_close($curl);
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdditionalService'
+              example:
+                success: true
+                data:
+                  - code: "sms_notification_receiver"
+                    name: "SMS известие на получателя"
+                    description: "SMS известие до получателя при пристигане на пратката"
+                    input_type: "checkbox"
+                  - code: "requires_special_packaging"
+                    name: "Специална опаковка"
+                    description: "Допълнителна защитна опаковка за крехки стоки"
+                    input_type: "checkbox"
+                  - code: "shipment_review"
+                    name: "Преглед на пратка"
+                    description: "Получателят може да прегледа съдържанието преди плащане"
+                    input_type: "select"
+                    option_group: "shipment_view"
+                  - code: "shipment_test_before_payment"
+                    name: "Тест преди плащане"
+                    description: "Получателят може да тества продукта преди плащане"
+                    input_type: "select"
+                    option_group: "shipment_view"
+                  - code: "declared_value"
+                    name: "Застраховка"
+                    description: "Застраховка на съдържанието на пратката"
+                    input_type: "text"
+                  - code: "cod_amount"
+                    name: "Наложен платеж"
+                    description: "Сума за наложен платеж (само стойността на продукта)"
+                    input_type: "text"
+                  - code: "cod_card_fee"
+                    name: "Позволи плащане с карта на НП"
+                    description: "Такса при плащане на наложен платеж с карта (удържа се от изпращача)"
+                    input_type: "checkbox"
+                  - code: "return_receipt"
+                    name: "Обратна разписка (електронна)"
+                    description: "Заявка за обратна разписка в електронен формат"
+                    input_type: "checkbox"
+                  - code: "paper_return_receipt"
+                    name: "Обратна разписка (хартия)"
+                    description: "Заявка за обратна разписка в хартиен формат"
+                    input_type: "checkbox"
+                  - code: "service_return_documents"
+                    name: "Обратни документи"
+                    description: "Връщане на оригинални документи от получателя към подателя след подписване."
+                    input_type: "checkbox"
+                  - code: "ID_verification_and_document_signature"
+                    name: "Верни данни и подпис върху документ"
+                    description: null
+                    input_type: "checkbox"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /v1/payments/completed:
+    get:
+      tags:
+        - Payments
+      summary: "List paid-out COD payments"
+      description: |
+        Returns the authenticated customer's already paid-out cash-on-delivery (COD) amounts for a date range as JSON.
+
+        Only payouts with status `completed` are returned, filtered by the payout completion date (`completed_at`), not the shipment delivery date.
+
+        **Date range constraints:**
+        - `from_date` and `to_date` are required and must be in `YYYY-MM-DD` format.
+        - `to_date` must be greater than or equal to `from_date`.
+        - The range must not exceed one calendar month.
+
+        Amounts are returned in EUR with 2 decimals (`amount_eur`). Dates (`collected_date`, `paid_date`) are formatted as `d-m-Y`.
+      operationId: listPayments
+      parameters:
+        - name: from_date
+          in: query
+          required: true
+          description: Start of the payout date range (inclusive), format YYYY-MM-DD
+          schema:
+            type: string
+            format: date
+            example: "2026-05-18"
+        - name: to_date
+          in: query
+          required: true
+          description: End of the payout date range (inclusive), format YYYY-MM-DD. Must be >= from_date and at most one month after it.
+          schema:
+            type: string
+            format: date
+            example: "2026-06-18"
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X GET "{BASE_URL}/payments/completed?from_date=2026-05-18&to_date=2026-06-18" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+        - lang: PHP
+          label: PHP (cURL)
+          source: |
+            <?php
+            $curl = curl_init();
+            curl_setopt_array($curl, [
+                CURLOPT_URL => "{BASE_URL}/payments/completed?from_date=2026-05-18&to_date=2026-06-18",
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_HTTPHEADER => [
+                    "X-API-Key: your-api-key",
+                    "X-API-Secret: your-api-secret"
+                ],
+            ]);
+            $response = curl_exec($curl);
+            $payments = json_decode($response, true);
+            curl_close($curl);
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Плащанията са заредени успешно"
+                  data:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                        description: Number of returned rows
+                        example: 2
+                      rows:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/CodPayment'
+              example:
+                success: true
+                message: "Плащанията са заредени успешно"
+                data:
+                  count: 2
+                  rows:
+                    - waybill: "456581447803"
+                      external_reference: ""
+                      collected_date: "13-04-2026"
+                      paid_date: "18-05-2026"
+                      amount_eur: "990.00"
+                    - waybill: "456742173301"
+                      external_reference: "ORD-10245"
+                      collected_date: "22-04-2026"
+                      paid_date: "18-05-2026"
+                      amount_eur: "10.00"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /v1/courier-requests:
+    post:
+      tags:
+        - Courier Requests
+      summary: Create courier pickup request
+      description: |
+        Request a courier pickup from an address. The request is forwarded to the
+        Pigeon Express backoffice for dispatching.
+
+        **Notes:**
+        - Identical requests within 30 seconds are deduplicated
+        - `requested_pickup_date` must be an open working day, today or later, and before the daily pickup cutoff
+        - Pickup times must be within office working hours
+        - `requested_pickup_time_to` is required when `requested_pickup_time_type` is `interval`
+        - `contact_name`, `contact_phone` and `contact_email` default to the customer profile when omitted
+        - Do not include the street number in `pickup_address` when `pickup_street_number` is provided
+      operationId: createCourierRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pickup_city_id
+                - pickup_address
+                - requested_pickup_date
+                - requested_pickup_time_type
+                - requested_pickup_time_from
+              properties:
+                pickup_city_id:
+                  type: integer
+                  description: Required. ID of the pickup city (see GET /v1/cities).
+                  example: 1
+                pickup_address:
+                  type: string
+                  maxLength: 255
+                  description: Required. Street name for the pickup. Do not include the street number here when `pickup_street_number` is provided.
+                  example: "ул. Витоша"
+                pickup_street_number:
+                  type: string
+                  maxLength: 20
+                  description: Street number for the pickup address.
+                  example: "15"
+                pickup_neighborhood:
+                  type: string
+                  maxLength: 255
+                  description: Neighborhood / quarter of the pickup address.
+                pickup_building_number:
+                  type: string
+                  maxLength: 255
+                  description: Building / block number.
+                pickup_entrance:
+                  type: string
+                  maxLength: 20
+                  description: Building entrance.
+                pickup_floor:
+                  type: string
+                  maxLength: 20
+                  description: Floor number.
+                pickup_apartment:
+                  type: string
+                  maxLength: 20
+                  description: Apartment number.
+                pickup_additional_info:
+                  type: string
+                  description: Free-text additional information to help the courier locate the address.
+                requested_pickup_date:
+                  type: string
+                  format: date
+                  description: Required. Requested pickup date. Must be an open working day, today or later, and before the daily pickup cutoff.
+                  example: "2026-07-13"
+                requested_pickup_time_type:
+                  type: string
+                  enum: [interval, specific_time]
+                  description: "Required. Type of requested pickup time: `interval` for a time range or `specific_time` for a single moment."
+                  example: "interval"
+                requested_pickup_time_from:
+                  type: string
+                  description: Required. Start of the pickup time (or the exact time when `requested_pickup_time_type` is `specific_time`). Must be within office working hours.
+                  example: "09:00"
+                requested_pickup_time_to:
+                  type: string
+                  description: End of the pickup time range. Required when `requested_pickup_time_type` is `interval`. Must be within office working hours.
+                  example: "13:00"
+                contact_name:
+                  type: string
+                  maxLength: 255
+                  description: Contact person for the pickup. Defaults to the customer profile when omitted.
+                contact_phone:
+                  type: string
+                  maxLength: 50
+                  description: Contact phone for the pickup. Defaults to the customer profile when omitted.
+                contact_phone_country_code:
+                  type: string
+                  maxLength: 10
+                  description: Country code for the contact phone. Defaults to "359".
+                contact_email:
+                  type: string
+                  format: email
+                  description: Contact email for the pickup. Defaults to the customer profile when omitted.
+                company_name:
+                  type: string
+                  maxLength: 255
+                  description: Company name for the pickup, if the request is on behalf of a company.
+                request_type:
+                  type: string
+                  enum: [single]
+                  description: Type of courier request. Currently only `single` is supported.
+                package_type:
+                  type: string
+                  enum: [documents, standard, large, pallet, money_transfer]
+                  description: Type of the package to be picked up.
+                package_description:
+                  type: string
+                  description: Free-text description of the package contents.
+                estimated_weight:
+                  type: number
+                  minimum: 0
+                  description: Estimated total weight of the package in kilograms.
+                estimated_dimensions:
+                  type: object
+                  description: Estimated package dimensions in centimeters.
+                  properties:
+                    length:
+                      type: number
+                      description: Estimated length in centimeters.
+                    width:
+                      type: number
+                      description: Estimated width in centimeters.
+                    height:
+                      type: number
+                      description: Estimated height in centimeters.
+                special_instructions:
+                  type: string
+                  description: Special instructions for the courier handling the pickup.
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X POST "{BASE_URL}/courier-requests" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "pickup_city_id": 1,
+                "pickup_address": "ул. Витоша",
+                "pickup_street_number": "15",
+                "requested_pickup_date": "2026-07-13",
+                "requested_pickup_time_type": "interval",
+                "requested_pickup_time_from": "09:00",
+                "requested_pickup_time_to": "13:00",
+                "package_type": "standard",
+                "estimated_weight": 3.5
+              }'
+      responses:
+        '201':
+          description: Courier request created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/CourierRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '503':
+          $ref: '#/components/responses/ServerError'
+
+  /v1/courier-requests/{requestNumber}:
+    get:
+      tags:
+        - Courier Requests
+      summary: Get courier request
+      description: |
+        Retrieve a courier pickup request by its public request number.
+        Only requests belonging to the authenticated customer are returned;
+        unknown or foreign numbers respond with 404.
+      operationId: getCourierRequest
+      parameters:
+        - name: requestNumber
+          in: path
+          description: Public courier request number
+          required: true
+          schema:
+            type: string
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl "{BASE_URL}/courier-requests/CR-458106744669" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/CourierRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /v1/courier-requests/{requestNumber}/cancel:
+    post:
+      tags:
+        - Courier Requests
+      summary: Cancel courier request
+      description: |
+        Cancel a courier pickup request. Requests with status
+        `courier_request_completed`, `courier_request_cancelled` or
+        `courier_request_failed` cannot be cancelled (422).
+
+        Identical requests within 30 seconds are deduplicated.
+      operationId: cancelCourierRequest
+      parameters:
+        - name: requestNumber
+          in: path
+          description: Public courier request number
+          required: true
+          schema:
+            type: string
+      x-codeSamples:
+        - lang: Shell
+          label: cURL
+          source: |
+            curl -X POST "{BASE_URL}/courier-requests/CR-458106744669/cancel" \
+              -H "X-API-Key: your-api-key" \
+              -H "X-API-Secret: your-api-secret"
+      responses:
+        '200':
+          description: Courier request cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                  data:
+                    $ref: '#/components/schemas/CourierRequest'
+              example:
+                success: true
+                message: "Заявката е отказана успешно"
+                data:
+                  request_number: "CR-458106744669"
+                  status:
+                    code: "courier_request_cancelled"
+                    name: "Отменена заявка"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API Key provided by Pigeon Express
+    ApiSecretAuth:
+      type: apiKey
+      in: header
+      name: X-API-Secret
+      description: API Secret provided by Pigeon Express
+
+  schemas:
+    CourierRequest:
+      type: object
+      properties:
+        request_number:
+          type: string
+          description: Unique identifier of the courier request.
+          example: "CR-458106744669"
+        request_type:
+          type: string
+          nullable: true
+          description: Type of the courier request.
+          example: single
+        status:
+          type: object
+          nullable: true
+          description: |
+            Current status of the courier request.
+            Codes: courier_request_pending, courier_request_assigned,
+            courier_request_in_progress, courier_request_completed,
+            courier_request_cancelled, courier_request_failed,
+            courier_request_no_zone_courier
+          properties:
+            code:
+              type: string
+              description: Machine-readable status code.
+              example: courier_request_pending
+            name:
+              type: string
+              description: Human-readable status name (returned in Bulgarian).
+              example: "Нова заявка"
+        contact:
+          type: object
+          description: Contact person for the pickup.
+          properties:
+            name:
+              type: string
+              nullable: true
+              description: Contact person name.
+            phone:
+              type: string
+              nullable: true
+              description: Contact phone number.
+            email:
+              type: string
+              nullable: true
+              description: Contact email address.
+        company_name:
+          type: string
+          nullable: true
+          description: Company name associated with the pickup.
+        pickup:
+          type: object
+          description: Pickup address details.
+          properties:
+            city:
+              type: string
+              nullable: true
+              description: Pickup city name.
+            address:
+              type: string
+              nullable: true
+              description: Pickup street and number.
+            neighborhood:
+              type: string
+              nullable: true
+              description: Pickup neighborhood / quarter.
+            building_number:
+              type: string
+              nullable: true
+              description: Building / block number.
+            additional_info:
+              type: string
+              nullable: true
+              description: Additional information to help locate the address.
+        requested_pickup_date:
+          type: string
+          format: date
+          description: Requested pickup date.
+          example: "2026-07-13"
+        requested_pickup_time_type:
+          type: string
+          enum: [interval, specific_time]
+          description: "Type of the requested pickup time: `interval` for a range or `specific_time` for a single moment."
+        requested_pickup_time_from:
+          type: string
+          description: Start of the pickup time (or the exact time when the type is `specific_time`).
+          example: "09:00"
+        requested_pickup_time_to:
+          type: string
+          nullable: true
+          description: End of the pickup time range (null when the type is `specific_time`).
+          example: "13:00"
+        package:
+          type: object
+          description: Details about the package to be picked up.
+          properties:
+            type:
+              type: string
+              nullable: true
+              description: Type of the package.
+            description:
+              type: string
+              nullable: true
+              description: Description of the package contents.
+            estimated_weight:
+              type: number
+              nullable: true
+              description: Estimated total weight in kilograms.
+            estimated_dimensions:
+              type: object
+              nullable: true
+              description: Estimated package dimensions in centimeters.
+              properties:
+                length:
+                  type: number
+                  description: Estimated length in centimeters.
+                width:
+                  type: number
+                  description: Estimated width in centimeters.
+                height:
+                  type: number
+                  description: Estimated height in centimeters.
+        special_instructions:
+          type: string
+          nullable: true
+          description: Special instructions for the courier.
+        notes:
+          type: string
+          nullable: true
+          description: Internal notes attached to the request.
+        created_shipment_reference:
+          type: string
+          nullable: true
+          description: Reference of the shipment created from this courier request, once one exists.
+        created_at:
+          type: string
+          description: Timestamp when the courier request was created.
+          example: "2026-07-10 17:17:57"
+
+    City:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 2459
+        name:
+          type: string
+          example: "Абланица"
+        name_en:
+          type: string
+          nullable: true
+          example: "Ablanitsa"
+        type:
+          type: string
+          description: City type in Bulgarian
+          enum:
+            - град
+            - село
+            - к.к.
+          example: "село"
+        type_en:
+          type: string
+          nullable: true
+          description: City type in English (only if type matches known values)
+          enum:
+            - city
+            - village
+            - resort
+          example: "village"
+        postal_code:
+          type: string
+          example: "5574"
+        municipality:
+          type: string
+          example: "Ловеч"
+        municipality_en:
+          type: string
+          nullable: true
+          example: "Lovech"
+        district:
+          type: string
+          example: "Ловеч"
+        district_en:
+          type: string
+          nullable: true
+          example: "Lovech"
+        iso_code_2:
+          type: string
+          nullable: true
+          example: "BG"
+      required:
+        - id
+        - name
+        - type
+
+    Street:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 406805
+        name:
+          type: string
+          example: "3-ТИ МАРТ"
+        name_en:
+          type: string
+          nullable: true
+          example: "3-TI MART"
+        type:
+          type: string
+          description: Street type in Bulgarian
+          example: "улица"
+        type_en:
+          type: string
+          nullable: true
+          description: Street type in English
+          example: "Street"
+        city_id:
+          type: integer
+          example: 2556
+      required:
+        - id
+        - name
+        - type
+        - city_id
+
+    Office:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 120
+        name:
+          type: string
+          example: "Попово (офис)"
+        code:
+          type: string
+          example: "POP-001"
+        type:
+          type: string
+          enum:
+            - office
+            - locker
+          example: "office"
+        address:
+          type: string
+          example: "Попово, 7800"
+        city:
+          type: object
+          properties:
+            id:
+              type: integer
+              example: 202
+            name:
+              type: string
+              example: "Попово"
+            name_en:
+              type: string
+              example: "Popovo"
+            type:
+              type: string
+              description: Settlement type in Bulgarian (град, село, к.к.)
+              example: "град"
+            type_en:
+              type: string
+              nullable: true
+              description: Settlement type in English (only if type matches known values)
+              enum:
+                - city
+                - village
+                - resort
+              example: "city"
+            postal_code:
+              type: string
+              example: "7800"
+            municipality:
+              type: string
+              example: "Попово"
+            municipality_en:
+              type: string
+              example: "Popovo"
+            district:
+              type: string
+              example: "Търговище"
+            district_en:
+              type: string
+              example: "Targovishte"
+            iso_code_2:
+              type: string
+              example: "BG"
+        postal_code:
+          type: string
+          example: "7800"
+        phone:
+          type: string
+          nullable: true
+          example: "0876017836"
+        email:
+          type: string
+          nullable: true
+          example: null
+        working_hours:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkingHours'
+        latitude:
+          type: number
+          format: float
+          nullable: true
+          example: null
+        longitude:
+          type: number
+          format: float
+          nullable: true
+          example: null
+        max_weight:
+          type: number
+          format: float
+          nullable: true
+          description: Maximum package weight in kg (for lockers)
+          example: 20
+        max_dimensions:
+          type: object
+          nullable: true
+          description: Maximum dimensions (for lockers)
+          properties:
+            length:
+              type: integer
+              example: 60
+            width:
+              type: integer
+              example: 40
+            height:
+              type: integer
+              example: 40
+      required:
+        - id
+        - name
+        - type
+        - address
+        - type
+
+    WorkingHours:
+      type: object
+      properties:
+        day:
+          type: string
+          enum:
+            - monday
+            - tuesday
+            - wednesday
+            - thursday
+            - friday
+            - saturday
+            - sunday
+          example: "monday"
+        open:
+          type: string
+          example: "09:00"
+        close:
+          type: string
+          example: "18:00"
+        is_closed:
+          type: boolean
+          example: false
+
+    Package:
+      type: object
+      properties:
+        weight:
+          type: number
+          format: float
+          description: Weight in kg
+          minimum: 0.1
+          maximum: 30
+          example: 1.5
+        length:
+          type: integer
+          description: Length in cm
+          minimum: 1
+          maximum: 200
+          example: 30
+        width:
+          type: integer
+          description: Width in cm
+          minimum: 1
+          maximum: 200
+          example: 20
+        height:
+          type: integer
+          description: Height in cm
+          minimum: 1
+          maximum: 200
+          example: 15
+      required:
+        - weight
+
+    Address:
+      type: object
+      description: |
+        Address structure for pickup or delivery.
+        **Important:** Either `street_id` OR `additional_info` must be provided:
+        - If `street_id` is provided: must exist in DB and belong to `city_id`
+        - If `street_id` is NOT provided: `additional_info` is required (min 3 chars)
+      properties:
+        city_id:
+          type: integer
+          description: City ID from cities API
+          example: 68134
+        street_id:
+          type: integer
+          nullable: true
+          description: Street ID from streets API. Must exist and belong to city_id. If not provided, additional_info is required.
+          example: 12345
+        street_name:
+          type: string
+          nullable: true
+          description: Street name (alternative to street_id)
+          example: "Витоша"
+        street_number:
+          type: string
+          example: "100"
+        building_number:
+          type: string
+          nullable: true
+          example: "А"
+        entrance:
+          type: string
+          nullable: true
+          example: "1"
+        floor:
+          type: string
+          nullable: true
+          example: "3"
+        apartment:
+          type: string
+          nullable: true
+          example: "12"
+        postal_code:
+          type: string
+          nullable: true
+          example: "1000"
+        neighborhood:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: Neighborhood/quarter name
+          example: "Лозенец"
+        contact_name:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: Contact person name
+          example: "Иван Петров"
+        contact_phone:
+          type: string
+          nullable: true
+          description: Contact phone number
+          example: "+359888123456"
+        additional_info:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 500
+          description: Additional address info. Required (min 3 chars) if street_id is not provided.
+          example: "Вход от двора, код 1234"
+      required:
+        - city_id
+
+    CalculateShipmentRequest:
+      type: object
+      properties:
+        pickup_type:
+          type: string
+          enum:
+            - address
+            - office
+          example: "office"
+        pickup_office_id:
+          type: integer
+          description: Required if pickup_type is 'office'
+          example: 1001
+        pickup_address:
+          $ref: '#/components/schemas/Address'
+          description: Required if pickup_type is 'address'. Alias 'sender_address' is also accepted.
+        delivery_type:
+          type: string
+          enum:
+            - address
+            - office
+            - locker
+          example: "address"
+        delivery_office_id:
+          type: integer
+          description: Required if delivery_type is 'office' or 'locker'
+          example: 2001
+        delivery_address:
+          $ref: '#/components/schemas/Address'
+          description: Required if delivery_type is 'address'
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Package'
+          minItems: 1
+        service_type:
+          type: string
+          enum:
+            - standard
+            - express
+          default: standard
+        who_pays:
+          type: string
+          enum:
+            - sender
+            - receiver
+          default: sender
+        service_codes:
+          type: object
+          description: |
+            Additional services as object (NOT array!).
+            Keys are service codes from GET /additional-services.
+            Values are `true` for checkbox services or numeric for number/text services.
+          additionalProperties:
+            oneOf:
+              - type: boolean
+              - type: number
+          example:
+            sms_notification_receiver: true
+            declared_value: 150
+            cod_amount: 50.00
+      required:
+        - pickup_type
+        - delivery_type
+        - packages
+        - service_type
+
+    ShipmentCalculation:
+      type: object
+      properties:
+        shipping_price:
+          type: number
+          format: float
+          description: Base shipping cost
+          example: 7.2
+        total_service_fees:
+          type: number
+          format: float
+          description: Total additional service fees
+          example: 6.06
+        total_price:
+          type: number
+          format: float
+          description: Total cost including all fees
+          example: 13.26
+        service_type:
+          type: string
+          description: Service type (standard/express)
+          example: "standard"
+        currency:
+          type: string
+          example: "EUR"
+        service_codes:
+          type: array
+          description: Array of selected additional service codes
+          items:
+            type: string
+          example: ["sms_notification_receiver", "insurance_required"]
+
+    ServiceFee:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Наложен платеж"
+        amount:
+          type: number
+          format: float
+          example: 1.50
+
+    CreateShipmentRequest:
+      type: object
+      properties:
+        receiver_name:
+          type: string
+          description: Full name of recipient
+          example: "Иван Петров"
+        receiver_phone:
+          type: string
+          description: Phone number (Bulgarian format)
+          example: "+359888123456"
+        receiver_email:
+          type: string
+          format: email
+          nullable: true
+          example: "ivan@example.com"
+        receiver_company_name:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: "**NEW** Recipient company name. Optional, but if any of receiver_company_name / receiver_company_vat / receiver_company_mol / receiver_company_address is provided, all four become required."
+          example: "Акме ООД"
+        receiver_company_vat:
+          type: string
+          nullable: true
+          maxLength: 50
+          description: "**NEW** Recipient company VAT / Bulstat (EIK). Required together with the other company fields (see receiver_company_name)."
+          example: "BG123456789"
+        receiver_company_mol:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: "**NEW** Recipient company MOL (responsible person). Required together with the other company fields (see receiver_company_name)."
+          example: "Иван Петров"
+        receiver_company_address:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: "**NEW** Recipient company address. Required together with the other company fields (see receiver_company_name)."
+          example: "гр. София, ул. Витоша 1"
+        receiver_company_dds_number:
+          type: string
+          nullable: true
+          maxLength: 50
+          description: "**NEW** Recipient company VAT registration number. Always optional, independent of the other company fields."
+          example: "BG123456789"
+        pickup_type:
+          type: string
+          enum:
+            - address
+            - office
+          example: "office"
+        pickup_office_id:
+          type: integer
+          description: Required if pickup_type is 'office'
+          example: 1001
+        pickup_address:
+          $ref: '#/components/schemas/Address'
+          description: Required if pickup_type is 'address'. Alias 'sender_address' is also accepted.
+        delivery_type:
+          type: string
+          enum:
+            - address
+            - office
+            - locker
+          example: "address"
+        delivery_office_id:
+          type: integer
+          description: Required if delivery_type is 'office' or 'locker'
+          example: 2001
+        delivery_address:
+          $ref: '#/components/schemas/Address'
+          description: Required if delivery_type is 'address'
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Package'
+          minItems: 1
+        service_type:
+          type: string
+          enum:
+            - standard
+            - express
+          default: standard
+        who_pays:
+          type: string
+          enum:
+            - sender
+            - receiver
+          default: sender
+        return_at_my_expense:
+          type: boolean
+          description: Return shipment at sender's expense
+          default: false
+        note:
+          type: string
+          nullable: true
+          description: Note for courier
+          maxLength: 1000
+          example: "Да се обади преди доставка"
+        external_reference:
+          type: string
+          nullable: true
+          description: "**NEW** External reference from the client's own system. Returned back in the tracking response."
+          maxLength: 100
+          example: "ORDER-12345"
+        label_format:
+          type: string
+          nullable: true
+          description: "**NEW** Requested label format generated together with the shipment. The label is returned in the response as `label_pdf` (base64, including ZPL), with `label_content_type` and `label_format` echoed back."
+          enum:
+            - default
+            - pdf150
+            - zpl300
+          default: default
+          example: "zpl300"
+        inventory_items:
+          type: array
+          description: List of items in the shipment (required)
+          items:
+            type: object
+            properties:
+              description:
+                type: string
+                description: Item description
+                maxLength: 200
+                example: "Книга - Програмиране с PHP"
+              quantity:
+                type: integer
+                description: Item quantity
+                minimum: 1
+                maximum: 1000000
+                default: 1
+                example: 2
+            required:
+              - description
+          minItems: 1
+        service_codes:
+          type: object
+          description: |
+            Additional services as object (NOT array!).
+            Keys are service codes from GET /additional-services.
+            Values are `true` for checkbox services or numeric for number services.
+          additionalProperties:
+            oneOf:
+              - type: boolean
+              - type: number
+          example:
+            sms_notification_receiver: true
+            declared_value: 150
+            cod_amount: 50.00
+        is_reverse:
+          type: boolean
+          default: false
+          description: |
+            **NEW** The shipment is created by its RECEIVER (the authenticated API customer) instead of by the sender.
+            This feature must be enabled for your account by an administrator; otherwise the request returns 422.
+            When `true`: provided `receiver_*` values are used as-is, missing ones default to the API customer's profile
+            (company fields are treated as one block - either fully from the request or fully from the profile);
+            the sender is described via the required `sender_name` + `sender_phone` (plus optional `sender_email`),
+            mirroring the receiver fields on a normal shipment, and is matched to an existing customer
+            or created automatically (same as an unknown receiver on a normal shipment);
+            `sender_address`/pickup is NOT auto-filled (it belongs to the sender) - provide it explicitly;
+            `delivery_address` is auto-filled from the API customer's default address when delivery_type=address and none is given.
+          example: true
+        sender_name:
+          type: string
+          nullable: true
+          minLength: 3
+          maxLength: 255
+          description: "**NEW** Only when `is_reverse: true`, then required. Sender full name."
+          example: "Иван Петров"
+        sender_phone:
+          type: string
+          nullable: true
+          description: "**NEW** Only when `is_reverse: true`, then required. Sender phone."
+          example: "0888123456"
+        sender_email:
+          type: string
+          format: email
+          nullable: true
+          description: "**NEW** Only when `is_reverse: true`. Sender email, optional (mirrors receiver_email)."
+          example: "ivan.petrov@example.com"
+        sender_company_name:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: "**NEW** Only when `is_reverse: true`. Sender company name. Optional, but if any of sender_company_name / sender_company_vat / sender_company_mol / sender_company_address is provided, all four become required (mirrors the receiver company block)."
+          example: "Акме ООД"
+        sender_company_vat:
+          type: string
+          nullable: true
+          maxLength: 50
+          description: "**NEW** Only when `is_reverse: true`. Sender company VAT / Bulstat (EIK). When provided, the sender is matched directly by EIK. Required together with the other company fields."
+          example: "BG123456789"
+        sender_company_mol:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: "**NEW** Only when `is_reverse: true`. Sender company MOL (responsible person). Required together with the other company fields."
+          example: "Иван Петров"
+        sender_company_address:
+          type: string
+          nullable: true
+          maxLength: 255
+          description: "**NEW** Only when `is_reverse: true`. Sender company address. Required together with the other company fields."
+          example: "гр. София, ул. Витоша 1"
+        sender_company_dds_number:
+          type: string
+          nullable: true
+          maxLength: 50
+          description: "**NEW** Only when `is_reverse: true`. Sender company VAT registration number. Always optional, independent of the other company fields."
+          example: "BG123456789"
+      required:
+        - receiver_name
+        - receiver_phone
+        - pickup_type
+        - delivery_type
+        - packages
+        - inventory_items
+        - service_type
+        - who_pays
+
+    Shipment:
+      type: object
+      properties:
+        reference_number:
+          type: string
+          description: Internal reference number
+          example: "455791936383"
+        status:
+          type: string
+          description: Status in Bulgarian
+          example: "Регистрирана пратка"
+        note:
+          type: string
+          nullable: true
+          description: "**NEW** Note for courier (as submitted in the request)"
+          example: "Моля, обадете се преди доставка"
+        external_reference:
+          type: string
+          nullable: true
+          description: "**NEW** External reference from the client's own system (as submitted in the request)"
+          example: "ORDER-12345"
+        packages:
+          type: array
+          items:
+            type: object
+            properties:
+              tracking_number:
+                type: string
+                example: "455791936383-1"
+              weight:
+                type: string
+                example: "1.500"
+              dimensions:
+                type: object
+                properties:
+                  length:
+                    type: string
+                    example: "25.00"
+                  width:
+                    type: string
+                    example: "15.00"
+                  height:
+                    type: string
+                    example: "10.00"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-26T17:17:15+02:00"
+        label_pdf:
+          type: string
+          description: Base64 encoded label content (PDF, or ZPL text for zpl300 - still base64 in this response)
+          example: "JVBERi0xLjcKMSAwIG9iago8PCAvVHlwZSAvQ2F0...."
+        label_content_type:
+          type: string
+          description: "**NEW** MIME type of the returned label_pdf content"
+          example: "application/pdf"
+        label_format:
+          type: string
+          description: "**NEW** Echo of the requested label format"
+          enum:
+            - default
+            - pdf150
+            - zpl300
+          example: "default"
+
+    TrackingResponse:
+      type: object
+      properties:
+        reference_number:
+          type: string
+          example: "455791936383"
+        external_reference:
+          type: string
+          nullable: true
+          description: External reference number provided when the shipment was created
+          example: null
+        note:
+          type: string
+          nullable: true
+          description: Shipment note
+          example: null
+        status:
+          type: string
+          description: Current status name (translated)
+          example: "Отказана"
+        status_code:
+          type: string
+          description: Current status code
+          example: "shipment_cancelled"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-26T17:17:15+02:00"
+        expected_delivery_date:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-02-27T00:00:00+02:00"
+        delivery_date:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        packages:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingPackage'
+        tracking:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingEvent'
+        chain_before:
+          type: array
+          description: Linked shipments created before this one in the chain (e.g. the original shipment of a return). Empty when none.
+          items:
+            $ref: '#/components/schemas/ChainShipment'
+        chain_after:
+          type: array
+          description: Linked shipments created after this one in the chain (e.g. a return-to-sender shipment). Empty when none.
+          items:
+            $ref: '#/components/schemas/ChainShipment'
+
+    ChainShipment:
+      type: object
+      properties:
+        reference_number:
+          type: string
+          example: "457341228749"
+        external_reference:
+          type: string
+          nullable: true
+          description: External reference number of the linked shipment
+          example: null
+        status:
+          type: string
+          description: Status name (translated)
+          example: "Непотърсена"
+        status_code:
+          type: string
+          example: "shipment_untracked"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-05-27T10:04:57+03:00"
+        delivery_date:
+          type: string
+          format: date-time
+          nullable: true
+          example: null
+        packages:
+          type: array
+          description: Packages of the linked shipment, same structure as the root-level packages
+          items:
+            $ref: '#/components/schemas/TrackingPackage'
+
+    TrackingPackage:
+      type: object
+      properties:
+        tracking_number:
+          type: string
+          description: The package barcode
+          example: "455791936383-1"
+        weight:
+          type: string
+          example: "1.500"
+
+    TrackingEvent:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Status name (translated)
+          example: "Регистрирана пратка"
+        status_code:
+          type: string
+          description: Status code
+          example: "shipment_registered"
+        note:
+          type: string
+          nullable: true
+          example: "Първоначален статус при създаване на пратката"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-02-26T17:17:15+02:00"
+
+    ShipmentStatus:
+      type: object
+      description: |
+        Shipment status definition.
+        Only active statuses from category 'shipments' are returned.
+      properties:
+        code:
+          type: string
+          description: Unique status code
+          example: "shipment_registered"
+        name:
+          type: string
+          description: Translated status name
+          example: "Регистрирана пратка"
+      required:
+        - code
+        - name
+
+    AdditionalService:
+      type: object
+      description: |
+        Additional service definition.
+        Only active, visible, and global services are returned.
+
+        **Usage in service_codes:**
+        - For `input_type: "checkbox"`: use `{"code": true}`
+        - For `input_type: "text"`: use `{"code": value}` (e.g., `{"declared_value": 500}`)
+        - For `input_type: "select"`: use `{"code": true}` (only one from option_group can be selected)
+      properties:
+        code:
+          type: string
+          description: |
+            Unique code to use as KEY in service_codes object.
+            For services with input fields, this is the field name (e.g., "declared_value").
+            For checkbox services, this is the service code (e.g., "sms_notification_receiver").
+          example: "sms_notification_receiver"
+        name:
+          type: string
+          description: Service name in Bulgarian
+          example: "SMS известие на получателя"
+        description:
+          type: string
+          description: Service description in Bulgarian
+          example: "SMS известие до получателя при пристигане на пратката"
+        input_type:
+          type: string
+          nullable: true
+          description: |
+            Type of input field:
+            - "checkbox": use `true` as value in service_codes
+            - "text": use numeric or string value in service_codes (e.g., declared_value)
+            - "select": use `true` as value (mutually exclusive within option_group)
+          enum:
+            - checkbox
+            - text
+            - select
+          example: "checkbox"
+        option_group:
+          type: string
+          nullable: true
+          description: |
+            Option group name for mutually exclusive services.
+            Services with the same option_group can NOT be selected together - only ONE from the group.
+            Example: `shipment_review` and `shipment_test_before_payment` both have `option_group: "shipment_view"`,
+            so you can use `{"shipment_review": true}` OR `{"shipment_test_before_payment": true}`, but NOT both.
+          example: "shipment_view"
+      required:
+        - code
+        - name
+        - description
+
+    CodPayment:
+      type: object
+      description: A single paid-out COD row in the payments list.
+      properties:
+        waybill:
+          type: string
+          description: |
+            Shipment waybill (reference number). For RETURN/REDIRECT/STORAGE child shipments,
+            this is the original shipment's reference number; otherwise the delivery shipment's reference number.
+          example: "456581447803"
+        external_reference:
+          type: string
+          description: Customer-provided external reference of the shipment (empty string if none)
+          example: "ORD-10245"
+        collected_date:
+          type: string
+          description: Date the COD was collected, formatted d-m-Y
+          example: "13-04-2026"
+        paid_date:
+          type: string
+          description: Date the COD was paid out to the customer (payout completion date), formatted d-m-Y
+          example: "18-05-2026"
+        amount_eur:
+          type: string
+          description: Paid-out amount in EUR, formatted with 2 decimals
+          example: "990.00"
+      required:
+        - waybill
+        - external_reference
+        - collected_date
+        - paid_date
+        - amount_eur
+
+    Pagination:
+      type: object
+      properties:
+        current_page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 2
+        total:
+          type: integer
+          example: 5275
+        last_page:
+          type: integer
+          example: 2638
+
+    StreetsPagination:
+      type: object
+      properties:
+        city_id:
+          type: integer
+          example: 2556
+        city_name:
+          type: string
+          example: "Новаково"
+        city_name_en:
+          type: string
+          nullable: true
+          example: "Novakovo"
+        city_type:
+          type: string
+          description: City type in Bulgarian
+          example: "село"
+        city_type_en:
+          type: string
+          nullable: true
+          description: City type in English (only if type matches known values)
+          example: "village"
+        current_page:
+          type: integer
+          example: 1
+        per_page:
+          type: integer
+          example: 2
+        total:
+          type: integer
+          example: 58
+        last_page:
+          type: integer
+          example: 29
+
+    Error:
+      type: object
+      description: |
+        Generic error response. `message` is a human-readable description in Bulgarian.
+        Do NOT program against the message text — rely on the HTTP status code,
+        the `success` flag and (for validation errors) the keys of the `errors` object.
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          description: Error message in Bulgarian
+          example: "Пратката не е намерена"
+
+    ValidationErrorResponse:
+      type: object
+      description: |
+        Validation error response (HTTP 422). `errors` is keyed by field name;
+        nested fields use dot notation (`delivery_address.city_id`), array items
+        use indexes (`packages.0.weight`). Each value is an array of messages.
+
+        Note: business-rule violations (e.g. blocked receiver, COD limits, no
+        matching shipping rate rule) also return HTTP 422 but WITHOUT the
+        `errors` object — only `success` + `message`.
+      required:
+        - success
+        - message
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: "Валидацията е неуспешна"
+        errors:
+          type: object
+          description: Field name → array of error messages (Bulgarian)
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          example:
+            receiver_phone: ["Полето телефон на получателя е задължително."]
+            packages.0.weight: ["Полето тегло е задължително."]
+            delivery_address.city_id: ["Избраната стойност за град е невалидна."]
+
+  responses:
+    BadRequest:
+      description: Bad request - Missing required path parameter
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            message: "Референтният номер е задължителен"
+
+    Unauthorized:
+      description: |
+        Unauthorized - Missing, malformed or invalid API credentials.
+        Possible messages:
+        - "API keys are required. Add the X-API-Key and X-API-Secret headers." (missing headers)
+        - "Invalid API key format" (key must start with `pk_live_`, secret with `sk_live_`)
+        - "Invalid API keys" (credentials don't match or are deactivated)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            message: "Invalid API keys"
+
+    NotFound:
+      description: |
+        Not found - The resource doesn't exist OR the shipment does not belong
+        to your customer account (the same message is returned on purpose, to
+        prevent probing for foreign reference numbers).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            message: "Пратката не е намерена"
+
+    ValidationError:
+      description: |
+        Unprocessable Entity. Two shapes are possible:
+        1. Field validation failed → `message` + `errors` object keyed by field.
+        2. Business-rule violation (blocked customer/receiver, COD limits,
+           unknown service codes, no shipping rate rule for the given weight,
+           cancel not allowed in current status, ...) → `message` only.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+          examples:
+            fieldValidation:
+              summary: Field validation failed
+              value:
+                success: false
+                message: "Валидацията е неуспешна"
+                errors:
+                  receiver_phone: ["Полето телефон на получателя е задължително."]
+                  packages.0.weight: ["Полето тегло е задължително."]
+            businessRule:
+              summary: Business-rule violation (no errors object)
+              value:
+                success: false
+                message: "Не могат да се изпращат пратки до този получател. Получаването на нови пратки е спряно за този клиент."
+
+    RateLimited:
+      description: Too many requests (60/min standard, 10/min for labels)
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: "Too Many Requests"
+          example:
+            message: "Too Many Requests"
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying
+          schema:
+            type: integer
+            example: 60
+
+    ServerError:
+      description: Server error - The operation was NOT performed (transactions are rolled back)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            success: false
+            message: "Създаването на пратка е неуспешно"
+

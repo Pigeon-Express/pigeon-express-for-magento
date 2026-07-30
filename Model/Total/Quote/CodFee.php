@@ -8,19 +8,22 @@ use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\Quote\Address\Total;
 use Magento\Quote\Model\Quote\Address\Total\AbstractTotal;
 use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Model\Service\CodFeeResolver;
 
 class CodFee extends AbstractTotal
 {
     public const CODE = 'pigeonexpress_cod_fee';
-    public const FEE_PERCENT = 0.025;
-    public const MIN_FEE = 0.80;
 
     /** @var ConfigInterface */
     private $config;
 
-    public function __construct(ConfigInterface $config)
+    /** @var CodFeeResolver */
+    private $codFeeResolver;
+
+    public function __construct(ConfigInterface $config, CodFeeResolver $codFeeResolver)
     {
         $this->config = $config;
+        $this->codFeeResolver = $codFeeResolver;
         $this->setCode(self::CODE);
     }
 
@@ -52,7 +55,13 @@ class CodFee extends AbstractTotal
             return $this;
         }
 
-        $fee = max(round($quote->getSubtotal() * self::FEE_PERCENT, 2), self::MIN_FEE);
+        // The fee comes from the API, never from a rate stored in this module.
+        $codAmount = round((float) $quote->getSubtotal(), 2);
+        $fee = $this->codFeeResolver->resolve($storeId, $codAmount);
+
+        if ($fee <= 0.0) {
+            return $this;
+        }
 
         // Merge fee into shipping — no separate line item in the summary.
         $total->setShippingAmount((float) $total->getShippingAmount() + $fee);
@@ -66,8 +75,23 @@ class CodFee extends AbstractTotal
         return $this;
     }
 
+    /**
+     * Expose the API resolved fee to the checkout so the summary can render it
+     * without recomputing anything in JavaScript.
+     */
     public function fetch(Quote $quote, Total $total): array
     {
-        return [];
+        $address = $quote->getShippingAddress();
+        $fee = $address ? (float) $address->getData(self::CODE) : 0.0;
+
+        if ($fee <= 0.0) {
+            return [];
+        }
+
+        return [
+            'code' => self::CODE,
+            'title' => __('Cash on Delivery Fee'),
+            'value' => $fee,
+        ];
     }
 }

@@ -1,0 +1,12 @@
+# Keep internal material out of `git archive` and out of Composer dist tarballs.
+# The zip build in bin/build-zip.sh works off an explicit whitelist and does not
+# depend on this file, but these two paths must agree.
+
+/.ai            export-ignore
+/docs           export-ignore
+/bin            export-ignore
+/tests          export-ignore
+/build          export-ignore
+/.github        export-ignore
+/.gitattributes export-ignore
+/.gitignore     export-ignore

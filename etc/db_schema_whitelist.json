@@ -122,5 +122,27 @@
             "PRIMARY": true,
             "PIGEONEXPRESS_SHIPMENT_ORDER_ID_SALES_ORDER_ENTITY_ID": true
         }
+    },
+    "pigeonexpress_additional_service": {
+        "column": {
+            "entity_id": true,
+            "code": true,
+            "name": true,
+            "description": true,
+            "input_type": true,
+            "option_group": true,
+            "is_active": true,
+            "last_fee_amount": true,
+            "last_fee_basis": true,
+            "fee_synced_at": true,
+            "synced_at": true
+        },
+        "index": {
+            "PIGEONEXPRESS_ADDITIONAL_SERVICE_IS_ACTIVE": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "PIGEONEXPRESS_ADDITIONAL_SERVICE_CODE": true
+        }
     }
 }

@@ -33,3 +33,6 @@ phpunit.xml
 *.tmp
 *.swp
 *~
+
+# Distribution archives
+/build/

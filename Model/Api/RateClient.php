@@ -81,13 +81,19 @@ class RateClient implements RateClientInterface
                 $calculation = $client->shipments()->calculate($payload);
 
                 $data = $calculation->toArray();
-                // DTO toArray() uses delivery_fee/total (not shipping_price/total_price).
+                // DTO toArray() exposes both the legacy and the current field names.
                 return [
                     'shipping_price' => isset($data['delivery_fee']) ? (float) $data['delivery_fee'] : 0.0,
                     'total_price' => isset($data['total']) ? (float) $data['total'] : 0.0,
+                    // Authoritative total of every additional service fee the API applied.
+                    'total_service_fees' => isset($data['total_service_fees']) ? (float) $data['total_service_fees'] : 0.0,
                     'currency' => isset($data['currency']) ? (string) $data['currency'] : null,
                     'estimated_delivery_days' => isset($data['expected_delivery_days']) ? (int) $data['expected_delivery_days'] : null,
                     'service_fees' => isset($data['fee_breakdown']) && !empty($data['fee_breakdown']) ? $data['fee_breakdown'] : null,
+                    // Codes the API reports it actually charged for.
+                    'applied_service_codes' => isset($data['service_codes']) && is_array($data['service_codes'])
+                        ? $data['service_codes']
+                        : [],
                 ];
             } catch (SdkValidationException $e) {
                 $lastException = $e;

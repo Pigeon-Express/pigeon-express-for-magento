@@ -85,6 +85,8 @@
                 type="PigeonExpress\Shipping\Model\LocationSync"/>
     <preference for="PigeonExpress\Shipping\Api\LocationSearchInterface"
                 type="PigeonExpress\Shipping\Model\LocationSearch"/>
+    <preference for="PigeonExpress\Shipping\Api\AdditionalServicesClientInterface"
+                type="PigeonExpress\Shipping\Model\Api\AdditionalServicesClient"/>
 <type name="Magento\Checkout\Model\ShippingInformationManagement">
         <plugin name="pigeonexpress_validate_shipping" sortOrder="5"
                 type="PigeonExpress\Shipping\Plugin\Checkout\ShippingInformationManagementValidationPlugin"/>

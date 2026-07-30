@@ -359,4 +359,5 @@ The shipment data (API request payload and response) is stored in `pigeonexpress
 | `pigeonexpress_quote_address` | Selected PE delivery location per quote shipping address |
 | `pigeonexpress_order_address` | Selected PE delivery location + price per order shipping address |
 | `pigeonexpress_shipment` | Shipment records: reference number, tracking number, API payload & response |
-| `sales_order` (column) | `pigeonexpress_cod_fee` — COD fee amount stored with the order |
+| `pigeonexpress_additional_service` | Additional services catalogue synced from the API, plus the last fee the API charged for each |
+| `sales_order` (column) | `pigeonexpress_cod_fee`: COD fee amount, as charged by the API, stored with the order |

@@ -66,7 +66,7 @@
                 <field id="cod_payment_methods" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="60" translate="label" type="multiselect">
                     <label>COD Payment Methods</label>
                     <source_model>PigeonExpress\Shipping\Model\Config\Source\PaymentMethods</source_model>
-                    <comment>Payment methods that trigger a COD fee (2.5% of subtotal, minimum 0.80). The fee is added to the shipping cost.</comment>
+                    <comment>Payment methods that trigger a cash on delivery fee. The fee itself is set by Pigeon Express and is read from the API for every quote, so it is not configurable here. It is added to the shipping cost.</comment>
                     <depends><field id="active">1</field></depends>
                 </field>
                 <field id="additional_services_note" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="61" type="note">

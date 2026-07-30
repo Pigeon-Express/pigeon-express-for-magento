@@ -17,8 +17,10 @@ use Magento\Quote\Model\Quote\Address\RateRequest;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\RateClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Model\AdditionalServiceRepository;
 use PigeonExpress\Shipping\Model\QuoteAddressLocationPersistor;
 use PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory as CityCollectionFactory;
+use PigeonExpress\Shipping\Model\Service\CodFeeResolver;
 use Psr\Log\LoggerInterface;
 
 class RateCollector
@@ -47,6 +49,12 @@ class RateCollector
     /** @var CityCollectionFactory */
     private $cityCollectionFactory;
 
+    /** @var CodFeeResolver */
+    private $codFeeResolver;
+
+    /** @var AdditionalServiceRepository */
+    private $additionalServiceRepository;
+
     public function __construct(
         ConfigInterface $config,
         RateClientInterface $rateClient,
@@ -55,6 +63,8 @@ class RateCollector
         ProductCollectionFactory $productCollectionFactory,
         LocationToApiIdResolver $locationToApiIdResolver,
         CityCollectionFactory $cityCollectionFactory,
+        CodFeeResolver $codFeeResolver,
+        AdditionalServiceRepository $additionalServiceRepository,
         ?CheckoutSession $checkoutSession = null
     ) {
         $this->config = $config;
@@ -64,6 +74,8 @@ class RateCollector
         $this->productCollectionFactory = $productCollectionFactory;
         $this->locationToApiIdResolver = $locationToApiIdResolver;
         $this->cityCollectionFactory = $cityCollectionFactory;
+        $this->codFeeResolver = $codFeeResolver;
+        $this->additionalServiceRepository = $additionalServiceRepository;
         $this->checkoutSession = $checkoutSession;
     }
 
@@ -94,6 +106,11 @@ class RateCollector
                     'calculation' => $calc,
                 ]);
             }
+
+            // While we are already talking to the API, find out what it charges
+            // for COD on this cart so the total collector does not have to guess.
+            $this->resolveCodFee($payload, $calc, $storeId);
+
             return (float) ($calc['total_price'] ?? 0.0);
         } catch (ApiException $e) {
             // Special case: missing product dimensions → surface to carrier so method becomes unavailable.
@@ -781,9 +798,13 @@ class RateCollector
             'return_documents'     => 'service_return_documents',
         ];
         foreach ($booleanMap as $configCode => $apiCode) {
-            if ($this->config->isAdditionalServiceEnabled($configCode, $storeId)) {
-                $serviceCodes[$apiCode] = true;
+            if (!$this->config->isAdditionalServiceEnabled($configCode, $storeId)) {
+                continue;
             }
+            if (!$this->isServiceOffered($apiCode, $storeId)) {
+                continue;
+            }
+            $serviceCodes[$apiCode] = true;
         }
 
         // Review / test — API only has shipment_test_before_payment (not available for locker).
@@ -801,13 +822,83 @@ class RateCollector
             $serviceCodes['declared_value'] = $declaredValue;
         }
 
-        // COD amount: include if customer selected a COD payment method.
-        $codAmount = $this->getCodAmountForCalculation($storeId);
-        if ($codAmount > 0.0) {
-            $serviceCodes['cod_amount'] = $codAmount;
-        }
+        // COD is deliberately NOT included here. The shipping rate stays free of
+        // the COD fee so it is charged exactly once, by the quote total collector,
+        // using the figure resolveCodFee() gets from the API.
 
         return $serviceCodes;
+    }
+
+    /**
+     * Ask the API what the COD fee is for this cart and hand it to the resolver.
+     *
+     * The API exposes no COD percentage, so the fee is the difference the
+     * calculate endpoint reports between an identical shipment with and without
+     * a cod_amount. Nothing is computed locally.
+     *
+     * @param array<string,mixed> $basePayload The COD free payload already priced
+     * @param array<string,mixed> $baseCalc    The API response for that payload
+     */
+    private function resolveCodFee(array $basePayload, array $baseCalc, int $storeId): void
+    {
+        $codAmount = $this->getCodAmountForCalculation($storeId);
+        if ($codAmount <= 0.0) {
+            return;
+        }
+
+        try {
+            $codPayload = $basePayload;
+            $codPayload['service_codes'] = ($codPayload['service_codes'] ?? []) + ['cod_amount' => $codAmount];
+
+            $codCalc = $this->rateClient->calculate($codPayload, $storeId);
+
+            $fee = round(
+                (float) ($codCalc['total_service_fees'] ?? 0.0) - (float) ($baseCalc['total_service_fees'] ?? 0.0),
+                2
+            );
+
+            if ($fee < 0.0) {
+                $fee = 0.0;
+            }
+
+            $this->codFeeResolver->rememberFee($storeId, $codAmount, $fee);
+        } catch (\Throwable $e) {
+            // Leave the resolver to fall back to the last API derived rate.
+            if ($this->config->isLoggingEnabled($storeId)) {
+                $this->logger->warning('[PigeonExpress] COD fee lookup failed: ' . $e->getMessage(), [
+                    'storeId' => $storeId,
+                    'cod_amount' => $codAmount,
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Whether the API currently offers this service.
+     *
+     * The catalogue is refreshed daily from GET /additional-services. When it has
+     * never been synced we send the code anyway rather than silently dropping a
+     * service the merchant switched on.
+     */
+    private function isServiceOffered(string $apiCode, int $storeId): bool
+    {
+        $catalogue = $this->additionalServiceRepository->getActiveByCode();
+        if (empty($catalogue)) {
+            return true;
+        }
+
+        if (isset($catalogue[$apiCode])) {
+            return true;
+        }
+
+        if ($this->config->isLoggingEnabled($storeId)) {
+            $this->logger->warning('[PigeonExpress] Skipping additional service not offered by the API', [
+                'storeId' => $storeId,
+                'service_code' => $apiCode,
+            ]);
+        }
+
+        return false;
     }
 
     /**

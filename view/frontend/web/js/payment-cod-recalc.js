@@ -14,18 +14,20 @@ define([
     var lastKey = null;
     var initialized = false;
 
+    /**
+     * Whether this payment method is one the merchant configured as cash on
+     * delivery. Guessing from the method code would disagree with the admin
+     * setting the rest of the module relies on.
+     */
     function isCodMethod(methodCode) {
         if (!methodCode) {
             return false;
         }
-        var code = String(methodCode).toLowerCase();
-        if (code === 'cod' || code === 'cashondelivery') {
-            return true;
-        }
-        return code.indexOf('cashondelivery') !== -1 ||
-            code.indexOf('_cod') !== -1 ||
-            code.indexOf('cod_') !== -1 ||
-            code.indexOf('cod') === code.length - 3;
+
+        var config = window.checkoutConfig && window.checkoutConfig.pigeonexpress,
+            codMethods = (config && config.cod_payment_methods) || [];
+
+        return codMethods.indexOf(String(methodCode)) !== -1;
     }
 
     function maybeRecalculate(method) {
