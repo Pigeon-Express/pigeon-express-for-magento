@@ -8,6 +8,7 @@ Internal. Never ships to clients, see [RELEASE.md](RELEASE.md).
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Getting oriented, or working out which layer a change belongs in |
 | [WOOCOMMERCE-REFERENCE.md](WOOCOMMERCE-REFERENCE.md) | Deciding how a feature should behave. The WooCommerce plugin is the behavioural reference |
 | [TODO.md](TODO.md) | Picking up work, or checking whether a bug is already known |
+| [TESTING.md](TESTING.md) | Running the test suites, or adding a test |
 | [RELEASE.md](RELEASE.md) | Building a zip for a client |
 
 Raw material sits in `.ai/`:

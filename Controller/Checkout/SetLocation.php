@@ -17,11 +17,16 @@ use Magento\Framework\App\Action\Context;
 use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Framework\Controller\ResultInterface;
+use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Model\QuoteAddressLocationPersistor;
+use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
 use Psr\Log\LoggerInterface;
 
 class SetLocation extends Action implements HttpPostActionInterface
 {
+    /** Courier note field is not unbounded free text. */
+    private const MAX_INSTRUCTIONS_LENGTH = 255;
+
     /** @var JsonFactory */
     private $resultJsonFactory;
 
@@ -31,6 +36,9 @@ class SetLocation extends Action implements HttpPostActionInterface
     /** @var QuoteAddressLocationPersistor */
     private $locationPersistor;
 
+    /** @var LocationToApiIdResolver */
+    private $locationToApiIdResolver;
+
     /** @var LoggerInterface */
     private $logger;
 
@@ -39,12 +47,14 @@ class SetLocation extends Action implements HttpPostActionInterface
         JsonFactory $resultJsonFactory,
         CheckoutSession $checkoutSession,
         QuoteAddressLocationPersistor $locationPersistor,
+        LocationToApiIdResolver $locationToApiIdResolver,
         LoggerInterface $logger
     ) {
         parent::__construct($context);
         $this->resultJsonFactory = $resultJsonFactory;
         $this->checkoutSession = $checkoutSession;
         $this->locationPersistor = $locationPersistor;
+        $this->locationToApiIdResolver = $locationToApiIdResolver;
         $this->logger = $logger;
     }
 
@@ -67,11 +77,36 @@ class SetLocation extends Action implements HttpPostActionInterface
 
             $deliveryType = (string) $request->getParam('delivery_type', '');
             $locationId = (string) $request->getParam('location_id', '');
-            $locationName = (string) $request->getParam('location_name', '');
-            $locationAddress = (string) $request->getParam('location_address', '');
-            $instructions = (string) $request->getParam('instructions', '');
-            $locationCity = (string) $request->getParam('location_city', '');
-            $locationPostcode = (string) $request->getParam('location_postcode', '');
+
+            // Only office and locker deliveries carry a location.
+            if (!in_array($deliveryType, [ConfigInterface::DELIVERY_TYPE_OFFICE, ConfigInterface::DELIVERY_TYPE_APS], true)) {
+                return $result->setData(['success' => false, 'message' => 'Unsupported delivery type']);
+            }
+
+            // The location must be one we actually synced and that is still
+            // active. Name, address, city and postcode are then taken from our
+            // own record, so request input cannot steer the rate calculation or
+            // land arbitrary text on the order.
+            $location = $this->locationToApiIdResolver->resolveLocation($deliveryType, $locationId);
+            if ($location === null) {
+                $this->logger->warning('[PE SetLocation] Rejected unknown or inactive location', [
+                    'delivery_type' => $deliveryType,
+                    'location_id' => $locationId,
+                ]);
+                return $result->setData(['success' => false, 'message' => 'Unknown location']);
+            }
+
+            $locationId = (string) $location['entity_id'];
+            $locationName = $location['name'];
+            $locationAddress = $location['address'];
+            $locationCity = $location['city'];
+            $locationPostcode = $location['postcode'];
+
+            // Free text from the customer. Keep it plain and bounded.
+            $instructions = trim(strip_tags((string) $request->getParam('instructions', '')));
+            if (mb_strlen($instructions) > self::MAX_INSTRUCTIONS_LENGTH) {
+                $instructions = mb_substr($instructions, 0, self::MAX_INSTRUCTIONS_LENGTH);
+            }
 
             $address = $quote->getShippingAddress();
             if (!$address) {

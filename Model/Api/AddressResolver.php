@@ -157,26 +157,83 @@ class AddressResolver
         ));
     }
 
+    /** The API caps per_page at 100. */
+    private const STREETS_PER_PAGE = 100;
+
+    /** Bound on pages walked, so a huge city cannot stall checkout. */
+    private const STREETS_MAX_PAGES = 5;
+
     /**
-     * Search street ID via GET /cities/{cityId}/streets filtered by name.
+     * Search street ID via GET /cities/{cityId}/streets.
+     *
+     * The endpoint is paginated and supports a server side `name` filter with
+     * Latin to Cyrillic transliteration. This previously fetched page one
+     * unfiltered and scanned it locally, so in any large city the street was
+     * simply not on the page and the lookup always failed.
      */
     private function searchStreetId(int $cityId, string $query, int $storeId): ?int
     {
+        $query = trim($query);
+
+        // The API requires at least 2 characters for a name search.
+        if (mb_strlen($query) < 2) {
+            return null;
+        }
+
         try {
             $apiKey    = $this->config->getApiKey($storeId);
             $apiSecret = $this->config->getApiSecret($storeId) ?: $apiKey;
 
-            $url  = $this->baseUrl($storeId) . '/cities/' . $cityId . '/streets';
-            $data = $this->doGet($url, $apiKey, $apiSecret);
-
             $queryLower = mb_strtolower($query);
-            foreach ($data['data'] ?? [] as $street) {
-                if (!is_array($street)) {
-                    continue;
+            $singleCandidate = null;
+            $candidateCount = 0;
+            $page = 1;
+            $lastPage = 1;
+
+            do {
+                $url = $this->baseUrl($storeId) . '/cities/' . $cityId . '/streets?' . http_build_query([
+                    'name'     => mb_substr($query, 0, 100),
+                    'page'     => $page,
+                    'per_page' => self::STREETS_PER_PAGE,
+                ]);
+
+                $data = $this->doGet($url, $apiKey, $apiSecret);
+                $rows = $data['data'] ?? [];
+
+                foreach ($rows as $street) {
+                    if (!is_array($street) || !isset($street['id'])) {
+                        continue;
+                    }
+
+                    $candidateCount++;
+                    if ($singleCandidate === null) {
+                        $singleCandidate = (int) $street['id'];
+                    }
+
+                    $name = mb_strtolower((string) ($street['name'] ?? ''));
+                    $nameEn = mb_strtolower((string) ($street['name_en'] ?? ''));
+                    if ($name === $queryLower || $nameEn === $queryLower) {
+                        return (int) $street['id'];
+                    }
                 }
-                if (mb_strtolower((string) ($street['name'] ?? '')) === $queryLower) {
-                    return (int) $street['id'];
-                }
+
+                $lastPage = (int) ($data['meta']['last_page'] ?? 1);
+                $page++;
+            } while ($page <= $lastPage && $page <= self::STREETS_MAX_PAGES);
+
+            if ($lastPage > self::STREETS_MAX_PAGES && $this->config->isLoggingEnabled($storeId)) {
+                $this->logger->info('[PigeonExpress] Street search stopped at the page limit', [
+                    'city_id' => $cityId,
+                    'query' => $query,
+                    'last_page' => $lastPage,
+                ]);
+            }
+
+            // No exact match. If the filtered search found exactly one street it
+            // is safe to take it, which covers input like "ul. Vitosha" against a
+            // stored name of "ВИТОША". More than one and we would be guessing.
+            if ($candidateCount === 1 && $singleCandidate !== null) {
+                return $singleCandidate;
             }
         } catch (\Throwable $e) {
             if ($this->config->isLoggingEnabled($storeId)) {

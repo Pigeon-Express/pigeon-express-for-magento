@@ -11,13 +11,13 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model\Rate;
 
-use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Quote\Model\Quote\Address\RateRequest;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\RateClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Model\AdditionalServiceRepository;
+use PigeonExpress\Shipping\Model\Package\PackageBuilder;
 use PigeonExpress\Shipping\Model\QuoteAddressLocationPersistor;
 use PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory as CityCollectionFactory;
 use PigeonExpress\Shipping\Model\Service\CodFeeResolver;
@@ -40,8 +40,8 @@ class RateCollector
     /** @var QuoteAddressLocationPersistor */
     private $locationPersistor;
 
-    /** @var ProductCollectionFactory */
-    private $productCollectionFactory;
+    /** @var PackageBuilder */
+    private $packageBuilder;
 
     /** @var LocationToApiIdResolver */
     private $locationToApiIdResolver;
@@ -60,7 +60,7 @@ class RateCollector
         RateClientInterface $rateClient,
         LoggerInterface $logger,
         QuoteAddressLocationPersistor $locationPersistor,
-        ProductCollectionFactory $productCollectionFactory,
+        PackageBuilder $packageBuilder,
         LocationToApiIdResolver $locationToApiIdResolver,
         CityCollectionFactory $cityCollectionFactory,
         CodFeeResolver $codFeeResolver,
@@ -71,7 +71,7 @@ class RateCollector
         $this->rateClient = $rateClient;
         $this->logger = $logger;
         $this->locationPersistor = $locationPersistor;
-        $this->productCollectionFactory = $productCollectionFactory;
+        $this->packageBuilder = $packageBuilder;
         $this->locationToApiIdResolver = $locationToApiIdResolver;
         $this->cityCollectionFactory = $cityCollectionFactory;
         $this->codFeeResolver = $codFeeResolver;
@@ -87,7 +87,6 @@ class RateCollector
                 'storeId' => $storeId,
                 'deliveryType' => $deliveryType,
                 'pricingMode' => $pricingMode,
-                'package_weight' => $this->calculateCartWeight($request, $storeId),
                 'package_value' => $request->getPackageValueWithDiscount(),
             ]);
         }
@@ -153,8 +152,10 @@ class RateCollector
         $apiDeliveryType = $deliveryType === ConfigInterface::DELIVERY_TYPE_APS ? 'locker' : $deliveryType;
         $configPickupType = $this->config->getPickupType($storeId);
 
+        $lines = $this->buildPackageLines($request);
+
         // APS requires all cart products to have dimensions configured.
-        if ($apiDeliveryType === 'locker' && !$this->cartHasDimensions($request, $storeId)) {
+        if ($apiDeliveryType === 'locker' && !$this->packageBuilder->hasCompleteDimensions($lines, $storeId)) {
             if ($this->config->isLoggingEnabled($storeId)) {
                 $this->logger->info('[PigeonExpress] APS hidden: one or more products missing dimensions', [
                     'storeId' => $storeId,
@@ -163,12 +164,10 @@ class RateCollector
             throw new ApiException(__('APS delivery requires all products to have dimensions (length/width/height) configured.'));
         }
 
-        $dimensions = $this->buildPackageDimensions($request, $storeId);
-
         $payload = [
             'pickup_type' => $configPickupType,
             'delivery_type' => $apiDeliveryType,
-            'packages' => $this->buildPackages($this->calculateCartWeight($request, $storeId), $dimensions),
+            'packages' => $this->packageBuilder->build($lines, $storeId, (float) $request->getPackageWeight()),
             'service_type' => 'standard',
             'who_pays' => 'sender',
         ];
@@ -312,200 +311,21 @@ class RateCollector
     }
 
     /**
-     * Build package dimensions (length/width/height in cm) using configured product attributes.
-     * Falls back to admin-configured defaults when a product has no dimensions.
-     * If defaults are 0 and no product has dimensions, throws ApiException (method becomes unavailable).
-     * Address and Office delivery always use this — APS must call cartHasDimensions() first.
+     * Turn RateRequest items into package lines for PackageBuilder.
      *
-     * @return array{length: float, width: float, height: float}
-     * @throws ApiException
-     */
-    private function buildPackageDimensions(RateRequest $request, int $storeId): array
-    {
-        $lengthAttr = $this->config->getLengthAttributeCode($storeId);
-        $widthAttr  = $this->config->getWidthAttributeCode($storeId);
-        $heightAttr = $this->config->getHeightAttributeCode($storeId);
-
-        $defaultLength = $this->config->getDefaultLength($storeId);
-        $defaultWidth  = $this->config->getDefaultWidth($storeId);
-        $defaultHeight = $this->config->getDefaultHeight($storeId);
-        $hasConfigDefaults = $defaultLength > 0 && $defaultWidth > 0 && $defaultHeight > 0;
-
-        if (!$lengthAttr || !$widthAttr || !$heightAttr) {
-            if ($hasConfigDefaults) {
-                return [
-                    'length' => $this->normalizeDimension($defaultLength),
-                    'width'  => $this->normalizeDimension($defaultWidth),
-                    'height' => $this->normalizeDimension($defaultHeight),
-                ];
-            }
-            throw new ApiException(__('Product dimensions (length/width/height) are not configured for this store.'));
-        }
-
-        try {
-            $productIds = $this->extractProductIds($request);
-            if (empty($productIds)) {
-                if ($hasConfigDefaults) {
-                    return [
-                        'length' => $this->normalizeDimension($defaultLength),
-                        'width'  => $this->normalizeDimension($defaultWidth),
-                        'height' => $this->normalizeDimension($defaultHeight),
-                    ];
-                }
-                throw new ApiException(__('Product dimensions (length/width/height) are not configured for this store.'));
-            }
-
-            $collection = $this->productCollectionFactory->create();
-            $collection->setStoreId($storeId);
-            $collection->addAttributeToSelect([$lengthAttr, $widthAttr, $heightAttr]);
-            $collection->addFieldToFilter('entity_id', ['in' => array_unique($productIds)]);
-            $collection->load();
-
-            $totalLength = 0.0;
-            $totalWidth  = 0.0;
-            $totalHeight = 0.0;
-
-            // $productIds may contain duplicates — each occurrence represents qty=1.
-            foreach ($productIds as $id) {
-                $product = $collection->getItemById($id);
-                $l = $product ? $product->getData($lengthAttr) : null;
-                $w = $product ? $product->getData($widthAttr) : null;
-                $h = $product ? $product->getData($heightAttr) : null;
-
-                if ($l !== null && $l !== '' && (float) $l > 0
-                    && $w !== null && $w !== '' && (float) $w > 0
-                    && $h !== null && $h !== '' && (float) $h > 0
-                ) {
-                    $totalLength += (float) $l;
-                    $totalWidth  += (float) $w;
-                    $totalHeight += (float) $h;
-                } else {
-                    if (!$hasConfigDefaults) {
-                        throw new ApiException(__('Product dimensions (length/width/height) are not configured for this store.'));
-                    }
-                    $totalLength += $defaultLength;
-                    $totalWidth  += $defaultWidth;
-                    $totalHeight += $defaultHeight;
-                }
-            }
-
-            return [
-                'length' => $this->normalizeDimension($totalLength),
-                'width'  => $this->normalizeDimension($totalWidth),
-                'height' => $this->normalizeDimension($totalHeight),
-            ];
-        } catch (ApiException $e) {
-            throw $e;
-        } catch (\Throwable $e) {
-            if ($this->config->isLoggingEnabled($storeId)) {
-                $this->logger->warning('[PigeonExpress] Failed to read product dimensions: ' . $e->getMessage());
-            }
-        }
-
-        if ($hasConfigDefaults) {
-            return [
-                'length' => $this->normalizeDimension($defaultLength),
-                'width'  => $this->normalizeDimension($defaultWidth),
-                'height' => $this->normalizeDimension($defaultHeight),
-            ];
-        }
-        throw new ApiException(__('Product dimensions (length/width/height) are not configured for this store.'));
-    }
-
-    /**
-     * Returns true when every product in the cart has valid dimensions configured,
-     * or when admin-configured default dimensions (> 0) cover products that are missing values.
-     * Used to gate APS delivery: if any product is missing dimensions and no default is set, APS is hidden.
-     */
-    private function cartHasDimensions(RateRequest $request, int $storeId): bool
-    {
-        $lengthAttr = $this->config->getLengthAttributeCode($storeId);
-        $widthAttr  = $this->config->getWidthAttributeCode($storeId);
-        $heightAttr = $this->config->getHeightAttributeCode($storeId);
-
-        $hasConfigDefaults = $this->config->getDefaultLength($storeId) > 0
-            && $this->config->getDefaultWidth($storeId) > 0
-            && $this->config->getDefaultHeight($storeId) > 0;
-
-        if ($this->config->isLoggingEnabled($storeId)) {
-            $this->logger->info('[PigeonExpress] cartHasDimensions attr codes', [
-                'storeId'          => $storeId,
-                'lengthAttr'       => $lengthAttr,
-                'widthAttr'        => $widthAttr,
-                'heightAttr'       => $heightAttr,
-                'hasConfigDefaults' => $hasConfigDefaults,
-            ]);
-        }
-
-        if (!$lengthAttr || !$widthAttr || !$heightAttr) {
-            return $hasConfigDefaults;
-        }
-
-        try {
-            $productIds = $this->extractProductIds($request);
-            if (empty($productIds)) {
-                return $hasConfigDefaults;
-            }
-
-            $collection = $this->productCollectionFactory->create();
-            $collection->setStoreId($storeId);
-            $collection->addAttributeToSelect([$lengthAttr, $widthAttr, $heightAttr]);
-            $collection->addFieldToFilter('entity_id', ['in' => array_unique($productIds)]);
-            $collection->load();
-
-            foreach ($productIds as $id) {
-                $product = $collection->getItemById($id);
-                if (!$product) {
-                    if ($this->config->isLoggingEnabled($storeId)) {
-                        $this->logger->warning('[PigeonExpress] cartHasDimensions product not found', ['id' => $id]);
-                    }
-                    if (!$hasConfigDefaults) {
-                        return false;
-                    }
-                    continue;
-                }
-                $l = $product->getData($lengthAttr);
-                $w = $product->getData($widthAttr);
-                $h = $product->getData($heightAttr);
-                if ($this->config->isLoggingEnabled($storeId)) {
-                    $this->logger->info('[PigeonExpress] cartHasDimensions product values', [
-                        'product_id' => $id,
-                        'sku'        => $product->getSku(),
-                        $lengthAttr  => $l,
-                        $widthAttr   => $w,
-                        $heightAttr  => $h,
-                    ]);
-                }
-                if ($l === null || $l === '' || (float) $l <= 0
-                    || $w === null || $w === '' || (float) $w <= 0
-                    || $h === null || $h === '' || (float) $h <= 0
-                ) {
-                    if (!$hasConfigDefaults) {
-                        return false;
-                    }
-                }
-            }
-            return true;
-        } catch (\Throwable $e) {
-            if ($this->config->isLoggingEnabled($storeId)) {
-                $this->logger->warning('[PigeonExpress] cartHasDimensions check failed: ' . $e->getMessage());
-            }
-            return false;
-        }
-    }
-
-    /**
-     * Extract unique product IDs from RateRequest items.
+     * One entry per cart line, carrying its qty. PackageBuilder sums dimensions
+     * once per line and weight per unit, which is what rating has always done.
      *
-     * @return int[]
+     * @return array<int, array{product_id:int, qty:float}>
      */
-    private function extractProductIds(RateRequest $request): array
+    private function buildPackageLines(RateRequest $request): array
     {
         $items = $request->getAllItems();
         if (!is_array($items) || empty($items)) {
             return [];
         }
-        $ids = [];
+
+        $lines = [];
         foreach ($items as $item) {
             if (!is_object($item) || !method_exists($item, 'getProduct')) {
                 continue;
@@ -514,158 +334,17 @@ class RateCollector
             if (!$product) {
                 continue;
             }
-            $id = (int) $product->getId();
-            if ($id > 0) {
-                $ids[] = $id;
+            $productId = (int) $product->getId();
+            if ($productId <= 0) {
+                continue;
             }
+            $qty = method_exists($item, 'getQty') ? (float) $item->getQty() : 1.0;
+            $lines[] = ['product_id' => $productId, 'qty' => $qty > 0 ? $qty : 1.0];
         }
-        return $ids;
+
+        return $lines;
     }
 
-    private function normalizeDimension(float $value): float
-    {
-        // API requires length/width/height >= 1 and <= 200.
-        if ($value < 1.0) {
-            return 1.0;
-        }
-        if ($value > 200.0) {
-            return 200.0;
-        }
-        return $value;
-    }
-
-    private function normalizeWeight(float $weight): float
-    {
-        if ($weight <= 0.0 || $weight < 0.1) {
-            return 0.1;
-        }
-        return round($weight, 3);
-    }
-
-    /**
-     * Split total cart weight into packages of max 30 kg each.
-     * All packages share the same dimensions.
-     *
-     * @param array{length: float, width: float, height: float} $dimensions
-     * @return array<int, array{weight: float, length: float, width: float, height: float}>
-     */
-    private function buildPackages(float $totalWeight, array $dimensions): array
-    {
-        $maxWeight = 30.0;
-        $weight = $this->normalizeWeight($totalWeight);
-
-        if ($weight <= $maxWeight) {
-            return [[
-                'weight' => $weight,
-                'length' => $dimensions['length'],
-                'width'  => $dimensions['width'],
-                'height' => $dimensions['height'],
-            ]];
-        }
-
-        $packages = [];
-        $remaining = $weight;
-        while ($remaining > 0) {
-            $packageWeight = min($remaining, $maxWeight);
-            $packages[] = [
-                'weight' => round($packageWeight, 3),
-                'length' => $dimensions['length'],
-                'width'  => $dimensions['width'],
-                'height' => $dimensions['height'],
-            ];
-            $remaining = round($remaining - $packageWeight, 3);
-        }
-        return $packages;
-    }
-
-    /**
-     * Calculate total cart weight using configured weight attribute.
-     * Falls back to default_weight config if attribute not configured or product value missing.
-     * Falls back to $request->getPackageWeight() if default_weight is also 0.
-     */
-    private function calculateCartWeight(RateRequest $request, int $storeId): float
-    {
-        $weightAttr = $this->config->getWeightAttributeCode($storeId);
-        $defaultWeight = $this->config->getDefaultWeight($storeId);
-
-        if (!$weightAttr) {
-            if ($defaultWeight > 0) {
-                // Count items and multiply by default weight
-                $items = $request->getAllItems();
-                if (is_array($items) && !empty($items)) {
-                    $total = 0.0;
-                    foreach ($items as $item) {
-                        if (!is_object($item)) {
-                            continue;
-                        }
-                        $total += $defaultWeight * (float) $item->getQty();
-                    }
-                    if ($total > 0) {
-                        return $total;
-                    }
-                }
-            }
-            return (float) $request->getPackageWeight();
-        }
-
-        try {
-            $items = $request->getAllItems();
-            if (!is_array($items) || empty($items)) {
-                return (float) $request->getPackageWeight();
-            }
-
-            $productIds = [];
-            $qtyMap = [];
-            foreach ($items as $item) {
-                if (!is_object($item) || !method_exists($item, 'getProduct')) {
-                    continue;
-                }
-                $product = $item->getProduct();
-                if (!$product) {
-                    continue;
-                }
-                $id = (int) $product->getId();
-                if ($id > 0) {
-                    $productIds[] = $id;
-                    $qtyMap[$id] = ($qtyMap[$id] ?? 0) + (float) $item->getQty();
-                }
-            }
-
-            if (empty($productIds)) {
-                return (float) $request->getPackageWeight();
-            }
-
-            $collection = $this->productCollectionFactory->create();
-            $collection->setStoreId($storeId);
-            $collection->addAttributeToSelect([$weightAttr]);
-            $collection->addFieldToFilter('entity_id', ['in' => array_unique($productIds)]);
-            $collection->load();
-
-            $total = 0.0;
-            foreach (array_unique($productIds) as $id) {
-                $product = $collection->getItemById($id);
-                if (!$product) {
-                    return (float) $request->getPackageWeight();
-                }
-                $w = $product->getData($weightAttr);
-                if ($w === null || $w === '' || (float) $w <= 0) {
-                    if ($defaultWeight > 0) {
-                        $total += $defaultWeight * ($qtyMap[$id] ?? 1);
-                        continue;
-                    }
-                    return (float) $request->getPackageWeight();
-                }
-                $total += (float) $w * ($qtyMap[$id] ?? 1);
-            }
-
-            return $total > 0 ? $total : (float) $request->getPackageWeight();
-        } catch (\Throwable $e) {
-            if ($this->config->isLoggingEnabled($storeId)) {
-                $this->logger->warning('[PigeonExpress] calculateCartWeight failed, using package weight: ' . $e->getMessage());
-            }
-            return (float) $request->getPackageWeight();
-        }
-    }
 
     /**
      * Try to resolve location id for office/APS from:

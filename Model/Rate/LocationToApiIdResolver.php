@@ -75,6 +75,73 @@ class LocationToApiIdResolver
     }
 
     /**
+     * Load an active office or locker by its local entity_id.
+     *
+     * Used to validate what checkout sends us and to take the authoritative
+     * name, address, city and postcode from our own synced data rather than
+     * from request input.
+     *
+     * @param string $deliveryType 'office' or 'aps'
+     * @return array{entity_id:int, api_id:int, name:string, address:string, city:string, postcode:string}|null
+     */
+    public function resolveLocation(string $deliveryType, string $entityId): ?array
+    {
+        // Strict parse. This value arrives from checkout, and a lenient cast would
+        // quietly turn junk like "1 OR 1=1" into the id 1. The query binds
+        // parameters so there is no injection either way, but silently resolving
+        // malformed input to a real office is not behaviour worth keeping.
+        $entityId = trim($entityId);
+        if ($entityId === '' || !ctype_digit($entityId)) {
+            return null;
+        }
+
+        $id = (int) $entityId;
+        if ($id <= 0) {
+            return null;
+        }
+
+        if ($deliveryType === ConfigInterface::DELIVERY_TYPE_APS) {
+            $collection = $this->apsCollectionFactory->create();
+        } elseif ($deliveryType === ConfigInterface::DELIVERY_TYPE_OFFICE) {
+            $collection = $this->officeCollectionFactory->create();
+        } else {
+            return null;
+        }
+
+        $resource = $collection->getResource();
+        $connection = $resource->getConnection();
+        $cityTable = $connection->getTableName('pigeonexpress_city');
+
+        // The location sync leaves city and postcode empty on offices and
+        // lockers, but always fills city_id, so the readable city comes from the
+        // city table. Join rather than trusting whatever checkout posted.
+        $select = $connection->select()
+            ->from(['l' => $resource->getMainTable()], ['entity_id', 'api_id', 'name', 'address'])
+            ->joinLeft(
+                ['c' => $cityTable],
+                'c.api_id = l.city_id',
+                ['city_name' => 'name', 'city_postal_code' => 'postal_code']
+            )
+            ->where('l.entity_id = ?', $id)
+            ->where('l.is_active = ?', 1)
+            ->limit(1);
+
+        $row = $connection->fetchRow($select);
+        if (!$row || empty($row['entity_id'])) {
+            return null;
+        }
+
+        return [
+            'entity_id' => (int) $row['entity_id'],
+            'api_id'    => (int) $row['api_id'],
+            'name'      => (string) ($row['name'] ?? ''),
+            'address'   => (string) ($row['address'] ?? ''),
+            'city'      => (string) ($row['city_name'] ?? ''),
+            'postcode'  => (string) ($row['city_postal_code'] ?? ''),
+        ];
+    }
+
+    /**
      * Get api_id of the first active office from DB (used as placeholder for rate calculation).
      */
     public function getFirstActiveOfficeApiId(): ?int

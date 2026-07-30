@@ -72,6 +72,23 @@ customer is charged nothing. Charging a guessed fee is worse than charging none.
 omits `cod_amount`, because the total collector adds the fee. Putting it back
 would charge the customer twice, which is the bug this design replaced.
 
+## Tax
+
+**Pigeon Express prices are final, gross values.** The shipping price and every
+additional service fee are what the customer pays. VAT applies to the order
+contents, not to carriage.
+
+So the module adds the COD fee at face value and does not tax it. The quote total
+collector runs after the tax pass and writes the fee into both the net and the
+tax inclusive shipping figures, keeping them equal in respect of the fee.
+
+This lines up with Magento's default `tax/classes/shipping_tax_class = 0`, which
+means no tax on shipping. **If someone sets a real shipping tax class in admin,
+Magento will add tax on top of the API price and the customer will be
+overcharged.** That setting must stay at None for this carrier. If Pigeon Express
+ever starts quoting net prices, this decision reverses and the collector has to
+move ahead of the tax pass.
+
 ## Storage and refresh
 
 `pigeonexpress_additional_service` mirrors the API catalogue.

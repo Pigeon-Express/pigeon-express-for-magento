@@ -97,7 +97,7 @@ echo
 # ---------------------------------------------------------------------------
 # Verification. Fail loudly if anything internal slipped through.
 # ---------------------------------------------------------------------------
-FORBIDDEN_PATTERN='(^|/)(\.ai|docs|bin|tests|\.github|node_modules)/|(^|/)\.git|(^|/)\.claude|CLAUDE\.md|\.zip$'
+FORBIDDEN_PATTERN='(^|/)(\.ai|docs|bin|Test|tests|\.github|node_modules)/|(^|/)\.git|(^|/)\.claude|CLAUDE\.md|phpunit|\.zip$'
 LEAKED="$(unzip -Z1 "$OUT_FILE" | sed "s|^$PACKAGE_NAME/||" | grep -nE "$FORBIDDEN_PATTERN" || true)"
 
 if [[ -n "$LEAKED" ]]; then

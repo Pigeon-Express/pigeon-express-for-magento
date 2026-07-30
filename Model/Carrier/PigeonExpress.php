@@ -180,11 +180,15 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
     }
 
     /**
-     * Return allowed delivery types as method codes (address, office, aps).
-     * Used by Magento to know which methods exist for this carrier.
-     * Uses current store from carrier when available (same as getConfigFlag).
+     * Method code to human readable title, for every enabled delivery type.
      *
-     * @return array<string, string> Carrier code => comma-separated method codes
+     * Magento and third party extensions treat this as a map of method code to
+     * label, for example when rendering a shipping method dropdown in the admin
+     * or matching a saved method. Returning the carrier code pointing at a
+     * comma joined string, as this did previously, breaks any caller that
+     * iterates it or looks a method up by code.
+     *
+     * @return array<string, string> Method code => title
      */
     public function getAllowedMethods(): array
     {
@@ -192,7 +196,13 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
         if ($storeId === null) {
             $storeId = 0;
         }
-        $enabled = $this->config->getEnabledDeliveryTypes($storeId);
-        return [$this->_code => implode(',', $enabled)];
+
+        $methods = [];
+        foreach ($this->config->getEnabledDeliveryTypes($storeId) as $deliveryType) {
+            $title = $this->config->getDeliveryTypeTitle($deliveryType, $storeId);
+            $methods[$deliveryType] = $title !== '' ? $title : $deliveryType;
+        }
+
+        return $methods;
     }
 }

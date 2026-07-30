@@ -63,16 +63,54 @@ class CodFee extends AbstractTotal
             return $this;
         }
 
-        // Merge fee into shipping — no separate line item in the summary.
+        // Merge the fee into shipping rather than showing a separate total row.
         $total->setShippingAmount((float) $total->getShippingAmount() + $fee);
         $total->setBaseShippingAmount((float) $total->getBaseShippingAmount() + $fee);
         $total->setTotalAmount('shipping', (float) ($total->getTotalAmount('shipping') ?? 0) + $fee);
         $total->setBaseTotalAmount('shipping', (float) ($total->getBaseTotalAmount('shipping') ?? 0) + $fee);
 
+        // This collector runs after tax, so the tax pass has already derived
+        // shipping_incl_tax from the pre fee shipping amount. Without the two
+        // lines below every tax inclusive display of shipping, in checkout, in
+        // the admin order view and in emails, would understate what the customer
+        // is actually charged. The fee is added at face value, so it is not
+        // itself taxed.
+        $this->addToInclTax($total, $address, $fee);
+
         // Keep address value so ToOrderPlugin can pass cod_amount to the PE API.
         $address->setData(self::CODE, $fee);
 
         return $this;
+    }
+
+    /**
+     * Keep the tax inclusive shipping figures in step with the fee.
+     *
+     * Written on both the total and the address, because different consumers
+     * read from different objects: checkout totals come from the Total, while
+     * order conversion copies from the address.
+     */
+    private function addToInclTax(Total $total, $address, float $fee): void
+    {
+        $inclTax = $total->getShippingInclTax();
+        if ($inclTax !== null) {
+            $total->setShippingInclTax((float) $inclTax + $fee);
+        }
+
+        $baseInclTax = $total->getBaseShippingInclTax();
+        if ($baseInclTax !== null) {
+            $total->setBaseShippingInclTax((float) $baseInclTax + $fee);
+        }
+
+        $addressInclTax = $address->getShippingInclTax();
+        if ($addressInclTax !== null) {
+            $address->setShippingInclTax((float) $addressInclTax + $fee);
+        }
+
+        $addressBaseInclTax = $address->getBaseShippingInclTax();
+        if ($addressBaseInclTax !== null) {
+            $address->setBaseShippingInclTax((float) $addressBaseInclTax + $fee);
+        }
     }
 
     /**

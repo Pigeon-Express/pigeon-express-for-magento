@@ -9,7 +9,6 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model;
 
-use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Sales\Api\Data\OrderInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
@@ -17,6 +16,7 @@ use PigeonExpress\Shipping\Api\ShipmentClientInterface;
 use PigeonExpress\Shipping\Api\ShipmentSenderInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Model\Api\AddressResolver;
+use PigeonExpress\Shipping\Model\Package\PackageBuilder;
 use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment\CollectionFactory as ShipmentCollectionFactory;
 use Psr\Log\LoggerInterface;
@@ -41,8 +41,11 @@ class ShipmentSender implements ShipmentSenderInterface
     /** @var ShipmentCollectionFactory */
     private $shipmentCollectionFactory;
 
-    /** @var ProductCollectionFactory */
-    private $productCollectionFactory;
+    /** @var PackageBuilder */
+    private $packageBuilder;
+
+    /** @var AdditionalServiceRepository */
+    private $additionalServiceRepository;
 
     /** @var LoggerInterface */
     private $logger;
@@ -60,7 +63,8 @@ class ShipmentSender implements ShipmentSenderInterface
         LocationToApiIdResolver $locationToApiIdResolver,
         AddressResolver $addressResolver,
         ShipmentCollectionFactory $shipmentCollectionFactory,
-        ProductCollectionFactory $productCollectionFactory,
+        PackageBuilder $packageBuilder,
+        AdditionalServiceRepository $additionalServiceRepository,
         LoggerInterface $logger,
         ShipmentFactory $shipmentFactory,
         \PigeonExpress\Shipping\Model\ResourceModel\Shipment $shipmentResource
@@ -71,7 +75,8 @@ class ShipmentSender implements ShipmentSenderInterface
         $this->locationToApiIdResolver = $locationToApiIdResolver;
         $this->addressResolver = $addressResolver;
         $this->shipmentCollectionFactory = $shipmentCollectionFactory;
-        $this->productCollectionFactory = $productCollectionFactory;
+        $this->packageBuilder = $packageBuilder;
+        $this->additionalServiceRepository = $additionalServiceRepository;
         $this->logger = $logger;
         $this->shipmentFactory = $shipmentFactory;
         $this->shipmentResource = $shipmentResource;
@@ -122,8 +127,8 @@ class ShipmentSender implements ShipmentSenderInterface
         $locationId   = $locationData['location_id'] ?? '';
         $instructions = $locationData['instructions'] ?? '';
 
-        // Build packages.
-        $packageData = $this->buildPackage($order, $storeId);
+        // Build packages using the same geometry rules as rating.
+        $packages = $this->buildPackages($order, $storeId);
 
         // Receiver info.
         $receiverName = trim($address->getFirstname() . ' ' . $address->getLastname());
@@ -161,24 +166,18 @@ class ShipmentSender implements ShipmentSenderInterface
             'delivery_type'  => $apiDeliveryType,
             'service_type'   => 'standard',
             'who_pays'       => 'sender',
-            'packages'       => [$packageData],
+            'packages'       => $packages,
         ];
-
-        if ($codAmount > 0) {
-            $payload['cod_amount'] = $codAmount;
-        }
 
         if ($instructions !== '') {
             $payload['note'] = $instructions;
         }
 
-        // Locker (APS) delivery requires SMS notification per PE API.
-        if ($apiDeliveryType === 'locker') {
-            $payload['sms_notification'] = true;
-        }
-
-        // Build service_codes using the same API codes as the calculate endpoint.
-        $serviceCodes = $this->buildServiceCodes($deliveryType, $apiDeliveryType, $storeId);
+        // Every additional service, including the COD amount, belongs inside
+        // service_codes. CreateShipmentRequest has no top level cod_amount and no
+        // sms_notification field, so sending them there meant the courier was
+        // never told to collect the money.
+        $serviceCodes = $this->buildServiceCodes($deliveryType, $apiDeliveryType, $storeId, $codAmount);
         if (!empty($serviceCodes)) {
             $payload['service_codes'] = $serviceCodes;
         }
@@ -238,169 +237,51 @@ class ShipmentSender implements ShipmentSenderInterface
     }
 
     /**
-     * Build package array from order weight and dimensions.
+     * Build the packages array for the shipment, using the same geometry rules
+     * as rating so the waybill matches what the customer was quoted.
      *
-     * @return array{weight: float, length: float, width: float, height: float}
+     * @return array<int, array{weight:float, length:float, width:float, height:float}>
      */
-    private function buildPackage(OrderInterface $order, int $storeId): array
+    private function buildPackages(OrderInterface $order, int $storeId): array
     {
-        $rawWeight = $this->calculateOrderWeight($order, $storeId);
-        if ($rawWeight <= 0.0) {
-            $weight = 0.5;
-        } elseif ($rawWeight < 0.1) {
-            $weight = 0.1;
-        } else {
-            $weight = round($rawWeight, 3);
-        }
-
-        $dimensions = $this->buildPackageDimensions($order, $storeId);
-
-        return [
-            'weight' => $weight,
-            'length' => $dimensions['length'],
-            'width'  => $dimensions['width'],
-            'height' => $dimensions['height'],
-        ];
+        return $this->packageBuilder->build(
+            $this->buildPackageLines($order),
+            $storeId,
+            (float) $order->getWeight()
+        );
     }
 
     /**
-     * Build package dimensions from product attributes; silently use defaults on failure.
+     * Turn order items into package lines for PackageBuilder.
      *
-     * @return array{length: float, width: float, height: float}
+     * Child items of configurable and bundle products are skipped so their
+     * geometry is not counted twice.
+     *
+     * @return array<int, array{product_id:int, qty:float}>
      */
-    private function buildPackageDimensions(OrderInterface $order, int $storeId): array
+    private function buildPackageLines(OrderInterface $order): array
     {
-        $default = ['length' => 10.0, 'width' => 10.0, 'height' => 10.0];
-
-        $lengthAttr = $this->config->getLengthAttributeCode($storeId);
-        $widthAttr  = $this->config->getWidthAttributeCode($storeId);
-        $heightAttr = $this->config->getHeightAttributeCode($storeId);
-
-        if (!$lengthAttr || !$widthAttr || !$heightAttr) {
-            return $default;
+        $items = $order->getItems();
+        if (!is_array($items) || empty($items)) {
+            return [];
         }
 
-        try {
-            $items = $order->getItems();
-            if (!is_array($items) || empty($items)) {
-                return $default;
+        $lines = [];
+        foreach ($items as $item) {
+            if ($item->getParentItemId()) {
+                continue;
             }
-
-            $productIds = [];
-            foreach ($items as $item) {
-                $productId = (int) $item->getProductId();
-                if ($productId > 0) {
-                    $productIds[] = $productId;
-                }
+            $productId = (int) $item->getProductId();
+            if ($productId <= 0) {
+                continue;
             }
-
-            if (empty($productIds)) {
-                return $default;
-            }
-
-            $collection = $this->productCollectionFactory->create();
-            $collection->setStoreId($storeId);
-            $collection->addAttributeToSelect([$lengthAttr, $widthAttr, $heightAttr]);
-            $collection->addFieldToFilter('entity_id', ['in' => array_unique($productIds)]);
-            $collection->load();
-
-            foreach ($productIds as $id) {
-                $product = $collection->getItemById($id);
-                if (!$product) {
-                    continue;
-                }
-                $l = $product->getData($lengthAttr);
-                $w = $product->getData($widthAttr);
-                $h = $product->getData($heightAttr);
-                if ($l !== null && $l !== '' && (float) $l > 0
-                    && $w !== null && $w !== '' && (float) $w > 0
-                    && $h !== null && $h !== '' && (float) $h > 0
-                ) {
-                    return [
-                        'length' => $this->normalizeDimension((float) $l),
-                        'width'  => $this->normalizeDimension((float) $w),
-                        'height' => $this->normalizeDimension((float) $h),
-                    ];
-                }
-            }
-        } catch (\Throwable $e) {
-            if ($this->config->isLoggingEnabled($storeId)) {
-                $this->logger->warning('[PigeonExpress] ShipmentSender: failed to read product dimensions: ' . $e->getMessage());
-            }
+            $qty = (float) $item->getQtyOrdered();
+            $lines[] = ['product_id' => $productId, 'qty' => $qty > 0 ? $qty : 1.0];
         }
 
-        return $default;
+        return $lines;
     }
 
-    /**
-     * Calculate total order weight using configured weight attribute.
-     * Falls back to $order->getWeight() if attribute not configured or value missing.
-     */
-    private function calculateOrderWeight(OrderInterface $order, int $storeId): float
-    {
-        $weightAttr = $this->config->getWeightAttributeCode($storeId);
-        if (!$weightAttr) {
-            return (float) ($order->getWeight() ?? 0);
-        }
-
-        try {
-            $items = $order->getItems();
-            if (!is_array($items) || empty($items)) {
-                return (float) ($order->getWeight() ?? 0);
-            }
-
-            $productIds = [];
-            $qtyMap = [];
-            foreach ($items as $item) {
-                $productId = (int) $item->getProductId();
-                if ($productId > 0) {
-                    $productIds[] = $productId;
-                    $qtyMap[$productId] = ($qtyMap[$productId] ?? 0) + (float) $item->getQtyOrdered();
-                }
-            }
-
-            if (empty($productIds)) {
-                return (float) ($order->getWeight() ?? 0);
-            }
-
-            $collection = $this->productCollectionFactory->create();
-            $collection->setStoreId($storeId);
-            $collection->addAttributeToSelect([$weightAttr]);
-            $collection->addFieldToFilter('entity_id', ['in' => array_unique($productIds)]);
-            $collection->load();
-
-            $total = 0.0;
-            foreach (array_unique($productIds) as $id) {
-                $product = $collection->getItemById($id);
-                if (!$product) {
-                    return (float) ($order->getWeight() ?? 0);
-                }
-                $w = $product->getData($weightAttr);
-                if ($w === null || $w === '' || (float) $w <= 0) {
-                    return (float) ($order->getWeight() ?? 0);
-                }
-                $total += (float) $w * ($qtyMap[$id] ?? 1);
-            }
-
-            return $total > 0 ? $total : (float) ($order->getWeight() ?? 0);
-        } catch (\Throwable $e) {
-            if ($this->config->isLoggingEnabled($storeId)) {
-                $this->logger->warning('[PigeonExpress] ShipmentSender: calculateOrderWeight failed: ' . $e->getMessage());
-            }
-            return (float) ($order->getWeight() ?? 0);
-        }
-    }
-
-    private function normalizeDimension(float $value): float
-    {
-        if ($value < 1.0) {
-            return 1.0;
-        }
-        if ($value > 200.0) {
-            return 200.0;
-        }
-        return $value;
-    }
 
     /**
      * Detect COD amount from payment method using configured COD methods list.
@@ -553,12 +434,21 @@ class ShipmentSender implements ShipmentSenderInterface
     }
 
     /**
-     * Build service_codes array using the same API codes as the calculate endpoint.
+     * Build the service_codes object using the same API codes as the calculate endpoint.
+     *
+     * The API expects an object keyed by service code: true for checkbox
+     * services, a numeric value for text services such as cod_amount and
+     * declared_value. Codes the API does not currently offer are dropped, so a
+     * stale mapping cannot fail the whole shipment.
      *
      * @return array<string,mixed>
      */
-    private function buildServiceCodes(string $deliveryType, string $apiDeliveryType, int $storeId): array
-    {
+    private function buildServiceCodes(
+        string $deliveryType,
+        string $apiDeliveryType,
+        int $storeId,
+        float $codAmount = 0.0
+    ): array {
         $serviceCodes = [];
 
         $booleanMap = [
@@ -570,9 +460,13 @@ class ShipmentSender implements ShipmentSenderInterface
             'return_documents'     => 'service_return_documents',
         ];
         foreach ($booleanMap as $configCode => $apiCode) {
-            if ($this->config->isAdditionalServiceEnabled($configCode, $storeId)) {
-                $serviceCodes[$apiCode] = true;
+            if (!$this->config->isAdditionalServiceEnabled($configCode, $storeId)) {
+                continue;
             }
+            if (!$this->isServiceOffered($apiCode, $storeId)) {
+                continue;
+            }
+            $serviceCodes[$apiCode] = true;
         }
 
         if ($apiDeliveryType !== 'locker') {
@@ -582,12 +476,49 @@ class ShipmentSender implements ShipmentSenderInterface
             }
         }
 
+        // Locker delivery relies on the recipient being notified, since there is
+        // nobody to hand the parcel to. The documented code is
+        // sms_notification_receiver, not sms_notification.
+        if ($apiDeliveryType === 'locker' && $this->isServiceOffered('sms_notification_receiver', $storeId)) {
+            $serviceCodes['sms_notification_receiver'] = true;
+        }
+
         $declaredValue = $this->config->getDeclaredValue($storeId);
         if ($declaredValue !== null) {
             $serviceCodes['declared_value'] = $declaredValue;
         }
 
+        if ($codAmount > 0.0) {
+            $serviceCodes['cod_amount'] = round($codAmount, 2);
+        }
+
         return $serviceCodes;
+    }
+
+    /**
+     * Whether the API currently offers this service. When the catalogue has
+     * never been synced we send the code rather than silently dropping a service
+     * the merchant switched on.
+     */
+    private function isServiceOffered(string $apiCode, int $storeId): bool
+    {
+        $catalogue = $this->additionalServiceRepository->getActiveByCode();
+        if (empty($catalogue)) {
+            return true;
+        }
+
+        if (isset($catalogue[$apiCode])) {
+            return true;
+        }
+
+        if ($this->config->isLoggingEnabled($storeId)) {
+            $this->logger->warning('[PigeonExpress] Shipment omits service not offered by the API', [
+                'storeId' => $storeId,
+                'service_code' => $apiCode,
+            ]);
+        }
+
+        return false;
     }
 
     private function buildInventoryItems(\Magento\Sales\Api\Data\OrderInterface $order): array
