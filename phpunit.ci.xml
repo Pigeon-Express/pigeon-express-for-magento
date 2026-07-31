@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Unit test config for a standalone checkout of this repository, as used by CI.
+  Paths are relative to the repository root and the bootstrap is the plain
+  composer autoloader, because a standalone checkout has no Magento instance.
+
+  For local runs inside a Magento installation use phpunit.xml.dist instead.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         cacheResult="false"
+         failOnRisky="true"
+         failOnWarning="true">
+    <testsuites>
+        <testsuite name="PigeonExpress_Shipping unit">
+            <directory suffix="Test.php">Test/Unit</directory>
+        </testsuite>
+    </testsuites>
+</phpunit>

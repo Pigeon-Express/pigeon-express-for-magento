@@ -34,8 +34,9 @@ On order placement `Observer\Sales\OrderPlaceAfter` hands off to
 | Layer | Key classes |
 |-------|-------------|
 | Carrier and rating | `Model/Carrier/PigeonExpress.php`, `Model/Rate/RateCollector.php`, `Model/Rate/LocationToApiIdResolver.php` |
-| API clients | `Model/Api/RateClient.php`, `LocationsClient.php`, `AdditionalServicesClient.php` (SDK), `ShipmentClient.php`, `AddressResolver.php` (raw Curl, bypasses the SDK) |
-| Pricing of services | `Model/Service/CodFeeResolver.php`, `Model/Total/Quote/CodFee.php`, `Model/AdditionalServiceRepository.php` |
+| API clients | `Model/Api/RateClient.php`, `LocationsClient.php`, `AdditionalServicesClient.php`, `ShipmentClient.php`, `AddressResolver.php`. All go through the SDK |
+| Pricing of services | `Model/Service/CodFeeResolver.php`, `Model/Service/ServiceCodesBuilder.php`, `Model/Total/Quote/CodFee.php`, `Model/AdditionalServiceRepository.php` |
+| Package geometry | `Model/Package/PackageBuilder.php`, the only place weight, dimensions and parcel splitting are decided |
 | Persistence | `etc/db_schema.xml`, `Model/ResourceModel/*` |
 | Sync | `etc/crontab.xml`, `etc/cron_groups.xml`, `Model/Cron/SyncLocations.php`, `Model/LocationSync.php` |
 | Checkout frontend | `view/frontend/web/js/**`, `Plugin/Checkout/*` |
@@ -81,16 +82,25 @@ Only two endpoints are used in normal operation, plus the catalogue sync:
 - `POST /v1/shipments` to create the waybill
 - `GET /v1/additional-services`, `GET /v1/offices`, `GET /v1/cities` for sync
 
-The SDK covers a fraction of the published API. See [TODO.md](TODO.md) for the
-gap list and `.ai/magento-module-analysis.md` for the full endpoint audit.
+The SDK's office, city and street resources now match the published API and
+paginate properly. Endpoints still unused by both: label retrieval,
+cancellation, tracking, completed payments and courier requests. See
+[TODO.md](TODO.md).
 
 ## Conventions
 
 - Business logic belongs in `Model/`, never in a template or a JS component.
   The COD fee was previously computed in three places including the browser.
-- All API access goes through an interface in `Api/` with a preference in
-  `etc/di.xml`. `AddressResolver` and `ShipmentClient` predate this and use raw
-  Curl, they should be migrated.
+- All API access goes through the SDK, behind an interface in `Api/` with a
+  preference in `etc/di.xml`. The SDK owns pagination, retries and rate limit
+  back-off, so none of that should be reimplemented here.
+- Anything decided in more than one place has drifted at least once in this
+  module's history: package geometry, additional service codes and street search
+  each existed twice and each pair disagreed. `PackageBuilder` and
+  `ServiceCodesBuilder` exist to keep them single. Do not add a second copy.
 - Log through `PigeonExpress\Shipping\Logger\Logger`, gated on
   `isLoggingEnabled()`. Output lands in `var/log/pigeonexpress.log`.
 - Money never appears as a literal. See [PRICING-AND-SERVICES.md](PRICING-AND-SERVICES.md).
+- Quoted prices are cached for 15 minutes, keyed on a hash of the calculate
+  payload. Raising that window recreates the stale pricing this module was fixed
+  to remove.

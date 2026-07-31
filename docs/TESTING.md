@@ -24,7 +24,7 @@ SDK tests, from `packages/pigeonexpress-php-sdk/`:
 The SDK suite has its own tiny PSR-4 bootstrap in `tests/bootstrap.php`, so it
 runs without a separate `composer install`.
 
-Current state: 61 module tests, 20 SDK tests. Both suites run in well under a
+Current state: 68 module tests, 34 SDK tests. Both suites run in well under a
 second because nothing in them touches the database, the filesystem or the API.
 
 ## What is covered and why
@@ -38,10 +38,44 @@ exactly those failure modes rather than at a line percentage.
 | `Test/Unit/Model/Package/PackageBuilderTest.php` | Rating and the waybill disagreeing on weight, dimensions or parcel count. Asserts dimensions are summed rather than taken from the first product, the 30 kg split, the 1 to 200 cm clamp, and that missing dimensions with no configured defaults are refused rather than guessed |
 | `Test/Unit/Model/Service/CodFeeResolverTest.php` | A guessed COD fee reaching a customer. Asserts the cache path, the stored API ratio fallback, and that an unknown fee resolves to zero with a warning instead of an invented number |
 | `Test/Unit/Model/Total/Quote/CodFeeTest.php` | The fee being charged twice, or `shipping_incl_tax` drifting from `shipping_amount`. Also asserts the carrier and payment method guards |
-| `Test/Unit/Model/ShipmentSenderTest.php` | `cod_amount` leaving the top level again, the undocumented `sms_notification` key coming back, and `service_codes` being built as a list instead of an object |
+| `Test/Unit/Model/Service/ServiceCodesBuilderTest.php` | `cod_amount` leaving the top level again, the undocumented `sms_notification` key coming back, `service_codes` being built as a list, a locker being asked to verify ID, both inspection tiers being sent at once, and value-versus-flag being decided by a hardcoded guess instead of the catalogue |
 | `Test/Unit/Model/Carrier/PigeonExpressTest.php` | `getAllowedMethods()` returning a comma joined string instead of a code to title map |
 | SDK `tests/DTO/Response/ShipmentCalculationTest.php` | `total_service_fees` being dropped, which is the root cause of the whole fee bug. Also asserts the baseline fee is not mistaken for the COD fee |
 | SDK `tests/DTO/Response/AdditionalServiceTest.php` | The catalogue growing a price field unnoticed, and `option_group` exclusivity being ignored |
+| SDK `tests/Resources/PaginationTest.php` | Listing endpoints silently returning only the first 100 rows, calls going back to the endpoints that 404, a failed page being abandoned instead of retried, and a rate limit not being obeyed |
+
+## Static analysis
+
+```bash
+# module, from the module directory
+../../../../vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=1G
+
+# SDK, from packages/pigeonexpress-php-sdk/
+../../vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=1G
+```
+
+Both are clean. The module runs at level 1 and the SDK at level 5. The module
+cannot go higher without a Magento stub extension: from level 2 the report is
+almost entirely Magento's magic `DataObject` accessors (`getId`, `getApiId`,
+`getShippingMethod`) flagged as undefined methods, which would bury real
+findings. Where a magic accessor is load bearing, declare it with `@method` on
+the class rather than adding an ignore, as `Model/Carrier/PigeonExpress.php`
+does for `getStore()`.
+
+Do not point PHPStan at `vendor/magento` via `scanDirectories`. It exhausts
+memory and then reports zero errors, which looks like a pass.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` in each repo runs the suite and the analyser on every
+push and pull request. The module workflow uses `phpunit.ci.xml` and
+`phpstan.ci.neon`, which are the same rules with paths relative to a standalone
+checkout rather than to a Magento installation.
+
+The module workflow needs a `COMPOSER_AUTH` secret, because installing
+`magento/framework` requires Adobe Marketplace credentials. Until that secret is
+set the CI job will fail at the install step. The workflows have not yet run on a
+real runner.
 
 ## Conventions
 
@@ -59,7 +93,7 @@ exactly those failure modes rather than at a line percentage.
 
 ## Tests never ship
 
-`Test/` and `phpunit.xml.dist` are absent from the whitelist in
+`Test/`, `phpunit*.xml` and `phpstan*.neon` are absent from the whitelist in
 `bin/build-zip.sh`, so they cannot enter a client archive, and the build verifier
 fails loudly if they somehow appear. `.gitattributes` carries matching
 `export-ignore` entries.
@@ -74,7 +108,8 @@ fails loudly if they somehow appear. `.gitattributes` carries matching
   integration tests, not unit tests.
 - No integration test that a COD order ends up with the right total. That is the
   one test that would have caught the original bug end to end.
-- No static analysis. PHPStan at level 5 or Magento's own coding standard would
-  both find real problems in the older files.
-- Nothing runs automatically. These suites are fast and deterministic, so a
-  pre-push hook or a CI job is cheap and worth adding.
+- Magento's own coding standard (`vendor/bin/phpcs` with
+  `Magento2` ruleset) has never been run and would find real issues in the older
+  files.
+- The CI workflows exist but have not run on a real runner yet, and the module
+  one needs a `COMPOSER_AUTH` secret before it can install.

@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# The module's unit tests deliberately depend on nothing but PHPUnit and a
+# handful of Magento framework classes for mocking, so CI does not install a
+# whole Magento instance. The Magento framework and the SDK come in as composer
+# dev dependencies purely so the analyser and the mocks can resolve types.
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: json, mbstring, intl, dom, simplexml, bcmath, soap, gd, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache composer
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache
+          key: composer-${{ hashFiles('composer.json') }}
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
+
+      - name: Run unit tests
+        run: vendor/bin/phpunit -c phpunit.ci.xml --no-coverage
+
+  analyse:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: json, mbstring, intl, dom, simplexml
+          coverage: none
+          tools: composer:v2, phpstan
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+        env:
+          COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
+
+      - name: Run PHPStan
+        run: phpstan analyse -c phpstan.ci.neon --no-progress --memory-limit=1G

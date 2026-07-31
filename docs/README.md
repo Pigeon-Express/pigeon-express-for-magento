@@ -9,6 +9,7 @@ Internal. Never ships to clients, see [RELEASE.md](RELEASE.md).
 | [WOOCOMMERCE-REFERENCE.md](WOOCOMMERCE-REFERENCE.md) | Deciding how a feature should behave. The WooCommerce plugin is the behavioural reference |
 | [TODO.md](TODO.md) | Picking up work, or checking whether a bug is already known |
 | [TESTING.md](TESTING.md) | Running the test suites, or adding a test |
+| [QA-TEST-PLAN.md](QA-TEST-PLAN.md) | Handing a release to QA. Manual cases with admin paths |
 | [RELEASE.md](RELEASE.md) | Building a zip for a client |
 
 Raw material sits in `.ai/`:
@@ -24,3 +25,5 @@ Raw material sits in `.ai/`:
 - Mode is developer, no `di:compile` needed. Flush after config changes.
 - Logs: `var/log/pigeonexpress.log`, gated on the carrier's logging setting
 - **No price, fee or percentage may be hardcoded.** Everything comes from the API.
+- Tests: `vendor/bin/phpunit -c dev/tests/unit/phpunit.xml.dist app/code/PigeonExpress/Shipping/Test/Unit`
+- Analysis: `../../../../vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=1G`

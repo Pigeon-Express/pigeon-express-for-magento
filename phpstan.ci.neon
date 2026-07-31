@@ -1,0 +1,19 @@
+# Static analysis config for a standalone checkout, as used by CI.
+# Same rules as phpstan.neon, with repository relative autoload paths.
+parameters:
+    level: 1
+    paths:
+        - Api
+        - Block
+        - Controller
+        - Logger
+        - Model
+        - Observer
+        - Plugin
+        - Setup
+    bootstrapFiles:
+        - vendor/autoload.php
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        -
+            message: '#has invalid type [A-Za-z\\]+(Factory|Interceptor)\.#'

@@ -21,8 +21,7 @@ fix the issue before any public disclosure.
 
 ## Credentials & secrets
 
-Pigeon Express API credentials (`pk_…` / `sk_…`) are configured at **runtime** —
-in the Magento admin (Stores → Configuration → Sales → Shipping Methods → Pigeon
+Pigeon Express API credentials (`pk_…` / `sk_…`) are configured at **runtime**, in the Magento admin (Stores → Configuration → Sales → Shipping Methods → Pigeon
 Express) and stored encrypted in the Magento database. **No secrets are stored in
 this repository**, and none should ever be committed. The carrier writes API
 diagnostics to `var/log/pigeonexpress.log` (outside this repo); avoid pasting full

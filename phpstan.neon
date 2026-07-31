@@ -1,0 +1,33 @@
+# Static analysis for PigeonExpress_Shipping.
+#
+# Run from the module directory:
+#   ../../../../vendor/bin/phpstan analyse -c phpstan.neon --memory-limit=1G
+#
+# Level 1 catches what matters here: undefined classes, undefined functions,
+# wrong argument counts, unreachable code. Level 2 and above mostly reports
+# Magento's magic DataObject accessors (getId, getApiId, getShippingMethod and
+# friends) as undefined methods, which are false positives that would bury real
+# findings. Raise the level deliberately, together with a Magento stub extension,
+# rather than leaving a permanently red build.
+#
+# Autoloading comes from the composer autoloader. Scanning vendor/magento
+# directly exhausts memory.
+parameters:
+    level: 1
+    paths:
+        - Api
+        - Block
+        - Controller
+        - Logger
+        - Model
+        - Observer
+        - Plugin
+        - Setup
+    bootstrapFiles:
+        - ../../../../vendor/autoload.php
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # Magento generates *Factory and *\Interceptor classes at build time, so
+        # they do not exist as source files for the analyser to read.
+        -
+            message: '#has invalid type [A-Za-z\\]+(Factory|Interceptor)\.#'
