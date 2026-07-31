@@ -19,6 +19,15 @@ use PigeonExpress\Shipping\Exception\ApiException;
 
 class LocationSync implements LocationSyncInterface
 {
+    /**
+     * A sync returning less than this share of what is already stored is
+     * treated as truncated and rejected.
+     */
+    private const TRUNCATION_GUARD_RATIO = 0.5;
+
+    /** Below this many stored rows there is nothing worth protecting. */
+    private const TRUNCATION_GUARD_MIN_STORED = 20;
+
     /** @var LocationsClientInterface */
     private $locationsClient;
 
@@ -158,21 +167,70 @@ class LocationSync implements LocationSyncInterface
      */
     public function syncAll(): array
     {
-        $result = [
-            'offices' => $this->syncOffices(),
-            'aps'     => $this->syncAps(),
-            'cities'  => $this->syncCities(),
+        // Each dataset is independent. One failing must not stop the others,
+        // otherwise a single bad response costs a whole night's sync.
+        $empty = ['created' => 0, 'updated' => 0, 'deactivated' => 0];
+
+        $tasks = [
+            'offices'             => function (): array {
+                return $this->syncOffices();
+            },
+            'aps'                 => function (): array {
+                return $this->syncAps();
+            },
+            'cities'              => function (): array {
+                return $this->syncCities();
+            },
+            'additional_services' => function (): array {
+                return $this->syncAdditionalServices();
+            },
         ];
 
-        // A catalogue failure must not discard a successful location sync.
-        try {
-            $result['additional_services'] = $this->syncAdditionalServices();
-        } catch (\Throwable $e) {
-            $this->logger->warning('[PigeonExpress] Additional services sync failed: ' . $e->getMessage());
-            $result['additional_services'] = ['created' => 0, 'updated' => 0, 'deactivated' => 0];
+        $result = [];
+        foreach ($tasks as $name => $task) {
+            try {
+                $result[$name] = $task();
+            } catch (\Throwable $e) {
+                $this->logger->error('[PigeonExpress] Sync failed for ' . $name . ': ' . $e->getMessage());
+                $result[$name] = $empty + ['error' => $e->getMessage()];
+            }
         }
 
         return $result;
+    }
+
+    /**
+     * Refuse a sync that would replace a healthy dataset with a fragment.
+     *
+     * A truncated fetch, from a partial pagination walk or an API hiccup, would
+     * otherwise deactivate most of the merchant's offices and quietly remove
+     * pickup locations from checkout. Growth and modest shrinkage are allowed;
+     * only a collapse is treated as a fault.
+     *
+     * @throws ApiException
+     */
+    private function guardAgainstTruncation(string $type, int $fetched, int $stored): void
+    {
+        if ($stored < self::TRUNCATION_GUARD_MIN_STORED) {
+            return;
+        }
+
+        if ($fetched >= (int) ceil($stored * self::TRUNCATION_GUARD_RATIO)) {
+            return;
+        }
+
+        $this->logger->error(
+            '[PigeonExpress] Refusing to sync ' . $type . ': the API returned ' . $fetched
+            . ' rows but ' . $stored . ' are stored. Existing data has been left untouched.'
+        );
+
+        throw new ApiException(__(
+            'Pigeon Express %1 sync aborted: the API returned %2 records but %3 are stored. '
+            . 'Existing data was kept. Check the API and retry.',
+            $type,
+            $fetched,
+            $stored
+        ));
     }
 
     /**
@@ -196,6 +254,8 @@ class LocationSync implements LocationSyncInterface
                 $existing[$apiId] = $item;
             }
         }
+
+        $this->guardAgainstTruncation($type, count($apiLocations), count($existing));
 
         $apiIds = array_column($apiLocations, 'id');
         $transaction = $this->transactionFactory->create();

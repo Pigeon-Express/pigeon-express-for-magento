@@ -113,7 +113,7 @@ class ShipmentClient implements ShipmentClientInterface
 
                 return $result;
             } catch (SdkValidationException $e) {
-                // Validation errors are not retryable — surface field details immediately.
+                // Validation errors are not retryable, surface field details immediately.
                 $lastException = $e;
                 if ($this->config->isLoggingEnabled($storeId)) {
                     $this->logger->warning('[PigeonExpress] Shipment API validation error', [

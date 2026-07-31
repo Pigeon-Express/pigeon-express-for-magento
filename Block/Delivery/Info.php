@@ -285,7 +285,7 @@ class Info extends Template
         if ($price !== '') {
             $parts[] = $price;
         }
-        return implode(' — ', $parts);
+        return implode(', ', $parts);
     }
 
     /**

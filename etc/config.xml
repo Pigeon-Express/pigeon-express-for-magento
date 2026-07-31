@@ -50,7 +50,7 @@
                 <aps_flat_rate>0</aps_flat_rate>
                 <!-- Autocomplete: limit results from local DB (offices/APS) -->
                 <location_search_limit>20</location_search_limit>
-                <!-- Place of shipment (pickup) for rate calculation -->
+                <!-- Pickup location, also the origin used for rate calculation -->
                 <pickup_type>office</pickup_type>
                 <!-- Default dimensions/weight fallback (0 = hide method when product has no value) -->
                 <default_weight>0</default_weight>

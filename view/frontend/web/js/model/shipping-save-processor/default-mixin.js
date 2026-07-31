@@ -53,7 +53,7 @@ define([
                     if (method.method_code === 'office' || method.method_code === 'aps') {
                         // Only validate if the autocomplete component has already initialized.
                         // If window.pigeonexpressCheckoutPayload is undefined, the component
-                        // hasn't loaded yet (e.g. page refresh) — skip validation.
+                        // hasn't loaded yet (e.g. page refresh), skip validation.
                         if (typeof window.pigeonexpressCheckoutPayload !== 'undefined' &&
                             (!pe.location_id || String(pe.location_id).trim() === '')
                         ) {

@@ -146,27 +146,29 @@ class CodFeeTest extends TestCase
         $this->assertSame(0.0, (float) $address->getData(CodFee::CODE));
     }
 
-    public function testFetchExposesTheFeeAsATotalSegment(): void
+    public function testNoTotalSegmentIsPublished(): void
     {
+        // The fee is merged into the shipping amount rather than shown as its own
+        // checkout row. Publishing a segment nothing consumes risks a third party
+        // theme rendering an unexpected total line.
         $this->config->method('getCodPaymentMethods')->willReturn(['cashondelivery']);
         $this->resolver->method('resolve')->willReturn(self::FEE);
-
-        [$total, $address, $quote] = $this->collect('pigeonexpress_office', 'cashondelivery');
-
-        $segment = $this->collector->fetch($quote, $total);
-
-        $this->assertSame(CodFee::CODE, $segment['code']);
-        $this->assertSame(self::FEE, (float) $segment['value']);
-    }
-
-    public function testFetchReturnsNothingWhenThereIsNoFee(): void
-    {
-        $this->config->method('getCodPaymentMethods')->willReturn(['cashondelivery']);
-        $this->resolver->method('resolve')->willReturn(0.0);
 
         [$total, , $quote] = $this->collect('pigeonexpress_office', 'cashondelivery');
 
         $this->assertSame([], $this->collector->fetch($quote, $total));
+    }
+
+    public function testTheFeeIsStillRecordedOnTheAddressForTheOrderRecord(): void
+    {
+        // No checkout row, but the merchant must still be able to see what was
+        // charged, and ToOrderPlugin copies this onto the order.
+        $this->config->method('getCodPaymentMethods')->willReturn(['cashondelivery']);
+        $this->resolver->method('resolve')->willReturn(self::FEE);
+
+        [, $address] = $this->collect('pigeonexpress_office', 'cashondelivery');
+
+        $this->assertSame(self::FEE, (float) $address->getData(CodFee::CODE));
     }
 
     // -----------------------------------------------------------------------

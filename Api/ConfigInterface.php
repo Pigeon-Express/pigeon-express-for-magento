@@ -145,7 +145,7 @@ interface ConfigInterface
 
     /**
      * Get default weight (kg) used when a product has no weight value.
-     * Returns 0.0 when not configured — methods will be hidden for products without weight.
+     * Returns 0.0 when not configured, methods will be hidden for products without weight.
      *
      * @param int|null $storeId
      * @return float
@@ -154,7 +154,7 @@ interface ConfigInterface
 
     /**
      * Get default length (cm) used when a product has no length value.
-     * Returns 0.0 when not configured — methods will be hidden for products without dimensions.
+     * Returns 0.0 when not configured, methods will be hidden for products without dimensions.
      *
      * @param int|null $storeId
      * @return float
@@ -163,7 +163,7 @@ interface ConfigInterface
 
     /**
      * Get default width (cm) used when a product has no width value.
-     * Returns 0.0 when not configured — methods will be hidden for products without dimensions.
+     * Returns 0.0 when not configured, methods will be hidden for products without dimensions.
      *
      * @param int|null $storeId
      * @return float
@@ -172,7 +172,7 @@ interface ConfigInterface
 
     /**
      * Get default height (cm) used when a product has no height value.
-     * Returns 0.0 when not configured — methods will be hidden for products without dimensions.
+     * Returns 0.0 when not configured, methods will be hidden for products without dimensions.
      *
      * @param int|null $storeId
      * @return float
@@ -180,7 +180,7 @@ interface ConfigInterface
     public function getDefaultHeight(?int $storeId = null): float;
 
     /**
-     * Place of shipment (pickup): 'office' or 'address'.
+     * Pickup location type: 'office' or 'address'.
      *
      * @param int|null $storeId
      * @return string
@@ -254,13 +254,16 @@ interface ConfigInterface
     public function getCodPaymentMethods(?int $storeId = null): array;
 
     /**
-     * Get declared value amount for the declared_value service code.
-     * Returns null if not configured (service disabled).
+     * Whether the declared value (insurance) service is switched on.
+     *
+     * The amount itself is not configured. When enabled, the goods value of the
+     * cart or order is sent as `declared_value`, since insuring a parcel for a
+     * fixed figure unrelated to its contents is never what a merchant wants.
      *
      * @param int|null $storeId
-     * @return float|null
+     * @return bool
      */
-    public function getDeclaredValue(?int $storeId = null): ?float;
+    public function isDeclaredValueEnabled(?int $storeId = null): bool;
 
     /**
      * Check if a global additional service is enabled.

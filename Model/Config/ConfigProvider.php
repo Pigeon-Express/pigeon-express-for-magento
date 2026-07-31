@@ -427,18 +427,13 @@ class ConfigProvider implements ConfigInterface
     /**
      * @inheritdoc
      */
-    public function getDeclaredValue(?int $storeId = null): ?float
+    public function isDeclaredValueEnabled(?int $storeId = null): bool
     {
-        $value = $this->scopeConfig->getValue(
+        return $this->scopeConfig->isSetFlag(
             self::XML_PATH_CARRIER . 'service_declared_value',
             ScopeInterface::SCOPE_STORE,
             $storeId
         );
-        if ($value === null || $value === '') {
-            return null;
-        }
-        $float = (float) $value;
-        return $float > 0 ? $float : null;
     }
 
     /**

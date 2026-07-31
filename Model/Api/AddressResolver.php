@@ -12,7 +12,8 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model\Api;
 
-use Magento\Framework\HTTP\Client\Curl;
+use PigeonExpress\Exceptions\PigeonExpressException as SdkException;
+use PigeonExpress\PigeonExpress;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory as CityCollectionFactory;
@@ -20,8 +21,13 @@ use Psr\Log\LoggerInterface;
 
 class AddressResolver
 {
-    private const API_BASE = 'https://api.pigeonexpress.com/v1';
-    private const SANDBOX_API_BASE = 'https://api-demo.pigeonexpress.com/v1';
+    private const DEMO_BASE_URL = 'https://api-demo.pigeonexpress.com';
+
+    /** Street lookup runs while pricing a quote, so keep it snappy. */
+    private const TIMEOUT = 20;
+
+    /** The API requires at least this many characters for a name search. */
+    private const MIN_SEARCH_LENGTH = 2;
 
     /** @var ConfigInterface */
     private $config;
@@ -29,21 +35,16 @@ class AddressResolver
     /** @var LoggerInterface */
     private $logger;
 
-    /** @var Curl */
-    private $curl;
-
     /** @var CityCollectionFactory */
     private $cityCollectionFactory;
 
     public function __construct(
         ConfigInterface $config,
         LoggerInterface $logger,
-        Curl $curl,
         CityCollectionFactory $cityCollectionFactory
     ) {
         $this->config = $config;
         $this->logger = $logger;
-        $this->curl = $curl;
         $this->cityCollectionFactory = $cityCollectionFactory;
     }
 
@@ -157,128 +158,84 @@ class AddressResolver
         ));
     }
 
-    /** The API caps per_page at 100. */
-    private const STREETS_PER_PAGE = 100;
-
-    /** Bound on pages walked, so a huge city cannot stall checkout. */
-    private const STREETS_MAX_PAGES = 5;
-
     /**
      * Search street ID via GET /cities/{cityId}/streets.
      *
-     * The endpoint is paginated and supports a server side `name` filter with
-     * Latin to Cyrillic transliteration. This previously fetched page one
-     * unfiltered and scanned it locally, so in any large city the street was
-     * simply not on the page and the lookup always failed.
+     * The SDK applies the server side name filter and walks the pages, so a
+     * street in a large city is actually found. Returning null is fine: the
+     * caller then sends the street as free text instead.
      */
     private function searchStreetId(int $cityId, string $query, int $storeId): ?int
     {
         $query = trim($query);
 
-        // The API requires at least 2 characters for a name search.
-        if (mb_strlen($query) < 2) {
+        if (mb_strlen($query) < self::MIN_SEARCH_LENGTH) {
             return null;
         }
 
         try {
-            $apiKey    = $this->config->getApiKey($storeId);
-            $apiSecret = $this->config->getApiSecret($storeId) ?: $apiKey;
+            $streets = $this->client($storeId)->streets()->searchInCity($cityId, $query);
 
             $queryLower = mb_strtolower($query);
-            $singleCandidate = null;
-            $candidateCount = 0;
-            $page = 1;
-            $lastPage = 1;
-
-            do {
-                $url = $this->baseUrl($storeId) . '/cities/' . $cityId . '/streets?' . http_build_query([
-                    'name'     => mb_substr($query, 0, 100),
-                    'page'     => $page,
-                    'per_page' => self::STREETS_PER_PAGE,
-                ]);
-
-                $data = $this->doGet($url, $apiKey, $apiSecret);
-                $rows = $data['data'] ?? [];
-
-                foreach ($rows as $street) {
-                    if (!is_array($street) || !isset($street['id'])) {
-                        continue;
-                    }
-
-                    $candidateCount++;
-                    if ($singleCandidate === null) {
-                        $singleCandidate = (int) $street['id'];
-                    }
-
-                    $name = mb_strtolower((string) ($street['name'] ?? ''));
-                    $nameEn = mb_strtolower((string) ($street['name_en'] ?? ''));
-                    if ($name === $queryLower || $nameEn === $queryLower) {
-                        return (int) $street['id'];
-                    }
+            foreach ($streets as $street) {
+                $name = mb_strtolower((string) $street->getName());
+                $nameEn = mb_strtolower((string) $street->getNameEn());
+                if ($name === $queryLower || $nameEn === $queryLower) {
+                    return $street->getId();
                 }
-
-                $lastPage = (int) ($data['meta']['last_page'] ?? 1);
-                $page++;
-            } while ($page <= $lastPage && $page <= self::STREETS_MAX_PAGES);
-
-            if ($lastPage > self::STREETS_MAX_PAGES && $this->config->isLoggingEnabled($storeId)) {
-                $this->logger->info('[PigeonExpress] Street search stopped at the page limit', [
-                    'city_id' => $cityId,
-                    'query' => $query,
-                    'last_page' => $lastPage,
-                ]);
             }
 
-            // No exact match. If the filtered search found exactly one street it
-            // is safe to take it, which covers input like "ul. Vitosha" against a
-            // stored name of "ВИТОША". More than one and we would be guessing.
-            if ($candidateCount === 1 && $singleCandidate !== null) {
-                return $singleCandidate;
+            // No exact match. A single hit on an already filtered search is safe
+            // to take, which covers input like "ul. Vitosha" against a stored
+            // "ВИТОША". More than one and we would be guessing.
+            if (count($streets) === 1) {
+                return $streets[0]->getId();
             }
+        } catch (SdkException $e) {
+            $this->logStreetFailure($e, $storeId);
+        } catch (ApiException $e) {
+            $this->logStreetFailure($e, $storeId);
         } catch (\Throwable $e) {
-            if ($this->config->isLoggingEnabled($storeId)) {
-                $this->logger->warning('[PigeonExpress] Street lookup failed, continuing without street_id: ' . $e->getMessage());
-            }
+            $this->logStreetFailure($e, $storeId);
         }
 
         return null;
     }
 
-    private function baseUrl(int $storeId): string
+    private function logStreetFailure(\Throwable $e, int $storeId): void
     {
-        return $this->config->isTestMode($storeId) ? self::SANDBOX_API_BASE : self::API_BASE;
+        if ($this->config->isLoggingEnabled($storeId)) {
+            $this->logger->warning(
+                '[PigeonExpress] Street lookup failed, continuing without street_id: ' . $e->getMessage()
+            );
+        }
     }
 
     /**
+     * Build a configured SDK client.
+     *
      * @throws ApiException
      */
-    private function doGet(string $url, string $apiKey, string $apiSecret): array
+    private function client(int $storeId): PigeonExpress
     {
-        $this->curl->setHeaders([]);
-        $this->curl->setTimeout(20);
-        $this->curl->addHeader('X-API-Key', $apiKey);
-        $this->curl->addHeader('X-API-Secret', $apiSecret);
-        $this->curl->addHeader('Accept', 'application/json');
-
-        $this->curl->get($url);
-
-        $status  = (int) $this->curl->getStatus();
-        $body    = (string) $this->curl->getBody();
-        $decoded = json_decode($body, true);
-
-        if ($status < 200 || $status >= 300) {
-            $msg = is_array($decoded) && isset($decoded['error']['message'])
-                ? (string) $decoded['error']['message']
-                : substr($body, 0, 300);
-            throw new ApiException(__('Pigeon Express API HTTP %1: %2', $status, $msg));
+        $apiKey = $this->config->getApiKey($storeId);
+        if ($apiKey === '') {
+            throw new ApiException(__('Pigeon Express API key is not configured.'));
         }
 
-        if (!is_array($decoded)) {
-            throw new ApiException(__('Invalid Pigeon Express API response.'));
+        $apiSecret = $this->config->getApiSecret($storeId);
+        if ($apiSecret === '') {
+            $apiSecret = $apiKey;
         }
 
-        return $decoded;
+        $options = ['timeout' => self::TIMEOUT];
+        if ($this->config->isTestMode($storeId)) {
+            $options['base_url'] = self::DEMO_BASE_URL;
+        }
+
+        return new PigeonExpress($apiKey, $apiSecret, $options);
     }
+
 
     /**
      * @return array{0:string,1:string}

@@ -1,8 +1,10 @@
 <?php
 /**
  * Pigeon Express shipping carrier.
- * Extends Magento AbstractCarrier; supports delivery types Address, Office, APS.
- * Rate collection is placeholder for Stage 2 (no API calls in Stage 1).
+ *
+ * Extends Magento AbstractCarrier and offers three delivery types: to an
+ * address, to a counter office, and to an automated parcel locker. All pricing
+ * is delegated to RateCollector.
  *
  * @copyright Copyright (c). All rights reserved.
  */
@@ -21,6 +23,14 @@ use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Model\Rate\RateCollector;
 use Psr\Log\LoggerInterface;
 
+/**
+ * getStore() and setStore() are magic DataObject accessors inherited from
+ * AbstractCarrier. Declaring them lets static analysis and editors see them
+ * instead of reporting a call to an undefined method.
+ *
+ * @method int|string|null getStore()
+ * @method $this setStore(int|string|null $store)
+ */
 class PigeonExpress extends AbstractCarrier implements CarrierInterface
 {
     /**

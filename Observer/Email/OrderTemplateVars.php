@@ -84,24 +84,40 @@ class OrderTemplateVars implements ObserverInterface
         $instructions = (string) ($ext->getPigeonexpressInstructions() ?? '');
 
         $lines = [];
-        $lines[] = '<strong>Pigeon Express</strong>';
+        $lines[] = '<strong>' . $this->escape((string) __('Pigeon Express')) . '</strong>';
         if ($typeLabel !== '') {
-            $lines[] = 'Type: ' . htmlspecialchars($typeLabel, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $lines[] = $this->escape((string) __('Type: %1', $typeLabel));
         }
         if ($locationName !== '') {
-            $lines[] = htmlspecialchars($locationName, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $lines[] = $this->escape($locationName);
         }
         if ($locationAddress !== '') {
-            $lines[] = htmlspecialchars($locationAddress, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $lines[] = $this->escape($locationAddress);
         }
         if ($instructions !== '') {
-            $lines[] = 'Comment: ' . htmlspecialchars($instructions, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $lines[] = $this->escape((string) __('Comment: %1', $instructions));
         }
 
         $html = '<p class="pigeonexpress-delivery-email">' . implode('<br/>', $lines) . '</p>';
 
         $transport->setData('pigeonexpress_show', true);
         $transport->setData('pigeonexpress_html', $html);
+
+        // Magento's own order confirmation template renders shipping_msg right
+        // below the shipping description, in every stock and customised variant.
+        // Publishing here means the delivery details appear without replacing the
+        // merchant's email template, which is what the removed reflection plugin
+        // used to do.
+        $existing = (string) ($transport->getData('shipping_msg') ?? '');
+        $transport->setData('shipping_msg', $existing !== '' ? $existing . $html : $html);
+    }
+
+    /**
+     * Escape a value for inclusion in the email HTML.
+     */
+    private function escape(string $value): string
+    {
+        return htmlspecialchars($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     }
 
     /**

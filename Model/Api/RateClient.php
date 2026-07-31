@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model\Api;
 
+use Magento\Framework\App\CacheInterface;
 use PigeonExpress\Exceptions\PigeonExpressException as SdkException;
 use PigeonExpress\Exceptions\ValidationException as SdkValidationException;
 use PigeonExpress\PigeonExpress;
@@ -30,21 +31,129 @@ class RateClient implements RateClientInterface
     /** @var int */
     private const RETRY_DELAY_MS = 1200;
 
+    private const CACHE_PREFIX = 'pigeonexpress_rate_';
+
+    /** Own tag so rates can be invalidated without flushing everything. */
+    private const CACHE_TAG = 'PIGEONEXPRESS_RATE';
+
+    /**
+     * How long a quoted price may be reused, in seconds.
+     *
+     * Magento recollects totals several times during a single checkout, and the
+     * carrier prices every enabled delivery type on each pass, so without this a
+     * COD checkout makes well over a dozen identical calls. Fifteen minutes is
+     * long enough to collapse those into one round of calls, and short enough
+     * that a tariff change reaches customers the same day. Do not raise this: a
+     * long window recreates the stale pricing this module was fixed to avoid.
+     */
+    private const CACHE_LIFETIME = 900;
+
     /** @var ConfigInterface */
     private $config;
 
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var CacheInterface */
+    private $cache;
+
     public function __construct(
         ConfigInterface $config,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        CacheInterface $cache
     ) {
         $this->config = $config;
         $this->logger = $logger;
+        $this->cache = $cache;
     }
 
     public function calculate(array $payload, int $storeId): array
+    {
+        $cacheKey = $this->cacheKey($payload, $storeId);
+
+        $cached = $this->loadFromCache($cacheKey);
+        if ($cached !== null) {
+            return $cached;
+        }
+
+        $result = $this->callApi($payload, $storeId);
+        $this->saveToCache($cacheKey, $result);
+
+        return $result;
+    }
+
+    /**
+     * Cache key for a calculate request.
+     *
+     * The price is deterministic for identical inputs, so hashing the whole
+     * payload is a safe key: any change to weight, dimensions, route or services
+     * produces a different key and a fresh quote.
+     *
+     * @param array<string,mixed> $payload
+     */
+    private function cacheKey(array $payload, int $storeId): string
+    {
+        // Sort so two logically identical payloads hash the same.
+        $normalized = $payload;
+        $this->ksortRecursive($normalized);
+
+        return self::CACHE_PREFIX . $storeId . '_' . sha1((string) json_encode($normalized));
+    }
+
+    /**
+     * @param array<string,mixed> $data
+     */
+    private function ksortRecursive(array &$data): void
+    {
+        ksort($data);
+        foreach ($data as &$value) {
+            if (is_array($value)) {
+                $this->ksortRecursive($value);
+            }
+        }
+    }
+
+    /**
+     * @return array<string,mixed>|null
+     */
+    private function loadFromCache(string $key): ?array
+    {
+        try {
+            $raw = $this->cache->load($key);
+            if ($raw === false || $raw === null || $raw === '') {
+                return null;
+            }
+            $decoded = json_decode($raw, true);
+
+            return is_array($decoded) ? $decoded : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $result
+     */
+    private function saveToCache(string $key, array $result): void
+    {
+        try {
+            $this->cache->save(
+                (string) json_encode($result),
+                $key,
+                [self::CACHE_TAG],
+                self::CACHE_LIFETIME
+            );
+        } catch (\Throwable $e) {
+            // A cache write failure must never break a quote.
+        }
+    }
+
+    /**
+     * @param array<string,mixed> $payload
+     * @return array<string,mixed>
+     * @throws ApiException
+     */
+    private function callApi(array $payload, int $storeId): array
     {
         $apiKey = $this->config->getApiKey($storeId);
         if ($apiKey === '') {

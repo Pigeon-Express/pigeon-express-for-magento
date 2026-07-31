@@ -43,7 +43,7 @@ define([
             ? window.checkoutConfig.defaultCountryId
             : (currentAddress.countryId || 'UA');
 
-        // Keep real address data — only remove customerAddressId so placeholders
+        // Keep real address data, only remove customerAddressId so placeholders
         // written later by populatePlaceholders() won't overwrite the saved address.
         var newAddress = createShippingAddressAction({
             firstname: currentAddress.firstname || '',

@@ -114,22 +114,19 @@ class CodFee extends AbstractTotal
     }
 
     /**
-     * Expose the API resolved fee to the checkout so the summary can render it
-     * without recomputing anything in JavaScript.
+     * No total segment is published.
+     *
+     * The fee is merged into the shipping amount rather than shown as its own
+     * checkout row, so nothing consumes a segment. Publishing one anyway risks
+     * a third party theme rendering an unexpected total line, and a separate row
+     * would additionally need handling in invoices and credit memos, which the
+     * API gives no way to control independently.
+     *
+     * The amount is still recorded on the address, and from there on the order,
+     * so it remains visible to the merchant and reportable.
      */
     public function fetch(Quote $quote, Total $total): array
     {
-        $address = $quote->getShippingAddress();
-        $fee = $address ? (float) $address->getData(self::CODE) : 0.0;
-
-        if ($fee <= 0.0) {
-            return [];
-        }
-
-        return [
-            'code' => self::CODE,
-            'title' => __('Cash on Delivery Fee'),
-            'value' => $fee,
-        ];
+        return [];
     }
 }

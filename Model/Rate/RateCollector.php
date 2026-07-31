@@ -16,11 +16,11 @@ use Magento\Quote\Model\Quote\Address\RateRequest;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\RateClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
-use PigeonExpress\Shipping\Model\AdditionalServiceRepository;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
 use PigeonExpress\Shipping\Model\QuoteAddressLocationPersistor;
 use PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory as CityCollectionFactory;
 use PigeonExpress\Shipping\Model\Service\CodFeeResolver;
+use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
 use Psr\Log\LoggerInterface;
 
 class RateCollector
@@ -52,8 +52,8 @@ class RateCollector
     /** @var CodFeeResolver */
     private $codFeeResolver;
 
-    /** @var AdditionalServiceRepository */
-    private $additionalServiceRepository;
+    /** @var ServiceCodesBuilder */
+    private $serviceCodesBuilder;
 
     public function __construct(
         ConfigInterface $config,
@@ -64,7 +64,7 @@ class RateCollector
         LocationToApiIdResolver $locationToApiIdResolver,
         CityCollectionFactory $cityCollectionFactory,
         CodFeeResolver $codFeeResolver,
-        AdditionalServiceRepository $additionalServiceRepository,
+        ServiceCodesBuilder $serviceCodesBuilder,
         ?CheckoutSession $checkoutSession = null
     ) {
         $this->config = $config;
@@ -75,7 +75,7 @@ class RateCollector
         $this->locationToApiIdResolver = $locationToApiIdResolver;
         $this->cityCollectionFactory = $cityCollectionFactory;
         $this->codFeeResolver = $codFeeResolver;
-        $this->additionalServiceRepository = $additionalServiceRepository;
+        $this->serviceCodesBuilder = $serviceCodesBuilder;
         $this->checkoutSession = $checkoutSession;
     }
 
@@ -172,7 +172,16 @@ class RateCollector
             'who_pays' => 'sender',
         ];
 
-        $serviceCodes = $this->buildServiceCodes($deliveryType, $apiDeliveryType, $storeId);
+        // COD is deliberately excluded: the quote total collector adds that fee,
+        // so including it here would charge the customer twice.
+        $serviceCodes = $this->serviceCodesBuilder->build(
+            $deliveryType,
+            $apiDeliveryType,
+            $storeId,
+            0.0,
+            false,
+            (float) $request->getPackageValueWithDiscount()
+        );
         if (!empty($serviceCodes)) {
             $payload['service_codes'] = $serviceCodes;
         }
@@ -184,7 +193,7 @@ class RateCollector
                 if ($this->config->isLoggingEnabled($storeId)) {
                     $this->logger->warning('[PigeonExpress] Pickup type is Office but no pickup office selected in config; rate unavailable.');
                 }
-                throw new ApiException(__('Place of shipment: please select a pickup office in Pigeon Express carrier configuration.'));
+                throw new ApiException(__('Pickup location: please select a pickup office in the Pigeon Express carrier configuration.'));
             }
             $payload['pickup_office_id'] = $pickupOfficeId;
         } elseif ($configPickupType === ConfigInterface::PICKUP_TYPE_ADDRESS) {
@@ -281,7 +290,7 @@ class RateCollector
     {
         $cityId = $this->config->getPickupAddressCityId($storeId);
         if ($cityId === null || $cityId === '') {
-            throw new ApiException(__('Place of shipment: pickup address city is not configured.'));
+            throw new ApiException(__('Pickup location: the pickup address city is not configured.'));
         }
         $streetNumber = $this->config->getPickupAddressStreetNumber($storeId);
         $streetNumber = $streetNumber !== null && $streetNumber !== '' ? $streetNumber : '1';
@@ -457,56 +466,6 @@ class RateCollector
         return null;
     }
 
-    /**
-     * Build service_codes object for the calculate endpoint.
-     * API expects an associative object {"code": true} or {"code": numeric_value}.
-     *
-     * @return array<string,mixed>
-     */
-    private function buildServiceCodes(string $deliveryType, string $apiDeliveryType, int $storeId): array
-    {
-        $serviceCodes = [];
-
-        // Boolean services: map from config code → actual API code (from GET /additional-services).
-        $booleanMap = [
-            'pos_payment'          => 'cod_card_fee',
-            'special_packaging'    => 'requires_special_packaging',
-            'return_at_my_expense' => 'paper_return_receipt',
-            'requires_signature'   => 'ID_verification_and_document_signature',
-            'return_receipt'       => 'return_receipt',
-            'return_documents'     => 'service_return_documents',
-        ];
-        foreach ($booleanMap as $configCode => $apiCode) {
-            if (!$this->config->isAdditionalServiceEnabled($configCode, $storeId)) {
-                continue;
-            }
-            if (!$this->isServiceOffered($apiCode, $storeId)) {
-                continue;
-            }
-            $serviceCodes[$apiCode] = true;
-        }
-
-        // Review / test — API only has shipment_test_before_payment (not available for locker).
-        if ($apiDeliveryType !== 'locker') {
-            $reviewTest = $this->config->getReviewAndTest($deliveryType, $storeId);
-            if ($reviewTest === 'review' || $reviewTest === 'test') {
-                $serviceCodes['shipment_test_before_payment'] = true;
-            }
-        }
-
-
-        // Declared value (fixed amount from config).
-        $declaredValue = $this->config->getDeclaredValue($storeId);
-        if ($declaredValue !== null) {
-            $serviceCodes['declared_value'] = $declaredValue;
-        }
-
-        // COD is deliberately NOT included here. The shipping rate stays free of
-        // the COD fee so it is charged exactly once, by the quote total collector,
-        // using the figure resolveCodFee() gets from the API.
-
-        return $serviceCodes;
-    }
 
     /**
      * Ask the API what the COD fee is for this cart and hand it to the resolver.
@@ -552,33 +511,6 @@ class RateCollector
         }
     }
 
-    /**
-     * Whether the API currently offers this service.
-     *
-     * The catalogue is refreshed daily from GET /additional-services. When it has
-     * never been synced we send the code anyway rather than silently dropping a
-     * service the merchant switched on.
-     */
-    private function isServiceOffered(string $apiCode, int $storeId): bool
-    {
-        $catalogue = $this->additionalServiceRepository->getActiveByCode();
-        if (empty($catalogue)) {
-            return true;
-        }
-
-        if (isset($catalogue[$apiCode])) {
-            return true;
-        }
-
-        if ($this->config->isLoggingEnabled($storeId)) {
-            $this->logger->warning('[PigeonExpress] Skipping additional service not offered by the API', [
-                'storeId' => $storeId,
-                'service_code' => $apiCode,
-            ]);
-        }
-
-        return false;
-    }
 
     /**
      * Get COD amount (quote subtotal) when the selected payment method is a configured COD method.

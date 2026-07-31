@@ -1,6 +1,6 @@
 <?php
 /**
- * Source model: Place of shipment (pickup) type — Office or Address.
+ * Source model: pickup location type, Office or Address.
  *
  * @copyright Copyright (c). All rights reserved.
  */

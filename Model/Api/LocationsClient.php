@@ -1,7 +1,13 @@
 <?php
 /**
- * Locations API client — direct HTTP calls to GET /offices with pagination.
- * Bypasses the PHP SDK (which ignores query params in all()) and uses Magento Curl.
+ * Locations API client: offices, lockers and cities, via the Pigeon Express PHP SDK.
+ *
+ * This previously used Magento Curl directly because the SDK ignored query
+ * parameters in all() and so could not paginate or filter by type. The SDK now
+ * walks every page, caps per_page at the API limit, retries a failed page and
+ * honours Retry-After on a 429, so there is one HTTP path in this module again.
+ *
+ * The row shapes returned here are unchanged, because LocationSync consumes them.
  *
  * @copyright Copyright (c). All rights reserved.
  */
@@ -10,34 +16,19 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model\Api;
 
-use Magento\Framework\HTTP\Client\Curl;
-use Psr\Log\LoggerInterface;
+use PigeonExpress\Exceptions\PigeonExpressException as SdkException;
+use PigeonExpress\PigeonExpress;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\LocationsClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use Psr\Log\LoggerInterface;
 
 class LocationsClient implements LocationsClientInterface
 {
-    private const API_BASE = 'https://api.pigeonexpress.com/v1';
-    private const SANDBOX_API_BASE = 'https://api-demo.pigeonexpress.com/v1';
+    private const DEMO_BASE_URL = 'https://api-demo.pigeonexpress.com';
 
-    private const TYPE_OFFICE = 'office';
-    private const TYPE_LOCKER = 'locker';
-
-    /** @var int API hard cap is 100 items per page. */
-    private const PER_PAGE = 100;
-
-    /** @var int Max attempts per request (initial + retries). */
-    private const MAX_ATTEMPTS = 3;
-
-    /** @var int Delay between retries in microseconds (1.5 s). */
-    private const RETRY_DELAY_US = 1500000;
-
-    /** @var int Delay between pagination pages in microseconds (1 s). */
-    private const PAGE_DELAY_US = 1000000;
-
-    /** @var int Delay after rate limit error in microseconds (65 s). */
-    private const RATE_LIMIT_DELAY_US = 65000000;
+    /** Bulk syncs are not latency sensitive, so allow a generous timeout. */
+    private const TIMEOUT = 120;
 
     /** @var ConfigInterface */
     private $config;
@@ -45,17 +36,12 @@ class LocationsClient implements LocationsClientInterface
     /** @var LoggerInterface */
     private $logger;
 
-    /** @var Curl */
-    private $curl;
-
     public function __construct(
         ConfigInterface $config,
-        LoggerInterface $logger,
-        Curl $curl
+        LoggerInterface $logger
     ) {
         $this->config = $config;
         $this->logger = $logger;
-        $this->curl = $curl;
     }
 
     /**
@@ -63,7 +49,16 @@ class LocationsClient implements LocationsClientInterface
      */
     public function fetchOffices(): array
     {
-        return $this->fetchByType(self::TYPE_OFFICE);
+        $offices = $this->client()->offices()->offices();
+
+        $rows = [];
+        foreach ($offices as $office) {
+            $rows[] = $this->normalizeOffice($office);
+        }
+
+        $this->log('offices', count($rows));
+
+        return $rows;
     }
 
     /**
@@ -71,7 +66,16 @@ class LocationsClient implements LocationsClientInterface
      */
     public function fetchAps(): array
     {
-        return $this->fetchByType(self::TYPE_LOCKER);
+        $lockers = $this->client()->offices()->lockers();
+
+        $rows = [];
+        foreach ($lockers as $locker) {
+            $rows[] = $this->normalizeOffice($locker);
+        }
+
+        $this->log('lockers', count($rows));
+
+        return $rows;
     }
 
     /**
@@ -79,263 +83,79 @@ class LocationsClient implements LocationsClientInterface
      */
     public function fetchCities(): array
     {
-        $apiKey = $this->config->getApiKey();
-        if ($apiKey === '') {
-            throw new ApiException(__('Pigeon Express API key is not configured.'));
-        }
+        $cities = $this->client()->cities()->all();
 
-        $apiSecret = $this->config->getApiSecret();
-        if ($apiSecret === '') {
-            $apiSecret = $apiKey;
-        }
-
-        $base = $this->config->isTestMode() ? self::SANDBOX_API_BASE : self::API_BASE;
-
-        if ($this->config->isLoggingEnabled()) {
-            $this->logger->info('[PigeonExpress] Fetching all cities from API...');
-        }
-
-        $cities = [];
-        $page = 1;
-
-        do {
-            $url = $base . '/cities?' . http_build_query(['page' => $page, 'per_page' => self::PER_PAGE]);
-            $data = $this->doGetFull($url, $apiKey, $apiSecret);
-            $items = $data['data'] ?? [];
-            foreach ($items as $item) {
-                if (!isset($item['id'])) {
-                    continue;
-                }
-                $cities[] = [
-                    'id'          => (int) $item['id'],
-                    'name'        => (string) ($item['name'] ?? ''),
-                    'name_en'     => isset($item['name_en']) ? (string) $item['name_en'] : null,
-                    'postal_code' => isset($item['postal_code']) ? (string) $item['postal_code'] : null,
-                ];
+        $rows = [];
+        foreach ($cities as $city) {
+            $id = $city->getId();
+            if (!$id) {
+                continue;
             }
-
-            $lastPage = (int) ($data['meta']['last_page'] ?? 1);
-            $page++;
-        } while ($page <= $lastPage);
-
-        if ($this->config->isLoggingEnabled()) {
-            $this->logger->info('[PigeonExpress] Cities fetched: ' . count($cities));
-        }
-
-        return $cities;
-    }
-
-    /**
-     * Fetch all locations of a given type via GET /offices?type=...&page=N&per_page=100.
-     *
-     * @param string $type 'office' or 'locker'
-     * @return array[]
-     * @throws ApiException
-     */
-    private function fetchByType(string $type): array
-    {
-        $apiKey = $this->config->getApiKey();
-        if ($apiKey === '') {
-            throw new ApiException(__('Pigeon Express API key is not configured.'));
-        }
-
-        $apiSecret = $this->config->getApiSecret();
-        if ($apiSecret === '') {
-            $apiSecret = $apiKey;
-        }
-
-        $base = $this->config->isTestMode() ? self::SANDBOX_API_BASE : self::API_BASE;
-
-        $normalized = [];
-        $seenIds = [];
-        $page = 1;
-
-        do {
-            $params = [
-                'type'     => $type,
-                'page'     => $page,
-                'per_page' => self::PER_PAGE,
+            $rows[] = [
+                'id'          => (int) $id,
+                'name'        => (string) $city->getName(),
+                'name_en'     => $city->getNameEn(),
+                'postal_code' => $city->getPostalCode(),
             ];
-            $url = $base . '/offices?' . http_build_query($params);
-
-            if ($this->config->isLoggingEnabled()) {
-                $this->logger->info('[PigeonExpress] API request: GET /offices?' . http_build_query($params));
-            }
-
-            $items = $this->getWithRetry($url, $apiKey, $apiSecret, $page);
-
-            if (empty($items)) {
-                break;
-            }
-
-            // Stop if we see IDs we already have — API wrap-around protection.
-            $newItems = [];
-            foreach ($items as $item) {
-                $id = $item['id'] ?? null;
-                if ($id === null) {
-                    continue;
-                }
-                if (isset($seenIds[$id])) {
-                    if ($this->config->isLoggingEnabled()) {
-                        $this->logger->info('[PigeonExpress] Duplicate ID ' . $id . ' on page ' . $page . ' — stopping pagination.');
-                    }
-                    $items = [];
-                    break;
-                }
-                $seenIds[$id] = true;
-                $newItems[] = $item;
-            }
-
-            foreach ($newItems as $item) {
-                $normalized[] = $this->normalizeItem($item);
-            }
-
-            $page++;
-            if (count($items) >= self::PER_PAGE) {
-                usleep(self::PAGE_DELAY_US);
-            }
-        } while (count($items) >= self::PER_PAGE);
-
-        if ($this->config->isLoggingEnabled()) {
-            $this->logger->info('[PigeonExpress] Sync done for type=' . $type . ', total=' . count($normalized));
         }
 
-        return $normalized;
+        $this->log('cities', count($rows));
+
+        return $rows;
     }
 
     /**
-     * GET request with per-page retry on transient errors and rate limit back-off.
-     *
-     * @param string $url
-     * @param string $apiKey
-     * @param string $apiSecret
-     * @param int $page Used only for log context.
-     * @return array Raw items from response data field.
-     * @throws ApiException
-     */
-    private function getWithRetry(string $url, string $apiKey, string $apiSecret, int $page): array
-    {
-        $lastError = null;
-        for ($attempt = 1; $attempt <= self::MAX_ATTEMPTS; $attempt++) {
-            try {
-                return $this->doGet($url, $apiKey, $apiSecret);
-            } catch (ApiException $e) {
-                $lastError = $e;
-                if ($this->config->isLoggingEnabled()) {
-                    $this->logger->warning('[PigeonExpress] Page ' . $page . ' error (attempt ' . $attempt . '): ' . $e->getMessage());
-                }
-                if ($attempt >= self::MAX_ATTEMPTS) {
-                    throw $e;
-                }
-                $delay = stripos($e->getMessage(), 'Too Many') !== false
-                    ? self::RATE_LIMIT_DELAY_US
-                    : self::RETRY_DELAY_US;
-                if ($this->config->isLoggingEnabled()) {
-                    $this->logger->info('[PigeonExpress] Waiting ' . ($delay / 1000000) . 's before retry...');
-                }
-                usleep($delay);
-            }
-        }
-
-        throw $lastError ?? new ApiException(__('Failed to fetch page %1.', $page));
-    }
-
-    /**
-     * Single GET request. Returns full decoded response (including meta).
+     * Build a configured SDK client.
      *
      * @throws ApiException
      */
-    private function doGetFull(string $url, string $apiKey, string $apiSecret): array
+    private function client(): PigeonExpress
     {
-        $this->curl->setHeaders([]);
-        $this->curl->setTimeout(30);
-        $this->curl->addHeader('X-API-Key', $apiKey);
-        $this->curl->addHeader('X-API-Secret', $apiSecret);
-        $this->curl->addHeader('Accept', 'application/json');
-
-        $this->curl->get($url);
-
-        $status  = (int) $this->curl->getStatus();
-        $body    = (string) $this->curl->getBody();
-        $decoded = json_decode($body, true);
-
-        if ($status < 200 || $status >= 300) {
-            $msg = is_array($decoded) && isset($decoded['message'])
-                ? (string) $decoded['message']
-                : substr($body, 0, 200);
-            throw new ApiException(__('Pigeon Express API HTTP %1: %2', $status, $msg));
+        $apiKey = $this->config->getApiKey();
+        if ($apiKey === '') {
+            throw new ApiException(__('Pigeon Express API key is not configured.'));
         }
 
-        if (!is_array($decoded)) {
-            throw new ApiException(__('Invalid Pigeon Express API response (not JSON).'));
+        $apiSecret = $this->config->getApiSecret();
+        if ($apiSecret === '') {
+            $apiSecret = $apiKey;
         }
 
-        return $decoded;
+        $options = ['timeout' => self::TIMEOUT];
+        if ($this->config->isTestMode()) {
+            $options['base_url'] = self::DEMO_BASE_URL;
+        }
+
+        try {
+            return new PigeonExpress($apiKey, $apiSecret, $options);
+        } catch (SdkException $e) {
+            throw new ApiException(__('Failed to reach Pigeon Express: %1', $e->getMessage()), $e);
+        }
     }
 
     /**
-     * Single GET request. Returns decoded items array.
+     * Map an office or locker onto the row shape LocationSync expects.
      *
-     * @param string $url
-     * @param string $apiKey
-     * @param string $apiSecret
-     * @return array
-     * @throws ApiException
+     * @param \PigeonExpress\DTO\Response\Office $office
+     * @return array{id:?int, name:string, city_id:?int, address:string, type:string, latitude:?float, longitude:?float}
      */
-    private function doGet(string $url, string $apiKey, string $apiSecret): array
+    private function normalizeOffice($office): array
     {
-        $this->curl->setHeaders([]);
-        $this->curl->setTimeout(30);
-        $this->curl->addHeader('X-API-Key', $apiKey);
-        $this->curl->addHeader('X-API-Secret', $apiSecret);
-        $this->curl->addHeader('Accept', 'application/json');
-
-        $this->curl->get($url);
-
-        $status = (int) $this->curl->getStatus();
-        $body = (string) $this->curl->getBody();
-        $decoded = json_decode($body, true);
-
-        if ($status < 200 || $status >= 300) {
-            $msg = is_array($decoded) && isset($decoded['message'])
-                ? (string) $decoded['message']
-                : substr($body, 0, 200);
-            throw new ApiException(__('Pigeon Express API HTTP %1: %2', $status, $msg));
-        }
-
-        if (!is_array($decoded)) {
-            throw new ApiException(__('Invalid Pigeon Express API response (not JSON).'));
-        }
-
-        // Response: {"success": true, "data": [...]} or plain array.
-        if (isset($decoded['data']) && is_array($decoded['data'])) {
-            return $decoded['data'];
-        }
-
-        // Plain array response (unlikely but guard).
-        if (isset($decoded[0])) {
-            return $decoded;
-        }
-
-        return [];
-    }
-
-    /**
-     * @param array<string,mixed> $item
-     * @return array
-     */
-    private function normalizeItem(array $item): array
-    {
-        $cityId = isset($item['city']['id']) ? (int) $item['city']['id'] : null;
-
         return [
-            'id'        => $item['id'] ?? null,
-            'name'      => $item['name'] ?? '',
-            'city_id'   => $cityId,
-            'address'   => $item['address'] ?? '',
-            'type'      => $item['type'] ?? '',
-            'latitude'  => $item['latitude'] ?? null,
-            'longitude' => $item['longitude'] ?? null,
+            'id'        => $office->getId() ?: null,
+            'name'      => (string) $office->getName(),
+            'city_id'   => $office->getCityId(),
+            'address'   => (string) $office->getAddress(),
+            'type'      => (string) $office->getType(),
+            'latitude'  => $office->getLatitude(),
+            'longitude' => $office->getLongitude(),
         ];
+    }
+
+    private function log(string $what, int $count): void
+    {
+        if ($this->config->isLoggingEnabled()) {
+            $this->logger->info('[PigeonExpress] Fetched ' . $count . ' ' . $what . ' from the API.');
+        }
     }
 }

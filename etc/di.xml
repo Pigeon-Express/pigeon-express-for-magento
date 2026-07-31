@@ -142,8 +142,4 @@
         <plugin name="pigeonexpress_cod_fee_to_order"
                 type="PigeonExpress\Shipping\Plugin\Quote\ToOrderPlugin"/>
     </type>
-    <type name="Magento\Sales\Model\Order\Email\Sender\OrderSender">
-        <plugin name="pigeonexpress_order_email_template" sortOrder="10"
-                type="PigeonExpress\Shipping\Plugin\Sales\Order\Email\OrderSenderPlugin"/>
-    </type>
 </config>

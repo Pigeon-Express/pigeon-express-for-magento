@@ -17,6 +17,7 @@ use PigeonExpress\Shipping\Api\ShipmentSenderInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Model\Api\AddressResolver;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
+use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
 use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment\CollectionFactory as ShipmentCollectionFactory;
 use Psr\Log\LoggerInterface;
@@ -44,8 +45,8 @@ class ShipmentSender implements ShipmentSenderInterface
     /** @var PackageBuilder */
     private $packageBuilder;
 
-    /** @var AdditionalServiceRepository */
-    private $additionalServiceRepository;
+    /** @var ServiceCodesBuilder */
+    private $serviceCodesBuilder;
 
     /** @var LoggerInterface */
     private $logger;
@@ -64,7 +65,7 @@ class ShipmentSender implements ShipmentSenderInterface
         AddressResolver $addressResolver,
         ShipmentCollectionFactory $shipmentCollectionFactory,
         PackageBuilder $packageBuilder,
-        AdditionalServiceRepository $additionalServiceRepository,
+        ServiceCodesBuilder $serviceCodesBuilder,
         LoggerInterface $logger,
         ShipmentFactory $shipmentFactory,
         \PigeonExpress\Shipping\Model\ResourceModel\Shipment $shipmentResource
@@ -76,7 +77,7 @@ class ShipmentSender implements ShipmentSenderInterface
         $this->addressResolver = $addressResolver;
         $this->shipmentCollectionFactory = $shipmentCollectionFactory;
         $this->packageBuilder = $packageBuilder;
-        $this->additionalServiceRepository = $additionalServiceRepository;
+        $this->serviceCodesBuilder = $serviceCodesBuilder;
         $this->logger = $logger;
         $this->shipmentFactory = $shipmentFactory;
         $this->shipmentResource = $shipmentResource;
@@ -177,7 +178,14 @@ class ShipmentSender implements ShipmentSenderInterface
         // service_codes. CreateShipmentRequest has no top level cod_amount and no
         // sms_notification field, so sending them there meant the courier was
         // never told to collect the money.
-        $serviceCodes = $this->buildServiceCodes($deliveryType, $apiDeliveryType, $storeId, $codAmount);
+        $serviceCodes = $this->serviceCodesBuilder->build(
+            $deliveryType,
+            $apiDeliveryType,
+            $storeId,
+            $codAmount,
+            true,
+            $this->detectGoodsValue($order)
+        );
         if (!empty($serviceCodes)) {
             $payload['service_codes'] = $serviceCodes;
         }
@@ -282,6 +290,19 @@ class ShipmentSender implements ShipmentSenderInterface
         return $lines;
     }
 
+
+    /**
+     * Value of the goods for insurance purposes.
+     *
+     * Products only. Shipping is not insured by the carrier, and including it
+     * would inflate the sum insured on every order.
+     */
+    private function detectGoodsValue(OrderInterface $order): float
+    {
+        $subtotal = (float) $order->getSubtotal();
+
+        return $subtotal > 0.0 ? round($subtotal, 2) : 0.0;
+    }
 
     /**
      * Detect COD amount from payment method using configured COD methods list.
@@ -408,7 +429,7 @@ class ShipmentSender implements ShipmentSenderInterface
     public static function normalizePhone(string $raw): string
     {
         $raw = trim($raw);
-        // Strip spaces, dashes, parentheses, dots — keep digits and leading +
+        // Strip spaces, dashes, parentheses and dots, keeping digits and a leading +
         $clean = preg_replace('/[\s\-\(\)\.]/', '', $raw);
 
         if (strpos($clean, '+') === 0) {
@@ -425,7 +446,7 @@ class ShipmentSender implements ShipmentSenderInterface
             return '+359' . $m[1];
         }
 
-        // 9 raw digits — assume Bulgarian, prepend +359
+        // 9 raw digits, so assume Bulgarian and prepend +359
         if (preg_match('/^\d{9}$/', $clean)) {
             return '+359' . $clean;
         }
@@ -433,93 +454,7 @@ class ShipmentSender implements ShipmentSenderInterface
         return $clean;
     }
 
-    /**
-     * Build the service_codes object using the same API codes as the calculate endpoint.
-     *
-     * The API expects an object keyed by service code: true for checkbox
-     * services, a numeric value for text services such as cod_amount and
-     * declared_value. Codes the API does not currently offer are dropped, so a
-     * stale mapping cannot fail the whole shipment.
-     *
-     * @return array<string,mixed>
-     */
-    private function buildServiceCodes(
-        string $deliveryType,
-        string $apiDeliveryType,
-        int $storeId,
-        float $codAmount = 0.0
-    ): array {
-        $serviceCodes = [];
 
-        $booleanMap = [
-            'pos_payment'          => 'cod_card_fee',
-            'special_packaging'    => 'requires_special_packaging',
-            'return_at_my_expense' => 'paper_return_receipt',
-            'requires_signature'   => 'ID_verification_and_document_signature',
-            'return_receipt'       => 'return_receipt',
-            'return_documents'     => 'service_return_documents',
-        ];
-        foreach ($booleanMap as $configCode => $apiCode) {
-            if (!$this->config->isAdditionalServiceEnabled($configCode, $storeId)) {
-                continue;
-            }
-            if (!$this->isServiceOffered($apiCode, $storeId)) {
-                continue;
-            }
-            $serviceCodes[$apiCode] = true;
-        }
-
-        if ($apiDeliveryType !== 'locker') {
-            $reviewAndTest = $this->config->getReviewAndTest($deliveryType, $storeId);
-            if ($reviewAndTest === 'review' || $reviewAndTest === 'test') {
-                $serviceCodes['shipment_test_before_payment'] = true;
-            }
-        }
-
-        // Locker delivery relies on the recipient being notified, since there is
-        // nobody to hand the parcel to. The documented code is
-        // sms_notification_receiver, not sms_notification.
-        if ($apiDeliveryType === 'locker' && $this->isServiceOffered('sms_notification_receiver', $storeId)) {
-            $serviceCodes['sms_notification_receiver'] = true;
-        }
-
-        $declaredValue = $this->config->getDeclaredValue($storeId);
-        if ($declaredValue !== null) {
-            $serviceCodes['declared_value'] = $declaredValue;
-        }
-
-        if ($codAmount > 0.0) {
-            $serviceCodes['cod_amount'] = round($codAmount, 2);
-        }
-
-        return $serviceCodes;
-    }
-
-    /**
-     * Whether the API currently offers this service. When the catalogue has
-     * never been synced we send the code rather than silently dropping a service
-     * the merchant switched on.
-     */
-    private function isServiceOffered(string $apiCode, int $storeId): bool
-    {
-        $catalogue = $this->additionalServiceRepository->getActiveByCode();
-        if (empty($catalogue)) {
-            return true;
-        }
-
-        if (isset($catalogue[$apiCode])) {
-            return true;
-        }
-
-        if ($this->config->isLoggingEnabled($storeId)) {
-            $this->logger->warning('[PigeonExpress] Shipment omits service not offered by the API', [
-                'storeId' => $storeId,
-                'service_code' => $apiCode,
-            ]);
-        }
-
-        return false;
-    }
 
     private function buildInventoryItems(\Magento\Sales\Api\Data\OrderInterface $order): array
     {
