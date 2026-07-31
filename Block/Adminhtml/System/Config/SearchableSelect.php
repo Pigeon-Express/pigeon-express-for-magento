@@ -15,51 +15,43 @@ class SearchableSelect extends Field
      * @param AbstractElement $element
      * @return string
      */
+    /**
+     * The filter behaviour is a RequireJS component wired up with data-mage-init.
+     * An inline script here would violate the admin Content Security Policy.
+     */
     protected function _getElementHtml(AbstractElement $element): string
     {
         $selectHtml = $element->getElementHtml();
         $elementId  = $element->getHtmlId();
         $inputId    = $elementId . '_search';
 
-        $placeholder = __('Search...');
+        $escaper = $this->getEscaper();
+        $placeholder = $escaper->escapeHtmlAttr((string) __('Search...'));
+
+        $init = $escaper->escapeHtmlAttr((string) json_encode([
+            'PigeonExpress_Shipping/js/searchable-select' => ['selectId' => $elementId],
+        ]));
 
         return <<<HTML
-<div class="pe-searchable-select" style="position:relative;">
+<div class="pe-searchable-select" data-mage-init="{$init}">
     <input
         type="text"
-        id="{$inputId}"
+        id="{$escaper->escapeHtmlAttr($inputId)}"
+        class="pe-searchable-select-input"
+        data-role="pe-select-search"
         placeholder="{$placeholder}"
         autocomplete="off"
-        style="width:100%;margin-bottom:4px;padding:4px 8px;box-sizing:border-box;border:1px solid #adadad;border-radius:1px;"
     />
     {$selectHtml}
 </div>
-<script>
-(function () {
-    var input  = document.getElementById('{$inputId}');
-    var select = document.getElementById('{$elementId}');
-    if (!input || !select) { return; }
-
-    var allOptions = Array.prototype.slice.call(select.options);
-
-    input.addEventListener('input', function () {
-        var q = this.value.toLowerCase().trim();
-        var currentVal = select.value;
-
-        while (select.options.length) { select.remove(0); }
-
-        allOptions.forEach(function (opt) {
-            if (!q || opt.text.toLowerCase().indexOf(q) !== -1) {
-                select.add(new Option(opt.text, opt.value, false, opt.value === currentVal));
-            }
-        });
-
-        if (!select.value && currentVal) {
-            select.value = currentVal;
-        }
-    });
-})();
-</script>
 HTML;
+    }
+
+    /**
+     * Escaper, resolved lazily so the constructor signature stays untouched.
+     */
+    private function getEscaper(): \Magento\Framework\Escaper
+    {
+        return $this->_escaper;
     }
 }

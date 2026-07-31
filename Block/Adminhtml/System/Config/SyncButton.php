@@ -9,7 +9,7 @@ use Magento\Framework\Data\Form\Element\AbstractElement;
 class SyncButton extends Field
 {
     /**
-     * Remove scope label — button is global, not store-scoped.
+     * Remove scope label: the button is global, not store scoped.
      */
     public function render(AbstractElement $element): string
     {
@@ -18,7 +18,7 @@ class SyncButton extends Field
     }
 
     /**
-     * Render a link styled as a button. Admin URL includes secret key — CSRF protection built-in.
+     * Render a link styled as a button. Admin URL includes the secret key, so CSRF protection is built in.
      */
     protected function _getElementHtml(AbstractElement $element): string
     {

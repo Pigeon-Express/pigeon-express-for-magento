@@ -1,0 +1,63 @@
+/**
+ * Pigeon Express carrier configuration styling.
+ *
+ * Lives in a stylesheet rather than inline attributes so the admin stays within
+ * Content Security Policy and the presentation is overridable by a theme.
+ */
+
+.pe-searchable-select {
+    position: relative;
+}
+
+.pe-searchable-select-input {
+    width: 100%;
+    margin-bottom: 4px;
+    padding: 4px 8px;
+    box-sizing: border-box;
+    border: 1px solid #adadad;
+    border-radius: 1px;
+}
+
+/* Catalogue of services the account actually offers. */
+.pe-service-availability {
+    margin: 0;
+    font-size: 1.3rem;
+    line-height: 1.6;
+}
+
+.pe-service-availability__synced {
+    margin: 0 0 8px;
+    color: #666;
+}
+
+.pe-service-availability__stale {
+    color: #c07600;
+    font-weight: 600;
+}
+
+.pe-service-availability__missing {
+    color: #e02b27;
+    font-weight: 600;
+}
+
+.pe-service-availability__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    columns: 2;
+}
+
+.pe-service-availability__list li {
+    padding: 1px 0;
+    break-inside: avoid;
+}
+
+.pe-service-availability__code {
+    color: #666;
+    font-family: monospace;
+    font-size: 1.1rem;
+}
+
+.pe-service-availability__empty {
+    color: #e02b27;
+}
