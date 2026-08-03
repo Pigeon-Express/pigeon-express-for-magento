@@ -52,6 +52,22 @@
                 <location_search_limit>20</location_search_limit>
                 <!-- Pickup location, also the origin used for rate calculation -->
                 <pickup_type>office</pickup_type>
+                <!-- The courier collects the shipping charge from the recipient.
+                     Magento still charges whatever the shipping rate says, so a store
+                     billing the customer at checkout as well should set its rates to
+                     zero for the affected delivery types. -->
+                <who_pays>receiver</who_pays>
+                <!-- Empty means no logo at checkout. -->
+                <checkout_logo></checkout_logo>
+                <!-- Off by default. Replacing Magento's address fields changes the
+                     checkout every customer sees, so a merchant turns it on once
+                     they have watched it work on their own store. -->
+                <override_address_fields>0</override_address_fields>
+                <!-- Locker compartment in cm, w x h x d. The API never checks this,
+                     so the module does. Zero on any side turns the check off. -->
+                <locker_max_width>61</locker_max_width>
+                <locker_max_height>37</locker_max_height>
+                <locker_max_depth>44</locker_max_depth>
                 <!-- Default dimensions/weight fallback (0 = hide method when product has no value) -->
                 <default_weight>0</default_weight>
                 <default_length>0</default_length>

@@ -307,6 +307,71 @@ class ConfigProvider implements ConfigInterface
     }
 
     /**
+     * @inheritDoc
+     */
+    public function isOverrideAddressFields(?int $storeId = null): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_CARRIER . 'override_address_fields',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getCheckoutLogo(?int $storeId = null): string
+    {
+        return (string) $this->scopeConfig->getValue(
+            self::XML_PATH_CARRIER . 'checkout_logo',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getLockerCompartment(?int $storeId = null): array
+    {
+        $read = function (string $field, float $fallback) use ($storeId): float {
+            $value = $this->scopeConfig->getValue(
+                self::XML_PATH_CARRIER . $field,
+                ScopeInterface::SCOPE_STORE,
+                $storeId
+            );
+
+            return $value !== null && $value !== '' ? (float) $value : $fallback;
+        };
+
+        // The compartment of the lockers currently deployed, 61 wide by 37 high
+        // by 44 deep. Zero on any side turns the check off.
+        return [
+            'length' => $read('locker_max_depth', 44.0),
+            'width'  => $read('locker_max_width', 61.0),
+            'height' => $read('locker_max_height', 37.0),
+        ];
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getWhoPays(?int $storeId = null): string
+    {
+        $value = $this->scopeConfig->getValue(
+            self::XML_PATH_CARRIER . 'who_pays',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+
+        // Receiver is the default, so anything unrecognised lands there rather
+        // than silently billing the merchant for a delivery they expected the
+        // recipient to pay for.
+        return $value === self::WHO_PAYS_SENDER ? self::WHO_PAYS_SENDER : self::WHO_PAYS_RECEIVER;
+    }
+
+    /**
      * @inheritdoc
      */
     public function getPickupOfficeId(?int $storeId = null): ?int

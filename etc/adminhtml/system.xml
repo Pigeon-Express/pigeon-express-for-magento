@@ -45,6 +45,59 @@
                         <can_be_empty>1</can_be_empty>
                         <source_model>Magento\Directory\Model\Config\Source\Country</source_model>
                     </field>
+                    <field id="who_pays" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="120" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/who_pays</config_path>
+                        <label>Who Pays the Shipping</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\WhoPays</source_model>
+                        <comment><![CDATA[Who Pigeon Express invoices for the shipping. This can be changed per shipment on the order screen.<br/>
+                        <strong>It does not change what the customer is charged at checkout.</strong> Pigeon Express quotes the same price either way, so if you choose Receiver the courier collects the delivery charge on top of anything Magento has already billed. Set your shipping rate to zero for the affected delivery types, or leave this on Sender.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="locker_max_width" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="122" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/locker_max_width</config_path>
+                        <label>Locker Compartment Width (cm)</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <comment><![CDATA[Every other limit is asked of Pigeon Express as parcels are priced, so this configuration does not repeat them. The locker compartment is the exception: the API accepts an oversized parcel without complaint and only the recipient finds out it will not go in. Leave any side at 0 to stop checking.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="locker_max_height" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="123" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/locker_max_height</config_path>
+                        <label>Locker Compartment Height (cm)</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="locker_max_depth" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="124" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/locker_max_depth</config_path>
+                        <label>Locker Compartment Depth (cm)</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="override_address_fields" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="126" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/override_address_fields</config_path>
+                        <label>Override Address Fields</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's own lists instead of typing them. This is what stops a loosely typed street reaching the carrier, which is the usual cause of a parcel being delivered to a different address it already holds for that phone number. With No, which is the default, Magento's standard address fields are used. Turn this on once you have placed a test order and seen the fields behave on your own checkout.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="checkout_logo" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="140" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/checkout_logo</config_path>
+                        <label>Checkout Logo</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\CheckoutLogo</source_model>
+                        <comment>Shown beside the Pigeon Express methods at checkout. Two of the versions are drawn in white for dark backgrounds and will be invisible on a light checkout, which is why they say so.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
                     <field id="location_search_limit" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="130" translate="label" type="text">
                         <config_path>carriers/pigeonexpress/location_search_limit</config_path>
                         <label>Location Autocomplete Results</label>

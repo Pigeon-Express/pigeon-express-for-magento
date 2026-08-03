@@ -19,6 +19,12 @@ interface ConfigInterface
     public const PICKUP_TYPE_OFFICE = 'office';
     public const PICKUP_TYPE_ADDRESS = 'address';
 
+    /** Pigeon Express bills the merchant for the shipping. */
+    public const WHO_PAYS_SENDER = 'sender';
+
+    /** The courier collects the shipping charge from the recipient on delivery. */
+    public const WHO_PAYS_RECEIVER = 'receiver';
+
     /**
      * Check if carrier is enabled.
      *
@@ -186,6 +192,48 @@ interface ConfigInterface
      * @return string
      */
     public function getPickupType(?int $storeId = null): string;
+
+    /**
+     * Who Pigeon Express bills for the shipping, sender or receiver.
+     *
+     * This decides who the carrier invoices. It does not change what Magento
+     * charges the customer at checkout, and Pigeon Express quotes the same price
+     * either way, so a store set to receiver has to decide separately what its
+     * own shipping rate should be.
+     *
+     * @param int|null $storeId
+     * @return string
+     */
+    public function getWhoPays(?int $storeId = null): string;
+
+    /**
+     * The locker compartment a parcel has to fit, in cm.
+     *
+     * Everything else about a parcel is the carrier's to judge, and it refuses
+     * with a reason. This one it never checks: an oversized parcel is booked
+     * happily and only the recipient discovers it will not go in. Configurable
+     * because lockers get replaced with different ones.
+     *
+     * @param int|null $storeId
+     * @return array{length:float, width:float, height:float}
+     */
+    public function getLockerCompartment(?int $storeId = null): array;
+
+    /**
+     * Which logo to show beside the methods at checkout, empty for none.
+     *
+     * @param int|null $storeId
+     * @return string
+     */
+    public function getCheckoutLogo(?int $storeId = null): string;
+
+    /**
+     * Whether checkout replaces Magento's address fields with the carrier's own.
+     *
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isOverrideAddressFields(?int $storeId = null): bool;
 
     /**
      * PE API office ID for pickup when pickup type is Office.
