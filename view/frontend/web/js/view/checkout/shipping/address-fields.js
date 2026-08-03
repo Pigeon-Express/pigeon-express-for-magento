@@ -67,6 +67,14 @@ define([
 
             this.showBuilding = ko.observable(false);
 
+            this.cityError = ko.observable('');
+            this.streetError = ko.observable('');
+            this.postcodeError = ko.observable('');
+
+            this.mirrorStockError('city', this.cityError);
+            this.mirrorStockError('street.0', this.streetError);
+            this.mirrorStockError('postcode', this.postcodeError);
+
             window.pigeonexpressCheckoutPayload = window.pigeonexpressCheckoutPayload || {};
 
             var self = this;
@@ -247,6 +255,32 @@ define([
             window.pigeonexpressCheckoutPayload.pigeonexpress_city_id = city ? String(city.id) : '';
             window.pigeonexpressCheckoutPayload.pigeonexpress_street_id =
                 this.selectedStreet() ? String(this.selectedStreet().id) : '';
+        },
+
+        /**
+         * Repeat a stock field's validation message on the field we show.
+         *
+         * The stock street, city and postcode are hidden with CSS rather than
+         * through their own visible observable, deliberately: Magento treats a
+         * field whose visible() is false as valid without checking it, and
+         * these three are the address of record, so they have to keep being
+         * checked. The cost is that their error message renders inside an
+         * element CSS has hidden, which would leave a customer pressing Next
+         * against a form that neither moves nor explains itself. Showing the
+         * same message on the field they can see is what closes that.
+         */
+        mirrorStockError: function (name, target) {
+            registry.get(FIELDSET + name, function (cmp) {
+                if (!cmp || typeof cmp.error !== 'function') {
+                    return;
+                }
+
+                target(cmp.error() || '');
+
+                cmp.error.subscribe(function (message) {
+                    target(message || '');
+                });
+            });
         },
 
         /**

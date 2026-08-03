@@ -90,6 +90,18 @@ body.pigeonexpress-shipping-active .shipping-address-item:not(:last-child) {
     position: relative;
 }
 
+/* The stock fields still validate while hidden, so their message is repeated
+   here on the field the customer can actually see. */
+.pigeonexpress-field-error {
+    color: #e02b27;
+    font-size: 1.2rem;
+    margin-top: .4rem;
+}
+
+.pigeonexpress-address-fields .field._error .input-text {
+    border-color: #e02b27;
+}
+
 .pigeonexpress-readonly {
     color: #333;
     display: inline-block;

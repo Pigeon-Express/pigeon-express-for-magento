@@ -5,7 +5,7 @@
 -->
 <div class="pigeonexpress-address-fields" data-bind="visible: isVisible(), if: isVisible()">
 
-    <div class="field required pigeonexpress-city">
+    <div class="field required pigeonexpress-city" data-bind="css: { '_error': cityError() }">
         <label class="label" data-bind="attr: { for: uid + '-city' }">
             <span data-bind="i18n: 'City'"></span>
         </label>
@@ -26,18 +26,24 @@
                     class="pigeonexpress-result-item"
                     data-bind="text: label, click: $parent.selectCity.bind($parent, $data)"></li>
             </ul>
+            <div class="mage-error pigeonexpress-field-error"
+                 data-bind="visible: cityError(), text: cityError()"></div>
         </div>
     </div>
 
-    <div class="field pigeonexpress-postcode" data-bind="visible: selectedCity()">
+    <div class="field pigeonexpress-postcode"
+         data-bind="visible: selectedCity(), css: { '_error': postcodeError() }">
         <label class="label"><span data-bind="i18n: 'Postal code'"></span></label>
         <div class="control">
             <span class="pigeonexpress-readonly"
                   data-bind="text: selectedCity() ? selectedCity().postcode : ''"></span>
+            <div class="mage-error pigeonexpress-field-error"
+                 data-bind="visible: postcodeError(), text: postcodeError()"></div>
         </div>
     </div>
 
-    <div class="field required pigeonexpress-street" data-bind="visible: selectedCity()">
+    <div class="field required pigeonexpress-street"
+         data-bind="visible: selectedCity(), css: { '_error': streetError() }">
         <label class="label" data-bind="attr: { for: uid + '-street' }">
             <span data-bind="i18n: 'Street'"></span>
         </label>
@@ -59,6 +65,8 @@
                     data-bind="text: label, click: $parent.selectStreet.bind($parent, $data)"></li>
             </ul>
             <p class="pigeonexpress-empty" data-bind="visible: streetNotice(), text: streetNotice()"></p>
+            <div class="mage-error pigeonexpress-field-error"
+                 data-bind="visible: streetError(), text: streetError()"></div>
         </div>
     </div>
 
