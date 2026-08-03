@@ -2,15 +2,12 @@
  * Pigeon Express checkout: Office/APS location autocomplete (selection only, no free text).
  */
 
-/* When Office or APS is selected, hide standard address fields (street, city, region, postcode, country). */
-body.pigeonexpress-office-or-aps-selected .field.street,
-body.pigeonexpress-office-or-aps-selected .field.city,
-body.pigeonexpress-office-or-aps-selected .field.region,
-body.pigeonexpress-office-or-aps-selected .field.region_id,
-body.pigeonexpress-office-or-aps-selected .field.postcode,
-body.pigeonexpress-office-or-aps-selected .field.zip,
-body.pigeonexpress-office-or-aps-selected .field.country,
-body.pigeonexpress-office-or-aps-selected .field.country_id {
+/* A parcel going to a counter has no street address. Only the street wrapper is
+   hidden here, and only because it is a fieldset with a legend and a second line
+   that are not fields in their own right. The fields themselves are hidden
+   through their own visible observable, in address-visibility.js: Luma gives
+   them no class to select on, only a name attribute. */
+body.pigeonexpress-office-or-aps-selected .field.street {
     display: none !important;
 }
 

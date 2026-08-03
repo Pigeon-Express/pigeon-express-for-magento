@@ -1,8 +1,25 @@
 /**
- * When Pigeon Express Office or APS is selected, add class to body so address fields can be hidden via CSS.
- * For logged-in users: detaches quote from saved customer address (creates a new temporary address)
- * so the customer's address book is never modified by placeholder data.
- * For guests: populates hidden address fields with placeholders so checkout validation passes.
+ * Which of Magento's address fields apply, given the Pigeon Express method.
+ *
+ * Office and locker deliveries do not have a street address at all, and with
+ * the override on the carrier's own fields collect one. Either way the stock
+ * street, city, postcode, region and country have to go.
+ *
+ * They are hidden through each field's own visible observable rather than with
+ * CSS. Luma gives these fields no class to select on, only a name attribute, so
+ * there is nothing for a stylesheet to hook; and Magento treats a field whose
+ * visible observable is false as valid without checking it, which is what stops
+ * an empty box the customer cannot see from blocking a form it cannot explain.
+ * The one exception is the street fieldset, which owns a legend and a second
+ * line that are not fields, so its wrapper is hidden in the stylesheet too.
+ *
+ * For office and locker the hidden fields are filled with placeholders, since
+ * nothing else will fill them. With the override they are left to the carrier's
+ * fields, which write real values into them, and validating them is our own job:
+ * see validate() in address-fields.js.
+ *
+ * For logged-in users the quote is detached from any saved customer address
+ * first, so the address book is never modified by placeholder data.
  */
 define([
     'ko',
@@ -18,11 +35,24 @@ define([
         bodyClassOverrideAddress = 'pigeonexpress-address-override';
     var bodyClassPhoneRequired = 'pigeonexpress-telephone-required';
 
+    var FIELDSET = 'checkout.steps.shipping-step.shippingAddress.shipping-address-fieldset';
+
+    /**
+     * Every stock field the carrier's own address replaces. Name, company,
+     * email and telephone are deliberately absent: nothing here collects them,
+     * and the telephone least of all, it being how Pigeon Express identifies a
+     * recipient.
+     */
+    var STOCK_FIELDS = ['street.0', 'street.1', 'city', 'postcode', 'region_id', 'region', 'country_id'];
+
+    /**
+     * What an office or locker delivery puts in the fields it hides. The parcel
+     * is not going to a street address, but Magento still wants one.
+     */
     var placeholders = {
-        'street': ['PigeonExpress Location', 'Office/APS Delivery'],
+        'street.0': 'PigeonExpress Location',
         'city': 'PigeonExpress Location',
-        'postcode': '00000',
-        'telephone': '' // We don't populate phone; user must enter it.
+        'postcode': '00000'
     };
 
     /**
@@ -61,70 +91,52 @@ define([
         });
     }
 
-    function populatePlaceholders(isOfficeOrAps) {
-        registry.async('checkout.steps.shipping-step.shippingAddress.shipping-address-fieldset')(function (fieldset) {
-            ['street', 'city', 'postcode', 'region_id', 'country_id'].forEach(function (fieldName) {
-                var path = 'checkout.steps.shipping-step.shippingAddress.shipping-address-fieldset.' + fieldName;
-
-                // Для улицы заполняем первый элемент street.0
-                if (fieldName === 'street') {
-                    path += '.0';
-                }
-
-                registry.get(path, function (cmp) {
-                    if (!cmp) {
-                        return;
-                    }
-
-                    var hasValue = typeof cmp.value === 'function';
-                    var hasVisible = typeof cmp.visible === 'function';
-
-                    if (!hasValue && !hasVisible) {
-                        return;
-                    }
-
-                    if (isOfficeOrAps) {
-                        // Прячем поле через observable visible, если он есть
-                        if (hasVisible) {
-                            cmp.visible(false);
-                        }
-
-                        // Populate if empty
-                        if (hasValue) {
-                            if (fieldName === 'street') {
-                                var streetVal = cmp.value();
-                                if (!streetVal) {
-                                    // Пишем то же, что и в город, чтобы валидация прошла
-                                    cmp.value(placeholders.city);
-                                }
-                            } else if (placeholders[fieldName]) {
-                                if (!cmp.value()) {
-                                    cmp.value(placeholders[fieldName]);
-                                }
-                            }
-                        }
-                    } else {
-                        // Возвращаем поля, если есть observable visible
-                        if (hasVisible) {
-                            cmp.visible(true);
-                        }
-
-                        // Clear if matches placeholder so user doesn't see dummy data
-                        if (hasValue) {
-                            if (fieldName === 'street') {
-                                var currentStreet = cmp.value();
-                                if (currentStreet === placeholders.city) {
-                                    cmp.value('');
-                                }
-                            } else if (placeholders[fieldName]) {
-                                if (cmp.value() === placeholders[fieldName]) {
-                                    cmp.value('');
-                                }
-                            }
-                        }
+    /**
+     * Run a callback against every stock address field, once each exists.
+     */
+    function eachStockField(callback) {
+        registry.async(FIELDSET)(function () {
+            STOCK_FIELDS.forEach(function (name) {
+                registry.get(FIELDSET + '.' + name, function (cmp) {
+                    if (cmp) {
+                        callback(cmp, name);
                     }
                 });
             });
+        });
+    }
+
+    /**
+     * Show or hide the stock address, and with it Magento's checking of it.
+     */
+    function setStockAddressVisible(visible) {
+        eachStockField(function (cmp) {
+            if (typeof cmp.visible === 'function') {
+                cmp.visible(visible);
+            }
+        });
+    }
+
+    /**
+     * Fill the hidden fields for an office or locker delivery, or clear what was
+     * filled once the delivery is something else. Only ever the placeholder is
+     * cleared, so an address the customer typed is left alone.
+     */
+    function setPlaceholders(on) {
+        eachStockField(function (cmp, name) {
+            var placeholder = placeholders[name];
+
+            if (!placeholder || typeof cmp.value !== 'function') {
+                return;
+            }
+
+            if (on) {
+                if (!cmp.value()) {
+                    cmp.value(placeholder);
+                }
+            } else if (cmp.value() === placeholder) {
+                cmp.value('');
+            }
         });
     }
 
@@ -150,11 +162,6 @@ define([
                     document.body.classList.remove(bodyClassHideAddress);
                 }
 
-                // The carrier's own address fields replace the stock ones, so
-                // the stock street, city and postcode are hidden. Unlike the
-                // office case they are not filled with placeholders: our fields
-                // write the real values straight into them, because the Magento
-                // address is what tax, invoices and emails all read.
                 if (overrideAddress) {
                     document.body.classList.add(bodyClassOverrideAddress);
                 } else {
@@ -167,7 +174,10 @@ define([
                     document.body.classList.remove(bodyClassPhoneRequired);
                 }
 
-                populatePlaceholders(isOfficeOrAps);
+                // Both cases replace the stock address; only one of them has
+                // nowhere real to get the values from.
+                setStockAddressVisible(!(isOfficeOrAps || overrideAddress));
+                setPlaceholders(isOfficeOrAps);
             }
             update();
             quote.shippingMethod.subscribe(update);

@@ -10,23 +10,14 @@
 
 /* -- Which of Magento's fields give way ----------------------------------- */
 
-/* The carrier's fields replace the address, and only the address. Name,
-   company, email and telephone stay: nothing here collects them, and the
-   telephone in particular is how Pigeon Express identifies a recipient, so
-   hiding it would leave the carrier guessing at the very thing that decides
-   where the parcel goes.
-
-   Unlike the office and locker case these are not filled with placeholders.
-   They are the address of record, read by tax, invoices, emails and the address
-   book, so the real values are written into them and they keep validating. */
-body.pigeonexpress-address-override .field.street,
-body.pigeonexpress-address-override .field.city,
-body.pigeonexpress-address-override .field.region,
-body.pigeonexpress-address-override .field.region_id,
-body.pigeonexpress-address-override .field.postcode,
-body.pigeonexpress-address-override .field.zip,
-body.pigeonexpress-address-override .field.country,
-body.pigeonexpress-address-override .field.country_id {
+/* Only the street wrapper is hidden here, and only because it is a fieldset
+   with a legend and a second line that are not fields in their own right.
+   Every other stock address field is hidden through its own visible observable,
+   in address-visibility.js. It has to be: Luma gives these fields no class to
+   select on, only a name attribute, so a stylesheet has nothing to hook, and
+   hiding one without telling Magento leaves it validating a box the customer
+   cannot see. */
+body.pigeonexpress-address-override .field.street {
     display: none !important;
 }
 
