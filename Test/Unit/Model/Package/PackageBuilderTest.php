@@ -14,7 +14,9 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Exception\UnshippableException;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
+use PigeonExpress\Shipping\Model\Service\CarrierLimits;
 use Psr\Log\LoggerInterface;
 
 class PackageBuilderTest extends TestCase
@@ -24,6 +26,9 @@ class PackageBuilderTest extends TestCase
 
     /** @var ProductCollectionFactory&MockObject */
     private $collectionFactory;
+
+    /** @var CarrierLimits&MockObject */
+    private $limits;
 
     /** @var PackageBuilder */
     private $builder;
@@ -35,10 +40,30 @@ class PackageBuilderTest extends TestCase
 
         $this->config->method('isLoggingEnabled')->willReturn(false);
 
+        // What the carrier last said it will carry. Stubbed here so the tests
+        // describe the builder's behaviour rather than today's tariff.
+        $this->limits = $this->createMock(CarrierLimits::class);
+        $this->limits->method('all')->willReturnCallback(
+            static function (string $type): array {
+                return $type === 'aps'
+                    ? ['weight' => 30.0, 'length' => 250.0, 'width' => 180.0, 'height' => 150.0]
+                    : ['weight' => 40.0, 'length' => 250.0, 'width' => 180.0, 'height' => 150.0];
+            }
+        );
+        $this->limits->method('maxWeight')->willReturnCallback(
+            static function (string $type): float {
+                return $type === 'aps' ? 30.0 : 40.0;
+            }
+        );
+
+        $this->config->method('getLockerCompartment')
+            ->willReturn(['length' => 44.0, 'width' => 61.0, 'height' => 37.0]);
+
         $this->builder = new PackageBuilder(
             $this->config,
             $this->collectionFactory,
-            $this->createMock(LoggerInterface::class)
+            $this->createMock(LoggerInterface::class),
+            $this->limits
         );
     }
 
@@ -52,14 +77,135 @@ class PackageBuilderTest extends TestCase
 
     public function dimensionClampProvider(): array
     {
+        // Unqualified, a dimension is bounded by the longest side an address or
+        // office parcel may have.
         return [
             'below minimum'   => [0.0, 1.0],
             'fractional'      => [0.4, 1.0],
             'at minimum'      => [1.0, 1.0],
             'normal'          => [30.0, 30.0],
-            'at maximum'      => [200.0, 200.0],
-            'above maximum'   => [5000.0, 200.0],
+            'at maximum'      => [250.0, 250.0],
+            'above maximum'   => [5000.0, 250.0],
         ];
+    }
+
+    /**
+     * @dataProvider deliveryLimitProvider
+     */
+    public function testEachDeliveryTypeCarriesItsOwnLimits(string $type, float $weight, float $length): void
+    {
+        // Measured against the API. A locker is the odd one out: its tariff stops
+        // at 30 kg, and its compartment is smaller than anything a courier will
+        // carry to a door.
+        $limits = $this->builder->limitsFor($type);
+
+        $this->assertSame($weight, $limits['weight']);
+        $this->assertSame($length, $limits['length']);
+    }
+
+    public function deliveryLimitProvider(): array
+    {
+        return [
+            'address' => ['address', 40.0, 250.0],
+            'office'  => ['office', 40.0, 250.0],
+            'locker'  => ['aps', 30.0, 250.0],
+        ];
+    }
+
+    public function testAnUnknownDeliveryTypeUsesTheAddressLimits(): void
+    {
+        $this->assertSame(40.0, $this->builder->maxWeightFor('teleport'));
+    }
+
+    /**
+     * @dataProvider lockerFitProvider
+     */
+    public function testALockerCompartmentIsMeasuredAsABox(array $parcel, bool $fits): void
+    {
+        // A parcel can be turned round, so 44 x 61 x 37 goes into a 61 x 37 x 44
+        // compartment perfectly well. Comparing axis to axis would refuse it.
+        $compartment = $this->builder->compartmentFor('aps');
+
+        $this->assertSame($fits, $this->builder->fitsWithin($parcel, $compartment));
+    }
+
+    public function lockerFitProvider(): array
+    {
+        return [
+            'exactly the compartment' => [['length' => 44.0, 'width' => 61.0, 'height' => 37.0], true],
+            'turned round'            => [['length' => 61.0, 'width' => 37.0, 'height' => 44.0], true],
+            'small'                   => [['length' => 20.0, 'width' => 20.0, 'height' => 20.0], true],
+            'one side too long'       => [['length' => 62.0, 'width' => 20.0, 'height' => 20.0], false],
+            'too fat overall'         => [['length' => 50.0, 'width' => 50.0, 'height' => 50.0], false],
+        ];
+    }
+
+    public function testAParcelTooBigForALockerIsRefusedRatherThanTrimmed(): void
+    {
+        // Trimming it on paper would let the carrier accept a parcel that then
+        // does not go into the locker the recipient was sent to.
+        $this->configureAttributes();
+        $this->configureDefaults(100.0, 100.0, 100.0);
+
+        $this->expectException(UnshippableException::class);
+        $this->expectExceptionMessageMatches('/will not fit/');
+
+        $this->builder->resolveDimensions([], 1, 'aps');
+    }
+
+    public function testTheSameParcelIsFineForAnAddress(): void
+    {
+        $this->configureAttributes();
+        $this->configureDefaults(100.0, 100.0, 100.0);
+
+        $dimensions = $this->builder->resolveDimensions([], 1, 'address');
+
+        $this->assertSame(100.0, $dimensions['length']);
+    }
+
+    public function testALockerRefusesAHeavierParcelThanADoorDoes(): void
+    {
+        $this->expectException(UnshippableException::class);
+
+        $this->builder->split(35.0, $this->dims(), 1, $this->builder->maxWeightFor('aps'));
+    }
+
+    public function testTheSameWeightIsOneParcelToAnAddress(): void
+    {
+        $packages = $this->builder->split(35.0, $this->dims(), 1, $this->builder->maxWeightFor('address'));
+
+        $this->assertCount(1, $packages);
+    }
+
+    public function testOneWaybillCannotCarryUnlimitedParcels(): void
+    {
+        // Pigeon Express caps a reference number at ten parcels. The module does
+        // not split across two waybills, so the merchant is told rather than
+        // handed half a shipment.
+        $this->expectException(UnshippableException::class);
+        $this->expectExceptionMessageMatches('/at most 10/');
+
+        $this->builder->split(500.0, $this->dims(), 20, 40.0);
+    }
+
+    public function testTheNoticeSaysWhatToDoAboutIt(): void
+    {
+        try {
+            $this->builder->split(500.0, $this->dims(), 20, 40.0);
+            $this->fail('an over-full waybill should be refused');
+        } catch (UnshippableException $e) {
+            $message = (string) $e->getMessage();
+
+            $this->assertStringContainsString('13 parcels', $message, 'say how many it needs');
+            $this->assertStringContainsString('Split it into separate orders', $message, 'say what to do');
+        }
+    }
+
+    public function testTenParcelsIsStillOneWaybill(): void
+    {
+        $packages = $this->builder->split(400.0, $this->dims(), 10, 40.0);
+
+        $this->assertCount(PackageBuilder::MAX_PACKAGES_PER_SHIPMENT, $packages);
     }
 
     /**
@@ -91,14 +237,58 @@ class PackageBuilderTest extends TestCase
 
     public function testSplitBreaksHeavyCartsIntoCappedParcels(): void
     {
-        $packages = $this->builder->split(75.0, $this->dims());
+        $packages = $this->builder->split(95.0, $this->dims());
 
         $this->assertCount(3, $packages);
-        $this->assertSame([30.0, 30.0, 15.0], array_column($packages, 'weight'));
-        $this->assertLessThanOrEqual(
-            PackageBuilder::MAX_PACKAGE_WEIGHT,
-            max(array_column($packages, 'weight'))
+        $this->assertSame([40.0, 40.0, 15.0], array_column($packages, 'weight'));
+        $this->assertLessThanOrEqual(40.0, max(array_column($packages, 'weight')));
+    }
+
+    public function testTheCapIsWhateverTheCarrierLastSaid(): void
+    {
+        // Nothing here is a number the module chose. The builder asks what the
+        // carrier will carry and splits at that, so when the tariff changes the
+        // behaviour changes with it and no release is needed.
+        $this->assertCount(1, $this->builder->split(40.0, $this->dims()));
+
+        $this->limits = $this->createMock(CarrierLimits::class);
+        $this->limits->method('maxWeight')->willReturn(60.0);
+        $this->limits->method('all')->willReturn(
+            ['weight' => 60.0, 'length' => 250.0, 'width' => 180.0, 'height' => 150.0]
         );
+        $builder = new PackageBuilder(
+            $this->config,
+            $this->collectionFactory,
+            $this->createMock(LoggerInterface::class),
+            $this->limits
+        );
+
+        $this->assertCount(1, $builder->split(55.0, $this->dims()), 'a raised ceiling stops the splitting');
+    }
+
+    public function testOneHeavyItemIsNotInventedIntoTwoParcels(): void
+    {
+        // Arithmetic will turn one 41 kg item into two 20.5 kg parcels. Nobody
+        // can hand the courier half of it, and a waybill promising two parcels
+        // when one arrives is worse than being told it cannot be carried.
+        $this->expectException(UnshippableException::class);
+        $this->expectExceptionMessageMatches('/cannot be split/');
+
+        $this->builder->split(41.0, $this->dims(), 1);
+    }
+
+    public function testEnoughItemsCanStillBeSplit(): void
+    {
+        $packages = $this->builder->split(60.0, $this->dims(), 2);
+
+        $this->assertCount(2, $packages);
+        $this->assertSame([40.0, 20.0], array_column($packages, 'weight'));
+    }
+
+    public function testAnUnknownPieceCountDoesNotBlockSplitting(): void
+    {
+        // Rating without line data still has to produce a price.
+        $this->assertCount(2, $this->builder->split(60.0, $this->dims(), null));
     }
 
     public function testSplitPreservesTotalWeight(): void

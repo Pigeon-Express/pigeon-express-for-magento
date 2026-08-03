@@ -21,16 +21,22 @@ namespace PigeonExpress\Shipping\Model\Package;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Exception\MissingDimensionsException;
+use PigeonExpress\Shipping\Exception\UnshippableException;
+use PigeonExpress\Shipping\Model\Service\CarrierLimits;
 use Psr\Log\LoggerInterface;
 
 class PackageBuilder
 {
-    /** API rejects packages over 30 kg. */
-    public const MAX_PACKAGE_WEIGHT = 30.0;
+    /**
+     * Parcels one waybill may carry. Beyond this the shipment needs a second
+     * reference number. This one is Pigeon Express's own operating rule rather
+     * than something the API reports, so it lives here.
+     */
+    public const MAX_PACKAGES_PER_SHIPMENT = 10;
 
-    /** API requires each dimension between 1 and 200 cm. */
+    /** API requires a positive dimension. */
     public const MIN_DIMENSION = 1.0;
-    public const MAX_DIMENSION = 200.0;
 
     /** API requires a positive weight. */
     public const MIN_WEIGHT = 0.1;
@@ -44,14 +50,19 @@ class PackageBuilder
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var CarrierLimits */
+    private $limits;
+
     public function __construct(
         ConfigInterface $config,
         ProductCollectionFactory $productCollectionFactory,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        CarrierLimits $limits
     ) {
         $this->config = $config;
         $this->productCollectionFactory = $productCollectionFactory;
         $this->logger = $logger;
+        $this->limits = $limits;
     }
 
     /**
@@ -59,15 +70,96 @@ class PackageBuilder
      *
      * @param array<int, array{product_id:int, qty:float}> $lines One entry per cart or order line
      * @param float|null $fallbackWeight Used when no weight can be derived from products
+     * @param float|null $recordedWeight The weight already known for this shipment, which is
+     *                                   used as given rather than looked up
      * @return array<int, array{weight:float, length:float, width:float, height:float}>
      * @throws ApiException When dimensions cannot be determined and no defaults are configured
+     * @throws UnshippableException When the parcel is too heavy to be carried
      */
-    public function build(array $lines, int $storeId, ?float $fallbackWeight = null): array
-    {
-        $dimensions = $this->resolveDimensions($lines, $storeId);
-        $weight = $this->resolveWeight($lines, $storeId, $fallbackWeight);
+    public function build(
+        array $lines,
+        int $storeId,
+        string $deliveryType = ConfigInterface::DELIVERY_TYPE_ADDRESS,
+        ?float $fallbackWeight = null,
+        ?float $recordedWeight = null
+    ): array {
+        $dimensions = $this->resolveDimensions($lines, $storeId, $deliveryType);
 
-        return $this->split($weight, $dimensions);
+        // An order carries its own weight, recorded when it was placed. Reading
+        // the catalogue instead would let a product edited months later change
+        // what a past shipment says it weighs.
+        $weight = $recordedWeight !== null && $recordedWeight > 0.0
+            ? $recordedWeight
+            : $this->resolveWeight($lines, $storeId, $fallbackWeight);
+
+        return $this->split(
+            $weight,
+            $dimensions,
+            $this->countPieces($lines),
+            $this->maxWeightFor($deliveryType, $storeId)
+        );
+    }
+
+    /**
+     * The bounds on one parcel, as the carrier last described them.
+     *
+     * @return array{weight:float, length:float, width:float, height:float}
+     */
+    public function limitsFor(string $deliveryType, int $storeId = 0): array
+    {
+        return $this->limits->all($deliveryType, $storeId);
+    }
+
+    /**
+     * Heaviest single parcel this delivery type is known to carry.
+     */
+    public function maxWeightFor(string $deliveryType, int $storeId = 0): float
+    {
+        return $this->limits->maxWeight($deliveryType, $storeId);
+    }
+
+    /**
+     * The locker compartment, which the API does not check.
+     *
+     * Everything else about a parcel is the carrier's to judge, and it says so
+     * when it refuses. This one it never says, because a locker accepts the
+     * booking and only the recipient finds out. Configurable rather than fixed:
+     * lockers get replaced.
+     *
+     * @return array{length:float, width:float, height:float}|null
+     */
+    public function compartmentFor(string $deliveryType, int $storeId = 0): ?array
+    {
+        if ($deliveryType !== ConfigInterface::DELIVERY_TYPE_APS) {
+            return null;
+        }
+
+        $compartment = $this->config->getLockerCompartment($storeId);
+
+        return $compartment['length'] > 0 && $compartment['width'] > 0 && $compartment['height'] > 0
+            ? $compartment
+            : null;
+    }
+
+    /**
+     * How many physical items there are, or null when that cannot be known.
+     *
+     * This is what bounds splitting. Weight divides on paper; objects do not.
+     *
+     * @param array<int, array{product_id:int, qty:float}> $lines
+     */
+    private function countPieces(array $lines): ?int
+    {
+        if (empty($lines)) {
+            return null;
+        }
+
+        $pieces = 0;
+        foreach ($lines as $line) {
+            $pieces += (int) ceil(max(1.0, (float) $line['qty']));
+        }
+
+        return max(1, $pieces);
     }
 
     /**
@@ -126,8 +218,11 @@ class PackageBuilder
      * @return array{length:float, width:float, height:float}
      * @throws ApiException
      */
-    public function resolveDimensions(array $lines, int $storeId): array
-    {
+    public function resolveDimensions(
+        array $lines,
+        int $storeId,
+        string $deliveryType = ConfigInterface::DELIVERY_TYPE_ADDRESS
+    ): array {
         $lengthAttr = $this->config->getLengthAttributeCode($storeId);
         $widthAttr  = $this->config->getWidthAttributeCode($storeId);
         $heightAttr = $this->config->getHeightAttributeCode($storeId);
@@ -140,11 +235,11 @@ class PackageBuilder
         $hasDefaults = $this->hasConfiguredDefaults($storeId);
 
         if (!$lengthAttr || !$widthAttr || !$heightAttr) {
-            return $this->requireDefaults($defaults, $hasDefaults);
+            return $this->requireDefaults($defaults, $hasDefaults, $deliveryType);
         }
 
         if (empty($lines)) {
-            return $this->requireDefaults($defaults, $hasDefaults);
+            return $this->requireDefaults($defaults, $hasDefaults, $deliveryType);
         }
 
         try {
@@ -164,7 +259,7 @@ class PackageBuilder
                 }
 
                 if (!$hasDefaults) {
-                    throw new ApiException(
+                    throw new MissingDimensionsException(
                         __('Product dimensions (length/width/height) are not configured for this store.')
                     );
                 }
@@ -174,7 +269,7 @@ class PackageBuilder
                 $total['height'] += $defaults['height'];
             }
 
-            return $this->normalizeDimensions($total);
+            return $this->normalizeDimensions($total, $deliveryType);
         } catch (ApiException $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -183,7 +278,7 @@ class PackageBuilder
             }
         }
 
-        return $this->requireDefaults($defaults, $hasDefaults);
+        return $this->requireDefaults($defaults, $hasDefaults, $deliveryType);
     }
 
     /**
@@ -252,23 +347,61 @@ class PackageBuilder
      * Split a total weight into packages of at most MAX_PACKAGE_WEIGHT.
      * All packages share the same dimensions.
      *
+     * Splitting is bounded by how many items there actually are. Arithmetic will
+     * happily turn one 41 kg item into two 20.5 kg parcels, but nobody can hand
+     * the courier half a washing machine, and a waybill describing two parcels
+     * when one arrives is worse than being told it cannot be shipped.
+     *
      * @param array{length:float, width:float, height:float} $dimensions
+     * @param int|null $maxPieces Items available to split across, null when unknown
      * @return array<int, array{weight:float, length:float, width:float, height:float}>
+     * @throws UnshippableException
      */
-    public function split(float $totalWeight, array $dimensions): array
-    {
+    public function split(
+        float $totalWeight,
+        array $dimensions,
+        ?int $maxPieces = null,
+        ?float $maxPackageWeight = null
+    ): array {
+        $cap = $maxPackageWeight ?? $this->maxWeightFor(ConfigInterface::DELIVERY_TYPE_ADDRESS);
         $weight = $this->normalizeWeight($totalWeight);
 
-        if ($weight <= self::MAX_PACKAGE_WEIGHT) {
+        if ($weight <= $cap) {
             return [$dimensions + ['weight' => $weight]];
+        }
+
+        $needed = (int) ceil($weight / $cap);
+
+        if ($maxPieces !== null && $needed > $maxPieces) {
+            throw new UnshippableException(__(
+                'This shipment weighs %1 kg across %2 item(s). Pigeon Express carries at most %3 kg per '
+                . 'parcel, and an item cannot be split between parcels. Send it in separate orders, or '
+                . 'arrange it with Pigeon Express directly.',
+                round($weight, 2),
+                $maxPieces,
+                $cap
+            ));
         }
 
         $packages = [];
         $remaining = $weight;
         while ($remaining > 0) {
-            $packageWeight = min($remaining, self::MAX_PACKAGE_WEIGHT);
+            $packageWeight = min($remaining, $cap);
             $packages[] = $dimensions + ['weight' => round($packageWeight, 3)];
             $remaining = round($remaining - $packageWeight, 3);
+        }
+
+        if (count($packages) > self::MAX_PACKAGES_PER_SHIPMENT) {
+            // Deliberately not split across two waybills. A second reference
+            // number would have to be created, cancelled and labelled alongside
+            // the first, and half of that going wrong leaves a worse mess than
+            // telling the merchant plainly that this one needs handling by hand.
+            throw new UnshippableException(__(
+                'This order needs %1 parcels and one Pigeon Express waybill carries at most %2. '
+                . 'Split it into separate orders, or arrange the shipment with Pigeon Express directly.',
+                count($packages),
+                self::MAX_PACKAGES_PER_SHIPMENT
+            ));
         }
 
         return $packages;
@@ -282,27 +415,75 @@ class PackageBuilder
         return round($weight, 3);
     }
 
-    public function normalizeDimension(float $value): float
+    public function normalizeDimension(float $value, ?float $max = null): float
     {
         if ($value < self::MIN_DIMENSION) {
             return self::MIN_DIMENSION;
         }
-        if ($value > self::MAX_DIMENSION) {
-            return self::MAX_DIMENSION;
+
+        $ceiling = $max ?? $this->limitsFor(ConfigInterface::DELIVERY_TYPE_ADDRESS)['length'];
+
+        return $value > $ceiling ? $ceiling : $value;
+    }
+
+    /**
+     * Whether a parcel fits a locker compartment.
+     *
+     * Compared as boxes rather than axis by axis, because a parcel can be turned
+     * round: 44 x 61 x 37 goes into a 61 x 37 x 44 compartment perfectly well.
+     *
+     * @param array{length:float, width:float, height:float} $dimensions
+     * @param array{length:float, width:float, height:float} $limits
+     */
+    public function fitsWithin(array $dimensions, array $limits): bool
+    {
+        $parcel = [$dimensions['length'], $dimensions['width'], $dimensions['height']];
+        $space = [$limits['length'], $limits['width'], $limits['height']];
+
+        rsort($parcel);
+        rsort($space);
+
+        foreach ($parcel as $i => $side) {
+            if ($side > $space[$i]) {
+                return false;
+            }
         }
-        return $value;
+
+        return true;
     }
 
     /**
      * @param array{length:float, width:float, height:float} $dimensions
      * @return array{length:float, width:float, height:float}
      */
-    private function normalizeDimensions(array $dimensions): array
-    {
+    private function normalizeDimensions(
+        array $dimensions,
+        string $deliveryType = ConfigInterface::DELIVERY_TYPE_ADDRESS
+    ): array {
+        $limits = $this->limitsFor($deliveryType);
+        $compartment = $this->compartmentFor($deliveryType);
+
+        // A locker compartment is a physical space, so an oversized parcel is
+        // refused rather than trimmed to fit on paper. The API does not check
+        // this, which is exactly why it has to be checked here: the parcel would
+        // be accepted, dispatched, and then not go into the locker.
+        if ($compartment !== null && !$this->fitsWithin($dimensions, $compartment)) {
+            throw new UnshippableException(__(
+                'This parcel measures %1 x %2 x %3 cm. A Pigeon Express locker compartment is '
+                . '%4 x %5 x %6 cm, so it will not fit. Choose delivery to an address or an office.',
+                round($dimensions['length']),
+                round($dimensions['width']),
+                round($dimensions['height']),
+                $compartment['width'],
+                $compartment['height'],
+                $compartment['length']
+            ));
+        }
+
         return [
-            'length' => $this->normalizeDimension($dimensions['length']),
-            'width'  => $this->normalizeDimension($dimensions['width']),
-            'height' => $this->normalizeDimension($dimensions['height']),
+            'length' => $this->normalizeDimension($dimensions['length'], $limits['length']),
+            'width'  => $this->normalizeDimension($dimensions['width'], $limits['width']),
+            'height' => $this->normalizeDimension($dimensions['height'], $limits['height']),
         ];
     }
 
@@ -318,15 +499,18 @@ class PackageBuilder
      * @return array{length:float, width:float, height:float}
      * @throws ApiException
      */
-    private function requireDefaults(array $defaults, bool $hasDefaults): array
-    {
+    private function requireDefaults(
+        array $defaults,
+        bool $hasDefaults,
+        string $deliveryType = ConfigInterface::DELIVERY_TYPE_ADDRESS
+    ): array {
         if (!$hasDefaults) {
-            throw new ApiException(
+            throw new MissingDimensionsException(
                 __('Product dimensions (length/width/height) are not configured for this store.')
             );
         }
 
-        return $this->normalizeDimensions($defaults);
+        return $this->normalizeDimensions($defaults, $deliveryType);
     }
 
     /**
