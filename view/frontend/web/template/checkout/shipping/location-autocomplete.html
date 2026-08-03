@@ -15,7 +15,10 @@
 <div class="pe-panel pigeonexpress-location-autocomplete" data-bind="visible: isVisible(), if: isVisible()">
     <div class="pe-grid">
 
-        <div class="field required pe-span-12">
+        <!-- Once a pickup point is chosen the city has done its work and only
+             gets in the way of the answer. Hidden rather than torn down, so
+             Change puts it back with what was typed in it still there. -->
+        <div class="field required pe-span-12" data-bind="visible: !selectedLocation()">
             <span class="pe-label-row">
                 <label class="label" data-bind="attr: { for: uid + '-city' }">
                     <span data-bind="i18n: 'City'"></span>
