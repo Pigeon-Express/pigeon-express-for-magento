@@ -5,11 +5,13 @@
  */
 define([
     'Magento_Checkout/js/model/quote',
-    'Magento_Customer/js/model/customer'
-], function (quote, customer) {
+    'Magento_Customer/js/model/customer',
+    'uiRegistry'
+], function (quote, customer, registry) {
     'use strict';
 
-    var bodyClass = 'pigeonexpress-shipping-active';
+    var bodyClass = 'pigeonexpress-shipping-active',
+        addressFieldsPath = 'checkout.steps.shipping-step.shippingAddress.pigeonexpress-address';
 
     return function (Component) {
         return Component.extend({
@@ -41,6 +43,31 @@ define([
                 update(quote.shippingMethod());
 
                 return this;
+            },
+
+            /**
+             * Also check the carrier's own address fields before moving on.
+             *
+             * They stand in for the stock street, city and postcode, which are
+             * hidden while they are shown, and Magento passes a hidden field
+             * without looking at it. Without this the step would move on from a
+             * form with an empty street on it.
+             *
+             * Magento's own checks run either way, so a missing email or
+             * shipping method is reported in the same pass rather than the
+             * customer being sent back a second time for it.
+             */
+            validateShippingInformation: function () {
+                var ours = true,
+                    fields = registry.get(addressFieldsPath);
+
+                if (fields && typeof fields.validate === 'function' &&
+                    typeof fields.isVisible === 'function' && fields.isVisible()
+                ) {
+                    ours = fields.validate();
+                }
+
+                return this._super() && ours;
             }
         });
     };

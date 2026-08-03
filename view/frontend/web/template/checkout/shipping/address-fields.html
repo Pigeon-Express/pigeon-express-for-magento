@@ -42,20 +42,25 @@
             </div>
         </div>
 
-        <div class="field pe-span-4" data-bind="css: { '_error': postcodeError() }">
+        <div class="field required pe-span-4" data-bind="css: { '_error': postcodeError() }">
             <span class="pe-label-row">
                 <label class="label" data-bind="attr: { for: uid + '-zip' }">
                     <span data-bind="i18n: 'Postal code'"></span>
                 </label>
             </span>
             <div class="control">
+                <!-- Set by the city, and not the customer's to type, except for
+                     the handful of settlements the carrier holds no code for. -->
                 <input type="text"
                        class="input-text"
-                       readonly="readonly"
-                       tabindex="-1"
                        data-bind="
-                           attr: { id: uid + '-zip' },
-                           value: selectedCity() ? selectedCity().postcode : ''
+                           attr: {
+                               id: uid + '-zip',
+                               readonly: isPostcodeReadonly(),
+                               tabindex: isPostcodeReadonly() ? '-1' : null
+                           },
+                           value: postcode,
+                           valueUpdate: 'afterkeydown'
                        "/>
                 <div class="pe-message _error" data-bind="visible: postcodeError(), text: postcodeError()"></div>
             </div>

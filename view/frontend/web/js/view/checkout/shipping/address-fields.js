@@ -65,13 +65,15 @@ define([
             this.floor = ko.observable('');
             this.apartment = ko.observable('');
 
+            // Pigeon Express holds one postal code per settlement, so choosing a
+            // city sets it. A couple of dozen of the smallest have none on
+            // record, and there the box is opened for the customer to fill in:
+            // Magento will not take a Bulgarian address without one.
+            this.postcode = ko.observable('');
+
             this.cityError = ko.observable('');
             this.streetError = ko.observable('');
             this.postcodeError = ko.observable('');
-
-            this.mirrorStockError('city', this.cityError);
-            this.mirrorStockError('street.0', this.streetError);
-            this.mirrorStockError('postcode', this.postcodeError);
 
             window.pigeonexpressCheckoutPayload = window.pigeonexpressCheckoutPayload || {};
 
@@ -81,7 +83,7 @@ define([
             // rate is quoted against the address the parcel is actually going to.
             [
                 this.streetNumber, this.buildingNumber, this.entrance,
-                this.floor, this.apartment
+                this.floor, this.apartment, this.postcode
             ].forEach(function (field) {
                 field.subscribe(function () {
                     self.publish();
@@ -115,6 +117,7 @@ define([
             q = typeof q === 'string' ? q.trim() : '';
             this.cityQuery(q);
             this.selectedCity(null);
+            this.cityError('');
 
             clearTimeout(this._cityTimeout);
 
@@ -139,14 +142,28 @@ define([
             this.cityQuery(city.name || '');
             this.cityResults([]);
             this.cityResultsVisible(false);
+            this.cityError('');
+
+            this.postcode(city.postcode || '');
+            this.postcodeError('');
 
             // A street belongs to one city, so the previous choice is void.
             this.selectedStreet(null);
             this.streetQuery('');
             this.streetResults([]);
             this.streetNotice('');
+            this.streetError('');
 
             this.publish();
+        },
+
+        /**
+         * The postal code is only the customer's to type where we have none.
+         */
+        isPostcodeReadonly: function () {
+            var city = this.selectedCity();
+
+            return !city || !!city.postcode;
         },
 
         // -- Street ----------------------------------------------------------
@@ -159,6 +176,7 @@ define([
             this.streetQuery(q);
             this.selectedStreet(null);
             this.streetNotice('');
+            this.streetError('');
 
             clearTimeout(this._streetTimeout);
 
@@ -205,7 +223,45 @@ define([
             this.streetResults([]);
             this.streetResultsVisible(false);
             this.streetNotice('');
+            this.streetError('');
             this.publish();
+        },
+
+        /**
+         * Is the form filled in well enough to send a parcel on?
+         *
+         * Ours to answer, because the stock fields these feed are hidden, and
+         * Magento passes a hidden field without looking at it. Called from the
+         * shipping step, which will not move on while it says no.
+         */
+        validate: function () {
+            var required = $t('This is a required field.'),
+                valid = true;
+
+            if (!this.selectedCity()) {
+                this.cityError(required);
+                valid = false;
+            } else {
+                this.cityError('');
+            }
+
+            if (!$.trim(this.streetQuery())) {
+                this.streetError(required);
+                valid = false;
+            } else {
+                this.streetError('');
+            }
+
+            // Only ever empty where Pigeon Express holds no code for the
+            // settlement, in which case the box was opened for the customer.
+            if (!$.trim(this.postcode())) {
+                this.postcodeError(required);
+                valid = false;
+            } else {
+                this.postcodeError('');
+            }
+
+            return valid;
         },
 
         /**
@@ -241,50 +297,20 @@ define([
          * thing the waybill will.
          */
         publish: function () {
-            var city = this.selectedCity(),
-                street = this.composedStreet();
+            var city = this.selectedCity();
 
-            if (city) {
-                this.setField('city', city.name || '');
-                if (city.postcode) {
-                    this.setField('postcode', city.postcode);
-                }
-            }
-
-            if (street) {
-                this.setField('street', street, 0);
-            }
+            // Written every time, including empty. Writing only what is filled
+            // in would leave a street the customer had since deleted standing in
+            // the field that actually reaches the order, which then passes a
+            // check the visible form should have failed.
+            this.setField('city', city ? city.name || '' : '');
+            this.setField('postcode', $.trim(this.postcode()));
+            this.setField('street', this.composedStreet(), 0);
 
             window.pigeonexpressCheckoutPayload = window.pigeonexpressCheckoutPayload || {};
             window.pigeonexpressCheckoutPayload.pigeonexpress_city_id = city ? String(city.id) : '';
             window.pigeonexpressCheckoutPayload.pigeonexpress_street_id =
                 this.selectedStreet() ? String(this.selectedStreet().id) : '';
-        },
-
-        /**
-         * Repeat a stock field's validation message on the field we show.
-         *
-         * The stock street, city and postcode are hidden with CSS rather than
-         * through their own visible observable, deliberately: Magento treats a
-         * field whose visible() is false as valid without checking it, and
-         * these three are the address of record, so they have to keep being
-         * checked. The cost is that their error message renders inside an
-         * element CSS has hidden, which would leave a customer pressing Next
-         * against a form that neither moves nor explains itself. Showing the
-         * same message on the field they can see is what closes that.
-         */
-        mirrorStockError: function (name, target) {
-            registry.get(FIELDSET + name, function (cmp) {
-                if (!cmp || typeof cmp.error !== 'function') {
-                    return;
-                }
-
-                target(cmp.error() || '');
-
-                cmp.error.subscribe(function (message) {
-                    target(message || '');
-                });
-            });
         },
 
         /**
