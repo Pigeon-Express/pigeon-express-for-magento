@@ -1,5 +1,10 @@
 /**
- * Pigeon Express checkout: Office/APS location autocomplete (selection only, no free text).
+ * Pigeon Express: choosing an office or a parcel locker at checkout.
+ *
+ * The panel itself is styled in checkout-panel.css, shared with the carrier's
+ * address fields. What is here is the part with no equivalent on the address
+ * side: a list that stands in the page rather than hanging over it, and what a
+ * chosen pickup point looks like afterwards.
  */
 
 /* A parcel going to a counter has no street address. Only the street wrapper is
@@ -11,63 +16,84 @@ body.pigeonexpress-office-or-aps-selected .field.street {
     display: none !important;
 }
 
-/* When Pigeon Express is selected, show telephone as required. */
-body.pigeonexpress-telephone-required .field.telephone .label:after {
-    content: ' *';
-    color: #e02b27;
-}
-
 /* When any Pigeon Express method is selected, hide all saved address cards except the last (new) one. */
 body.pigeonexpress-shipping-active .shipping-address-item:not(:last-child) {
     display: none !important;
 }
 
-/* Shared autocomplete styles (location). */
-.pigeonexpress-location-autocomplete .pigeonexpress-results {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    border: 1px solid #ccc;
-    background: #fff;
-    max-height: 200px;
-    overflow-y: auto;
-    position: relative;
-    z-index: 100;
-}
-.pigeonexpress-location-autocomplete .pigeonexpress-result-item {
-    padding: 0.5rem 0.75rem;
-    cursor: pointer;
-}
-.pigeonexpress-location-autocomplete .pigeonexpress-result-item:hover {
-    background: #f5f5f5;
-}
-.pigeonexpress-location-autocomplete .pigeonexpress-selected {
-    margin-top: 0.5rem;
-}
-.pigeonexpress-location-autocomplete .loading {
-    margin-left: 0.5rem;
-}
+/* -- The list of pickup points -------------------------------------------- */
 
-/* -- City first picker ---------------------------------------------------- */
-
-.pigeonexpress-city {
-    position: relative;
-}
-
-.pigeonexpress-location-filter {
-    margin-bottom: .8rem;
-}
-
-/* The city suggestions float over the page; the location list is part of it,
-   because it is the thing being chosen from rather than a hint. */
-.pigeonexpress-results.-standing {
-    max-height: 24rem;
+/* The city suggestions hang over the page, because they interrupt what is being
+   typed. This list does not: it is the thing being chosen from, not a hint
+   about it, so it takes up room of its own and pushes the page down. */
+.pigeonexpress-location-autocomplete .pigeonexpress-suggest.-standing {
+    border-radius: 2px;
+    box-shadow: none;
+    margin-top: .8rem;
+    max-height: 30rem;
     position: static;
+    width: auto;
 }
 
-.pigeonexpress-empty {
+.pigeonexpress-location-autocomplete .pigeonexpress-location-filter {
+    margin: 0;
+}
+
+/* -- A pickup point, once chosen ------------------------------------------ */
+
+/* Set apart from the boxes above it, because it is an answer rather than a
+   question. The bar down the left is what carries that at a glance. */
+.pigeonexpress-selected {
+    align-items: center;
+    background: #f0f6fc;
+    border: 1px solid #c3d4e1;
+    border-left: 4px solid #006bb4;
+    border-radius: 3px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .2rem .8rem;
+    padding: 1.2rem 1.4rem;
+}
+
+.pigeonexpress-selected-label {
     color: #666;
-    margin: .4rem 0 0;
 }
 
-/* The carrier's own address fields have their own sheet: address-fields.css */
+.pigeonexpress-selected-name {
+    font-weight: 600;
+}
+
+.pigeonexpress-selected-meta {
+    color: #666;
+    flex-basis: 100%;
+    font-size: 1.2rem;
+    line-height: 1.4;
+}
+
+/* Pushed to the far end of the row, away from the name it would otherwise read
+   as part of. */
+.pigeonexpress-selected .pigeonexpress-change {
+    background: none;
+    border: 0;
+    color: #006bb4;
+    cursor: pointer;
+    font-size: inherit;
+    margin-left: auto;
+    padding: 0;
+    text-decoration: underline;
+}
+
+.pigeonexpress-selected .pigeonexpress-change:hover {
+    color: #004f86;
+}
+
+@media (max-width: 480px) {
+    .pigeonexpress-selected {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .pigeonexpress-selected .pigeonexpress-change {
+        margin-left: 0;
+    }
+}
