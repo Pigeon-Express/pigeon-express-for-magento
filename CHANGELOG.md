@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **None of the module's checkout settings reached the checkout.** The config
+  provider was registered in the module's global di.xml, but Magento_Checkout
+  declares the whole provider list in its own frontend di.xml, and an area
+  definition beats a global one for that argument, so the entry was dropped
+  without complaint. Everything the browser reads from it was therefore
+  permanently absent: Override Address Fields did nothing whichever way it was
+  set, and the stock street, city and postcode were never hidden. It is
+  registered in the frontend di.xml now.
+- **A hidden address field could stop checkout without saying why.** Magento
+  skips validation on a field whose visible observable is false, so the stock
+  street, city and postcode are hidden with CSS instead and keep being checked,
+  they being the address of record. Their error message then rendered inside a
+  hidden element, leaving Next doing nothing and explaining nothing. The message
+  is now repeated on the field the customer can actually see.
 - **The office and locker search could never match on a city name.** The filter
   read a column the location sync never writes, so it only ever appeared to work
   because the city name happens to sit inside the free-text address. It reads the
@@ -135,13 +149,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the delivery charge on top of anything already billed. A store that does not
   want that should zero its own rate for the affected delivery types, or set this
   to Sender.
-- **Checkout asks for the address the way the carrier holds it.** With Override
-  Address Fields on, which is the default, a customer choosing address delivery
-  picks their city and street from Pigeon Express's own lists rather than typing
-  them, with optional block, entrance, floor and apartment. The real values are
-  written into Magento's own address fields rather than replacing them, so tax,
-  invoices, emails and the address book all still read the same address the
-  waybill will. Set it to No for Magento's standard fields.
+- **Checkout can ask for the address the way the carrier holds it.** With
+  Override Address Fields on, a customer choosing address delivery picks their
+  city and street from Pigeon Express's own lists rather than typing them, with
+  optional block, entrance, floor and apartment, and Magento's own street, city
+  and postcode fields give way to them. The real values are written into those
+  fields rather than replacing them, so tax, invoices, emails and the address
+  book all still read the same address the waybill will. It ships off, because
+  it changes what every customer sees.
 - **Offices and lockers are chosen by city first.** One search box across the
   whole country either buried the right counter or hid it behind a result limit:
   Sofia alone has 43 offices and 84 lockers. Now the city comes first, offering
@@ -216,6 +231,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The unused cash on delivery checkout display components. The fee has always
   been folded into the shipping amount, and these never rendered.
+- Debug logging from the checkout components. Every location choice, every
+  address field written and every placeholder cleared was printed to the
+  browser console of every shopper.
 
 ## [1.0.0] - 2026-06-25
 
