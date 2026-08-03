@@ -7,6 +7,7 @@
       xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
     <head>
         <css src="PigeonExpress_Shipping::css/checkout/location-autocomplete.css"/>
+        <css src="PigeonExpress_Shipping::css/checkout/address-fields.css"/>
         <css src="PigeonExpress_Shipping::css/checkout/carrier-logo.css"/>
     </head>
     <body>

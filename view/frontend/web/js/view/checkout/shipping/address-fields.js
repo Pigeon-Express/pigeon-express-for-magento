@@ -65,8 +65,6 @@ define([
             this.floor = ko.observable('');
             this.apartment = ko.observable('');
 
-            this.showBuilding = ko.observable(false);
-
             this.cityError = ko.observable('');
             this.streetError = ko.observable('');
             this.postcodeError = ko.observable('');
@@ -164,7 +162,17 @@ define([
 
             clearTimeout(this._streetTimeout);
 
-            if (!this.selectedCity() || q.length < this.minChars) {
+            // A street list belongs to one city, so there is nothing to search
+            // until one is chosen. Say so rather than leaving the box silent.
+            if (!this.selectedCity()) {
+                this.streetResults([]);
+                this.streetResultsVisible(false);
+                this.streetNotice(q.length ? $t('Choose a city first') : '');
+                this.publish();
+                return;
+            }
+
+            if (q.length < this.minChars) {
                 this.streetResults([]);
                 this.streetResultsVisible(false);
                 this.publish();
@@ -198,10 +206,6 @@ define([
             this.streetResultsVisible(false);
             this.streetNotice('');
             this.publish();
-        },
-
-        toggleBuilding: function () {
-            this.showBuilding(!this.showBuilding());
         },
 
         /**

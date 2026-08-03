@@ -4,7 +4,6 @@
 "                        <strong>It does not change what the customer is charged at checkout.</strong> Pigeon Express quotes the same price either way"," so if you choose Receiver the courier collects the delivery charge on top of anything Magento has already billed. Set your shipping rate to zero for the affected delivery types"
 "<strong>You are responsible for taking every parcel to this office yourself.</strong> No courier will collect from your address while this option is selected. Choose the office you will actually deliver to, since it is also the origin used to calculate shipping rates.","<strong>You are responsible for taking every parcel to this office yourself.</strong> No courier will collect from your address while this option is selected. Choose the office you will actually deliver to, since it is also the origin used to calculate shipping rates."
 "A4 sheet","A4 sheet"
-"Add block, entrance, floor or apartment","Add block, entrance, floor or apartment"
 "Additional Services","Additional Services"
 "Address (pickup from your address)","Address (pickup from your address)"
 "Address Delivery","Address Delivery"
@@ -102,7 +101,6 @@ Floor,Floor
 "Full colour","Full colour"
 General,General
 "Height Attribute","Height Attribute"
-"Hide building details","Hide building details"
 "How your parcels reach Pigeon Express: you take them to one of their offices, or a courier collects them from your address. This is also the origin used when calculating rates.","How your parcels reach Pigeon Express: you take them to one of their offices, or a courier collects them from your address. This is also the origin used when calculating rates."
 "ID Verification and Document Signature","ID Verification and Document Signature"
 "Inspection and testing","Inspection and testing"
@@ -241,7 +239,6 @@ Select,Select
 "Special Packaging","Special Packaging"
 "Start typing","Start typing"
 "Start typing and choose from the list. The list is Pigeon Express's own, and villages often share a name, so the postal code is shown to tell them apart.","Start typing and choose from the list. The list is Pigeon Express's own, and villages often share a name, so the postal code is shown to tell them apart."
-"Start typing a street","Start typing a street"
 "Start typing a town or a street and choose the counter from the list.","Start typing a town or a street and choose the counter from the list."
 "Start typing a town or city","Start typing a town or city"
 Status,Status
@@ -249,7 +246,6 @@ Street,Street
 "Street (display)","Street (display)"
 "Street ID","Street ID"
 "Street list unavailable, type it by hand","Street list unavailable, type it by hand"
-"Street number","Street number"
 "Street Number","Street Number"
 "Test Mode","Test Mode"
 "That parcel locker is no longer available. Choose another from the list.","That parcel locker is no longer available. Choose another from the list."

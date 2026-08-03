@@ -2,120 +2,140 @@
   Pigeon Express address fields, shown in place of Magento's own when the
   merchant has turned the override on. The city and street come from the
   carrier's lists so the parcel is addressed to somewhere it recognises.
+
+  Laid out as the order screen's shipment form is, on the same twelve column
+  grid, so a merchant who has filled one recognises the other. The help icons
+  are the deliberate difference: they explain the carrier to a member of staff,
+  and a shopper is owed a form that needs no explaining.
+
+  Every field is present from the start rather than appearing as the one above
+  it is filled. A form that grows under the cursor is hard to judge the length
+  of, and these are only ever five short rows.
 -->
-<div class="pigeonexpress-address-fields" data-bind="visible: isVisible(), if: isVisible()">
+<div class="pe-panel pigeonexpress-address-fields" data-bind="visible: isVisible(), if: isVisible()">
+    <div class="pe-grid">
 
-    <div class="field required pigeonexpress-city" data-bind="css: { '_error': cityError() }">
-        <label class="label" data-bind="attr: { for: uid + '-city' }">
-            <span data-bind="i18n: 'City'"></span>
-        </label>
-        <div class="control">
-            <input type="text"
-                   class="input-text"
-                   data-bind="
-                       attr: { id: uid + '-city', placeholder: $t('Start typing a town or city') },
-                       value: cityQuery,
-                       valueUpdate: 'afterkeydown',
-                       event: { input: onCityInput }
-                   "
-                   autocomplete="off"/>
-            <ul class="pigeonexpress-results"
-                data-bind="visible: cityResultsVisible() && cityResults().length > 0, foreach: cityResults"
-                role="listbox">
-                <li role="option"
-                    class="pigeonexpress-result-item"
-                    data-bind="text: label, click: $parent.selectCity.bind($parent, $data)"></li>
-            </ul>
-            <div class="mage-error pigeonexpress-field-error"
-                 data-bind="visible: cityError(), text: cityError()"></div>
-        </div>
-    </div>
-
-    <div class="field pigeonexpress-postcode"
-         data-bind="visible: selectedCity(), css: { '_error': postcodeError() }">
-        <label class="label"><span data-bind="i18n: 'Postal code'"></span></label>
-        <div class="control">
-            <span class="pigeonexpress-readonly"
-                  data-bind="text: selectedCity() ? selectedCity().postcode : ''"></span>
-            <div class="mage-error pigeonexpress-field-error"
-                 data-bind="visible: postcodeError(), text: postcodeError()"></div>
-        </div>
-    </div>
-
-    <div class="field required pigeonexpress-street"
-         data-bind="visible: selectedCity(), css: { '_error': streetError() }">
-        <label class="label" data-bind="attr: { for: uid + '-street' }">
-            <span data-bind="i18n: 'Street'"></span>
-        </label>
-        <div class="control">
-            <input type="text"
-                   class="input-text"
-                   data-bind="
-                       attr: { id: uid + '-street', placeholder: $t('Start typing a street') },
-                       value: streetQuery,
-                       valueUpdate: 'afterkeydown',
-                       event: { input: onStreetInput }
-                   "
-                   autocomplete="off"/>
-            <ul class="pigeonexpress-results"
-                data-bind="visible: streetResultsVisible() && streetResults().length > 0, foreach: streetResults"
-                role="listbox">
-                <li role="option"
-                    class="pigeonexpress-result-item"
-                    data-bind="text: label, click: $parent.selectStreet.bind($parent, $data)"></li>
-            </ul>
-            <p class="pigeonexpress-empty" data-bind="visible: streetNotice(), text: streetNotice()"></p>
-            <div class="mage-error pigeonexpress-field-error"
-                 data-bind="visible: streetError(), text: streetError()"></div>
-        </div>
-    </div>
-
-    <div class="field pigeonexpress-street-number" data-bind="visible: selectedCity()">
-        <label class="label" data-bind="attr: { for: uid + '-no' }">
-            <span data-bind="i18n: 'Street number'"></span>
-        </label>
-        <div class="control">
-            <input type="text"
-                   class="input-text"
-                   data-bind="attr: { id: uid + '-no' }, value: streetNumber, valueUpdate: 'afterkeydown'"
-                   autocomplete="off"/>
-        </div>
-    </div>
-
-    <div class="field pigeonexpress-building-toggle" data-bind="visible: selectedCity()">
-        <button type="button" class="action pigeonexpress-link" data-bind="click: toggleBuilding">
-            <span data-bind="i18n: showBuilding() ? 'Hide building details' : 'Add block, entrance, floor or apartment'"></span>
-        </button>
-    </div>
-
-    <div class="pigeonexpress-building" data-bind="visible: selectedCity() && showBuilding()">
-        <div class="field">
-            <label class="label"><span data-bind="i18n: 'Block'"></span></label>
-            <div class="control">
-                <input type="text" class="input-text"
-                       data-bind="value: buildingNumber, valueUpdate: 'afterkeydown'" autocomplete="off"/>
+        <div class="field required pe-span-8" data-bind="css: { '_error': cityError() }">
+            <span class="pe-label-row">
+                <label class="label" data-bind="attr: { for: uid + '-city' }">
+                    <span data-bind="i18n: 'City'"></span>
+                </label>
+            </span>
+            <div class="control pigeonexpress-suggest-wrap">
+                <input type="text"
+                       class="input-text"
+                       data-bind="
+                           attr: { id: uid + '-city', placeholder: $t('Start typing') },
+                           value: cityQuery,
+                           valueUpdate: 'afterkeydown',
+                           event: { input: onCityInput }
+                       "
+                       autocomplete="off"/>
+                <ul class="pigeonexpress-suggest"
+                    data-bind="visible: cityResultsVisible() && cityResults().length > 0, foreach: cityResults"
+                    role="listbox">
+                    <li role="option"
+                        class="pigeonexpress-suggest-item"
+                        data-bind="text: label, click: $parent.selectCity.bind($parent, $data)"></li>
+                </ul>
+                <div class="pe-message _error" data-bind="visible: cityError(), text: cityError()"></div>
             </div>
         </div>
-        <div class="field">
-            <label class="label"><span data-bind="i18n: 'Entrance'"></span></label>
+
+        <div class="field pe-span-4" data-bind="css: { '_error': postcodeError() }">
+            <span class="pe-label-row">
+                <label class="label" data-bind="attr: { for: uid + '-zip' }">
+                    <span data-bind="i18n: 'Postal code'"></span>
+                </label>
+            </span>
             <div class="control">
-                <input type="text" class="input-text"
-                       data-bind="value: entrance, valueUpdate: 'afterkeydown'" autocomplete="off"/>
+                <input type="text"
+                       class="input-text"
+                       readonly="readonly"
+                       tabindex="-1"
+                       data-bind="
+                           attr: { id: uid + '-zip' },
+                           value: selectedCity() ? selectedCity().postcode : ''
+                       "/>
+                <div class="pe-message _error" data-bind="visible: postcodeError(), text: postcodeError()"></div>
             </div>
         </div>
-        <div class="field">
-            <label class="label"><span data-bind="i18n: 'Floor'"></span></label>
-            <div class="control">
-                <input type="text" class="input-text"
-                       data-bind="value: floor, valueUpdate: 'afterkeydown'" autocomplete="off"/>
+
+        <div class="field required pe-span-8" data-bind="css: { '_error': streetError() }">
+            <span class="pe-label-row">
+                <label class="label" data-bind="attr: { for: uid + '-street' }">
+                    <span data-bind="i18n: 'Street'"></span>
+                </label>
+            </span>
+            <div class="control pigeonexpress-suggest-wrap">
+                <input type="text"
+                       class="input-text"
+                       data-bind="
+                           attr: { id: uid + '-street', placeholder: $t('Start typing') },
+                           value: streetQuery,
+                           valueUpdate: 'afterkeydown',
+                           event: { input: onStreetInput }
+                       "
+                       autocomplete="off"/>
+                <ul class="pigeonexpress-suggest"
+                    data-bind="visible: streetResultsVisible() && streetResults().length > 0, foreach: streetResults"
+                    role="listbox">
+                    <li role="option"
+                        class="pigeonexpress-suggest-item"
+                        data-bind="text: label, click: $parent.selectStreet.bind($parent, $data)"></li>
+                </ul>
+                <div class="pe-message _warn" data-bind="visible: streetNotice(), text: streetNotice()"></div>
+                <div class="pe-message _error" data-bind="visible: streetError(), text: streetError()"></div>
             </div>
         </div>
-        <div class="field">
-            <label class="label"><span data-bind="i18n: 'Apartment'"></span></label>
+
+        <div class="field pe-span-4">
+            <span class="pe-label-row">
+                <label class="label" data-bind="attr: { for: uid + '-no' }">
+                    <span data-bind="i18n: 'No.'"></span>
+                </label>
+            </span>
             <div class="control">
-                <input type="text" class="input-text"
-                       data-bind="value: apartment, valueUpdate: 'afterkeydown'" autocomplete="off"/>
+                <input type="text"
+                       class="input-text"
+                       data-bind="attr: { id: uid + '-no' }, value: streetNumber, valueUpdate: 'afterkeydown'"
+                       autocomplete="off"/>
             </div>
         </div>
+
+        <div class="field pe-span-12">
+            <span class="pe-label-row">
+                <label class="label"><span data-bind="i18n: 'Building'"></span></label>
+            </span>
+            <div class="control">
+                <div class="pe-subfields">
+                    <span class="pe-subfield">
+                        <label data-bind="attr: { for: uid + '-block' }, i18n: 'Block'"></label>
+                        <input type="text" class="input-text"
+                               data-bind="attr: { id: uid + '-block' }, value: buildingNumber, valueUpdate: 'afterkeydown'"
+                               autocomplete="off"/>
+                    </span>
+                    <span class="pe-subfield">
+                        <label data-bind="attr: { for: uid + '-entrance' }, i18n: 'Entrance'"></label>
+                        <input type="text" class="input-text"
+                               data-bind="attr: { id: uid + '-entrance' }, value: entrance, valueUpdate: 'afterkeydown'"
+                               autocomplete="off"/>
+                    </span>
+                    <span class="pe-subfield">
+                        <label data-bind="attr: { for: uid + '-floor' }, i18n: 'Floor'"></label>
+                        <input type="text" class="input-text"
+                               data-bind="attr: { id: uid + '-floor' }, value: floor, valueUpdate: 'afterkeydown'"
+                               autocomplete="off"/>
+                    </span>
+                    <span class="pe-subfield">
+                        <label data-bind="attr: { for: uid + '-apartment' }, i18n: 'Apartment'"></label>
+                        <input type="text" class="input-text"
+                               data-bind="attr: { id: uid + '-apartment' }, value: apartment, valueUpdate: 'afterkeydown'"
+                               autocomplete="off"/>
+                    </span>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
