@@ -152,11 +152,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Checkout can ask for the address the way the carrier holds it.** With
   Override Address Fields on, a customer choosing address delivery picks their
   city and street from Pigeon Express's own lists rather than typing them, with
-  optional block, entrance, floor and apartment, and Magento's own street, city
-  and postcode fields give way to them. The real values are written into those
-  fields rather than replacing them, so tax, invoices, emails and the address
-  book all still read the same address the waybill will. It ships off, because
-  it changes what every customer sees.
+  block, entrance, floor and apartment beside them. Magento's own street, city,
+  postcode, region and country give way to it; name, company, email and
+  telephone stay, nothing here collecting those, and the telephone least of all,
+  it being how Pigeon Express identifies a recipient. The chosen values are
+  written into the stock fields rather than replacing them, so tax, invoices,
+  emails and the address book all still read the same address the waybill will.
+  The form is laid out as the order screen's is, on the same twelve column grid,
+  without the help icons: those explain the carrier to a member of staff, and a
+  shopper is owed a form that needs no explaining. It ships off, because it
+  changes what every customer sees.
 - **Offices and lockers are chosen by city first.** One search box across the
   whole country either buried the right counter or hid it behind a result limit:
   Sofia alone has 43 offices and 84 lockers. Now the city comes first, offering
