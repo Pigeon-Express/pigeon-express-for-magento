@@ -153,7 +153,15 @@ define([
                     (method.method_code === 'office' || method.method_code === 'aps');
                 var isAddress = isPigeonExpress && method.method_code === 'address';
                 var settings = (window.checkoutConfig && window.checkoutConfig.pigeonexpress) || {};
-                var overrideAddress = isAddress && !!settings.override_address_fields;
+                var overrideEnabled = !!settings.override_address_fields;
+
+                // Before any method is chosen there is nothing for the stock
+                // address to be for yet. With the override on it is the
+                // carrier's own fields that will ask for one, so the boxes they
+                // replace are never put up only to be taken away a moment
+                // later. Choosing a method that is not Pigeon Express hands
+                // them straight back.
+                var overrideAddress = overrideEnabled && (isAddress || !method);
 
                 if (isOfficeOrAps) {
                     document.body.classList.add(bodyClassHideAddress);
