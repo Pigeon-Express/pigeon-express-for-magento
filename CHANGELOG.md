@@ -183,7 +183,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   whole country either buried the right counter or hid it behind a result limit:
   Sofia alone has 43 offices and 84 lockers. Now the city comes first, offering
   only cities that actually have somewhere to collect from, and then every pickup
-  point in that city, filterable but never truncated.
+  point in that city, filterable but never truncated. It sits in the same panel
+  and on the same grid as the carrier's address fields, so the two read as one
+  thing rather than as two features that arrived separately. Both fields are on
+  the form from the start, the second saying what it is waiting for rather than
+  appearing once the first is answered. Each pickup point is listed as its name
+  above its address rather than as one run-on line, thirty of those being
+  unreadable at a glance, and the one chosen is set apart from the boxes above
+  it, being an answer rather than a question.
 - A carrier logo can be shown beside the methods at checkout, chosen from the
   four Pigeon Express supplies. No logo by default. The two drawn in white say so
   in the setting, and get a dark plate behind them so they are not invisible.
