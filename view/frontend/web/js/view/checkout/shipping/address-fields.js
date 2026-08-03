@@ -306,11 +306,34 @@ define([
             this.setField('city', city ? city.name || '' : '');
             this.setField('postcode', $.trim(this.postcode()));
             this.setField('street', this.composedStreet(), 0);
+            this.setRegion(city);
 
             window.pigeonexpressCheckoutPayload = window.pigeonexpressCheckoutPayload || {};
             window.pigeonexpressCheckoutPayload.pigeonexpress_city_id = city ? String(city.id) : '';
             window.pigeonexpressCheckoutPayload.pigeonexpress_street_id =
                 this.selectedStreet() ? String(this.selectedStreet().id) : '';
+        },
+
+        /**
+         * Set the region from the chosen city's district.
+         *
+         * Bulgaria is one of the countries Magento will not accept an address
+         * for without one, and a settlement is not a region, so it comes from
+         * the district Pigeon Express files the settlement under. Seven of the
+         * five thousand odd settlements have no district on record; for those
+         * the stock region field is given back so the customer can say, rather
+         * than the order failing when it is placed with nothing to explain it.
+         */
+        setRegion: function (city) {
+            var regionId = city && city.region_id ? String(city.region_id) : '';
+
+            this.setField('region_id', regionId);
+
+            registry.get(FIELDSET + 'region_id', function (cmp) {
+                if (cmp && typeof cmp.visible === 'function') {
+                    cmp.visible(regionId === '');
+                }
+            });
         },
 
         /**

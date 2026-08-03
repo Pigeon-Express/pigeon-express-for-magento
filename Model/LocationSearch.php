@@ -13,6 +13,7 @@ use Magento\Framework\App\ResourceConnection;
 use Magento\Store\Model\StoreManagerInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\LocationSearchInterface;
+use PigeonExpress\Shipping\Model\Directory\RegionResolver;
 use PigeonExpress\Shipping\Model\ResourceModel\Office\CollectionFactory as OfficeCollectionFactory;
 use PigeonExpress\Shipping\Model\ResourceModel\Aps\CollectionFactory as ApsCollectionFactory;
 
@@ -43,18 +44,39 @@ class LocationSearch implements LocationSearchInterface
      */
     private $resource;
 
+    /**
+     * @var RegionResolver
+     */
+    private $regionResolver;
+
     public function __construct(
         OfficeCollectionFactory $officeCollectionFactory,
         ApsCollectionFactory $apsCollectionFactory,
         ConfigInterface $config,
         StoreManagerInterface $storeManager,
-        ResourceConnection $resource
+        ResourceConnection $resource,
+        RegionResolver $regionResolver
     ) {
         $this->officeCollectionFactory = $officeCollectionFactory;
         $this->apsCollectionFactory = $apsCollectionFactory;
         $this->config = $config;
         $this->storeManager = $storeManager;
         $this->resource = $resource;
+        $this->regionResolver = $regionResolver;
+    }
+
+    /**
+     * The Magento region a pickup point stands in, or null if it cannot be
+     * placed. Read from the city the location was joined to.
+     *
+     * @param \Magento\Framework\DataObject $item
+     */
+    private function regionFor($item): ?int
+    {
+        return $this->regionResolver->resolve(
+            (string) ($item->getData('district_en_resolved') ?? ''),
+            (string) ($item->getData('district_resolved') ?? '')
+        );
     }
 
     /**
@@ -71,6 +93,11 @@ class LocationSearch implements LocationSearchInterface
             [
                 'city_resolved' => 'COALESCE(main_table.city, pe_city.name)',
                 'postcode_resolved' => 'COALESCE(main_table.postcode, pe_city.postal_code)',
+                // The district the counter stands in, which is the only source
+                // of a region for the Magento address. Bulgaria is one of the
+                // countries an order cannot be placed without one for.
+                'district_resolved' => 'pe_city.district',
+                'district_en_resolved' => 'pe_city.district_en',
             ]
         );
     }
@@ -122,6 +149,7 @@ class LocationSearch implements LocationSearchInterface
                 'address' => (string) $item->getAddress(),
                 'city' => (string) ($item->getData('city_resolved') ?? ''),
                 'postcode' => (string) ($item->getData('postcode_resolved') ?? ''),
+                'region_id' => $this->regionFor($item),
                 'type' => ConfigInterface::DELIVERY_TYPE_OFFICE,
             ];
         }
@@ -162,6 +190,7 @@ class LocationSearch implements LocationSearchInterface
                 'address' => (string) $item->getAddress(),
                 'city' => (string) ($item->getData('city_resolved') ?? ''),
                 'postcode' => (string) ($item->getData('postcode_resolved') ?? ''),
+                'region_id' => $this->regionFor($item),
                 'type' => ConfigInterface::DELIVERY_TYPE_APS,
             ];
         }
@@ -200,6 +229,7 @@ class LocationSearch implements LocationSearchInterface
                 'address' => (string) $item->getAddress(),
                 'city' => (string) ($item->getData('city_resolved') ?? ''),
                 'postcode' => (string) ($item->getData('postcode_resolved') ?? ''),
+                'region_id' => $this->regionFor($item),
                 'type' => $type,
             ];
         }
@@ -229,10 +259,13 @@ class LocationSearch implements LocationSearchInterface
         $like = str_replace(['\\', '_', '%'], ['\\\\', '\_', '\%'], $query) . '%';
 
         $select = $connection->select()
-            ->from(['c' => $this->resource->getTableName('pigeonexpress_city')], ['api_id', 'name', 'postal_code'])
+            ->from(
+                ['c' => $this->resource->getTableName('pigeonexpress_city')],
+                ['api_id', 'name', 'postal_code', 'district', 'district_en']
+            )
             ->join(['l' => $locationTable], 'l.city_id = c.api_id AND l.is_active = 1', ['count' => 'COUNT(l.entity_id)'])
             ->where('c.name LIKE ? OR c.name_en LIKE ? OR c.postal_code LIKE ?', $like)
-            ->group(['c.api_id', 'c.name', 'c.postal_code'])
+            ->group(['c.api_id', 'c.name', 'c.postal_code', 'c.district', 'c.district_en'])
             // Same ordering the admin city picker uses: district capitals are the
             // codes ending in 000, and they are what most orders go to.
             ->order(new \Zend_Db_Expr("(c.postal_code LIKE '%000') DESC"))
@@ -249,6 +282,10 @@ class LocationSearch implements LocationSearchInterface
                 'postcode' => $postcode,
                 'label' => $postcode !== '' ? $row['name'] . ' (' . $postcode . ')' : (string) $row['name'],
                 'count' => (int) $row['count'],
+                'region_id' => $this->regionResolver->resolve(
+                    isset($row['district_en']) ? (string) $row['district_en'] : null,
+                    isset($row['district']) ? (string) $row['district'] : null
+                ),
             ];
         }
 

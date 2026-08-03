@@ -20,6 +20,7 @@ use Magento\Framework\App\CacheInterface;
 use PigeonExpress\PigeonExpress;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Model\Directory\RegionResolver;
 use PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory as CityCollectionFactory;
 use Psr\Log\LoggerInterface;
 
@@ -57,16 +58,21 @@ class AddressResolver
     /** @var CacheInterface */
     private $cache;
 
+    /** @var RegionResolver */
+    private $regionResolver;
+
     public function __construct(
         ConfigInterface $config,
         LoggerInterface $logger,
         CityCollectionFactory $cityCollectionFactory,
-        CacheInterface $cache
+        CacheInterface $cache,
+        RegionResolver $regionResolver
     ) {
         $this->config = $config;
         $this->logger = $logger;
         $this->cityCollectionFactory = $cityCollectionFactory;
         $this->cache = $cache;
+        $this->regionResolver = $regionResolver;
     }
 
     // -- Cities --------------------------------------------------------------
@@ -91,7 +97,7 @@ class AddressResolver
 
         $connection = $this->cityConnection();
         $select = $connection->select()
-            ->from($this->cityTable(), ['api_id', 'name', 'name_en', 'postal_code'])
+            ->from($this->cityTable(), ['api_id', 'name', 'name_en', 'postal_code', 'district', 'district_en'])
             ->where('name LIKE ?', $like)
             ->orWhere('name_en LIKE ?', $like)
             ->orWhere('postal_code LIKE ?', $like)
@@ -111,6 +117,12 @@ class AddressResolver
                 'name'     => (string) $row['name'],
                 'postcode' => (string) ($row['postal_code'] ?? ''),
                 'label'    => $this->cityLabel((string) $row['name'], (string) ($row['postal_code'] ?? '')),
+                // Magento will not take a Bulgarian address without a region,
+                // and the district this settlement sits in is the only one going.
+                'region_id' => $this->regionResolver->resolve(
+                    isset($row['district_en']) ? (string) $row['district_en'] : null,
+                    isset($row['district']) ? (string) $row['district'] : null
+                ),
             ];
         }
 
