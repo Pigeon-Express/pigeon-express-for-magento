@@ -95,7 +95,7 @@ class Recalculate extends Action implements HttpPostActionInterface
             );
 
             return $result->setData([
-                'error' => (string) __('Pigeon Express could not price this shipment. Check the log for details.'),
+                'error' => (string) __('Pigeon Express could not price this shipment. For further assistance, please contact our customer service.'),
             ]);
         }
 

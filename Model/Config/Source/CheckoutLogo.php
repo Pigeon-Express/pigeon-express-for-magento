@@ -41,7 +41,7 @@ class CheckoutLogo implements OptionSourceInterface
     {
         return [
             ['value' => self::NONE, 'label' => __('No logo')],
-            ['value' => 'color', 'label' => __('Full colour')],
+            ['value' => 'color', 'label' => __('Official (full colour)')],
             ['value' => 'black', 'label' => __('Black and grey')],
             ['value' => 'white', 'label' => __('White (needs a dark background)')],
             ['value' => 'blue_light', 'label' => __('White and orange (needs a dark background)')],

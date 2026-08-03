@@ -259,14 +259,14 @@ class AddressForm
         if ($fields['contact_name'] === '') {
             $issues['contact_name'] = $this->issue(
                 self::SEVERITY_ERROR,
-                (string) __('Enter the name of the person receiving the parcel.')
+                (string) __('Please enter the recipient\'s name.')
             );
         }
 
         if ($fields['contact_phone'] === '') {
             $issues['contact_phone'] = $this->issue(
                 self::SEVERITY_ERROR,
-                (string) __('Enter a phone number. The courier calls the recipient before delivering.')
+                (string) __('Please enter a phone number.')
             );
         } else {
             $fields['contact_phone'] = ShipmentSender::normalizePhone($fields['contact_phone']);
@@ -364,7 +364,7 @@ class AddressForm
         if ($fields['city'] === '' && $fields['city_id'] === '') {
             $issues['city'] = $this->issue(
                 self::SEVERITY_ERROR,
-                (string) __('Enter a city and choose it from the list.')
+                (string) __('Please choose a city from the list.')
             );
 
             return null;
@@ -438,7 +438,7 @@ class AddressForm
         if ($fields['street'] === '') {
             $issues['street'] = $this->issue(
                 self::SEVERITY_ERROR,
-                (string) __('Enter a street. Without one the parcel cannot be delivered to an address.')
+                (string) __('Please enter a street.')
             );
             $fields['street_id'] = '';
 

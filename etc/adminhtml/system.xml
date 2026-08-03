@@ -59,7 +59,7 @@
                         <config_path>carriers/pigeonexpress/locker_max_width</config_path>
                         <label>Locker Compartment Width (cm)</label>
                         <validate>validate-zero-or-greater validate-number</validate>
-                        <comment><![CDATA[Every other limit is asked of Pigeon Express as parcels are priced, so this configuration does not repeat them. The locker compartment is the exception: the API accepts an oversized parcel without complaint and only the recipient finds out it will not go in. Leave any side at 0 to stop checking.]]></comment>
+                        <comment><![CDATA[Only the locker compartment is checked here; the other limits come from Pigeon Express when a parcel is priced. Leave a side at 0 to skip the check.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
@@ -84,7 +84,7 @@
                         <config_path>carriers/pigeonexpress/override_address_fields</config_path>
                         <label>Override Address Fields</label>
                         <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                        <comment><![CDATA[With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's own lists instead of typing them. This is what stops a loosely typed street reaching the carrier, which is the usual cause of a parcel being delivered to a different address it already holds for that phone number. With No, which is the default, Magento's standard address fields are used. Turn this on once you have placed a test order and seen the fields behave on your own checkout.]]></comment>
+                        <comment><![CDATA[With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's lists instead of typing them, so the address always matches what we hold. With No, Magento's standard address fields are used.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
@@ -138,12 +138,12 @@
                 </group>
                 <group id="additional_services" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="40" translate="label comment">
                     <label>Additional Services</label>
-                    <comment>Services applied to every shipment. Prices are set by Pigeon Express and read from the API, so they are not configurable here. Only services included in your account are listed, and a service is skipped automatically when the chosen delivery method cannot perform it.</comment>
+                    <comment>Services applied to every shipment. Prices come from Pigeon Express. Only services in your account are listed, and one the chosen delivery method cannot perform is skipped.</comment>
                     <field id="cod_payment_methods" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="60" translate="label" type="multiselect">
                         <config_path>carriers/pigeonexpress/cod_payment_methods</config_path>
                         <label>COD Payment Methods</label>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\PaymentMethods</source_model>
-                        <comment>Payment methods that trigger a cash on delivery fee. The fee itself is set by Pigeon Express and is read from the API for every quote, so it is not configurable here. It is added to the shipping cost.</comment>
+                        <comment>Payment methods that trigger a cash on delivery fee. The fee is set by Pigeon Express and read from the API for every quote.</comment>
                         <depends><field id="carriers/pigeonexpress/active">1</field></depends>
                     </field>
                     <field id="service_return_at_my_expense" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="64" translate="label" type="select">
@@ -174,7 +174,7 @@
                         <config_path>carriers/pigeonexpress/service_declared_value</config_path>
                         <label>Insurance (Declared Value)</label>
                         <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                        <comment>Insure the contents of every parcel. The sum insured is the value of the goods in the order, sent to Pigeon Express as declared_value. Pigeon Express sets the premium.</comment>
+                        <comment>Insure the contents of every parcel. The sum insured is the value of the goods in the order, sent to Pigeon Express.</comment>
                         <depends><field id="carriers/pigeonexpress/active">1</field></depends>
                         <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ServiceField</frontend_model>
                     </field>
@@ -245,7 +245,7 @@
                         <config_path>carriers/pigeonexpress/address_review_and_test</config_path>
                         <label>Recipient Inspection</label>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\ReviewAndTest</source_model>
-                        <comment>Let the recipient check the parcel before paying. &quot;Inspection only&quot; allows looking; &quot;Inspection and testing&quot; also allows trying the product. These are two separately priced Pigeon Express services and only one is ever requested. Not available for parcel locker delivery, where nobody is present.</comment>
+                        <comment>Let the recipient check the parcel before paying. Inspection only allows looking; Inspection and testing also allows trying the product. Only one is ever requested. Not available for parcel locker delivery.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
@@ -298,7 +298,7 @@
                         <config_path>carriers/pigeonexpress/office_review_and_test</config_path>
                         <label>Recipient Inspection</label>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\ReviewAndTest</source_model>
-                        <comment>Let the recipient check the parcel before paying. &quot;Inspection only&quot; allows looking; &quot;Inspection and testing&quot; also allows trying the product. These are two separately priced Pigeon Express services and only one is ever requested. Not available for parcel locker delivery, where nobody is present.</comment>
+                        <comment>Let the recipient check the parcel before paying. Inspection only allows looking; Inspection and testing also allows trying the product. Only one is ever requested. Not available for parcel locker delivery.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
@@ -355,7 +355,7 @@
                         <config_path>carriers/pigeonexpress/pickup_type</config_path>
                         <label>Pickup Type</label>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupType</source_model>
-                        <comment>How your parcels reach Pigeon Express: you take them to one of their offices, or a courier collects them from your address. This is also the origin used when calculating rates.</comment>
+                        <comment>How your parcels reach us: you drop them off at one of our offices, or our couriers collect them from your address. This is also the origin used when calculating rates.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
@@ -365,7 +365,7 @@
                         <label>Office</label>
                         <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\SearchableSelect</frontend_model>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupOffice</source_model>
-                        <comment><![CDATA[<strong>You are responsible for taking every parcel to this office yourself.</strong> No courier will collect from your address while this option is selected. Choose the office you will actually deliver to, since it is also the origin used to calculate shipping rates.]]></comment>
+                        <comment><![CDATA[Drop your parcels off at the Pigeon Express office you choose here. It is also the origin used to calculate shipping rates.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="pickup_type">office</field>

@@ -174,13 +174,13 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                     <?php else : ?>
                     <p class="pe-hint">
                         <?= $escaper->escapeHtml(__(
-                            'Too late to cancel here. Pigeon Express only allows it before the courier collects the parcel.'
+                            'Too late to cancel here. Pigeon Express only allows it before the courier collects the parcel. For further assistance, please contact our customer service.'
                         )) ?>
                     </p>
                     <?php endif; ?>
                 <?php else : ?>
                     <p class="pe-hint">
-                        <?= $escaper->escapeHtml(__('Cancelled. Nothing is in transit for this order.')) ?>
+                        <?= $escaper->escapeHtml(__('Cancelled')) ?>
                     </p>
                 <?php endif; ?>
             </div>
@@ -205,7 +205,7 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                       "locationSearchUrl" => $block->getLocationSearchUrl(),
                       "recalculateUrl" => $block->getRecalculateUrl(),
                       "oldFeeLabel" => (string) __("Old shipping fee"),
-                      "recalculating" => (string) __("Asking Pigeon Express..."),
+                      "recalculating" => (string) __("Loading..."),
                       "unreachable" => (string) __("Could not reach Pigeon Express."),
                       "noResults" => (string) __("Nothing found"),
                       "streetsUnavailable" => (string) __("Street list unavailable, type it by hand"),
@@ -277,7 +277,7 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                     6,
                     [
                         'required' => true,
-                        'tooltip'  => (string) __('The person the courier hands the parcel to.'),
+                        'tooltip'  => (string) __('The person receiving the parcel.'),
                     ]
                 ) ?>
                 <?= /* @noEscape */ $peField(
@@ -320,8 +320,8 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                         'required'   => true,
                         'group'      => 'address',
                         'tooltip'    => (string) __(
-                            'Start typing and choose from the list. The list is Pigeon Express\'s own, and '
-                            . 'villages often share a name, so the postal code is shown to tell them apart.'
+                            'Start typing and choose from the list. The postal code is shown, '
+                            . 'because villages often share a name.'
                         ),
                         'attributes' => [
                             'data-role'    => 'pe-city',
@@ -333,9 +333,8 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                 <?= /* @noEscape */ $peField('postal_code', (string) __('Postal code'), 4, [
                     'group'      => 'address',
                     'tooltip'    => (string) __(
-                        'Set by the city you choose, and not editable. Pigeon Express holds one code per '
-                        . 'settlement and routes by city and street, so a code typed by hand could only '
-                        . 'ever disagree with the city on the same form.'
+                        'Set by the city you choose. Pigeon Express routes by city and '
+                        . 'street, not by postal code.'
                     ),
                     'attributes' => ['readonly' => 'readonly', 'tabindex' => '-1'],
                 ]) ?>
@@ -400,7 +399,7 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
 
                     <button type="button" class="action-default scalable" data-role="pe-recalculate"
                             title="<?= $escaper->escapeHtmlAttr(
-                                __('Ask Pigeon Express what this shipment costs as described above')
+                                __('Recalculate price')
                             ) ?>">
                         <span><?= $escaper->escapeHtml(__('Recalculate')) ?></span>
                     </button>

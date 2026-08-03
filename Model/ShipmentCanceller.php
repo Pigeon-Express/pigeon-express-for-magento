@@ -89,7 +89,8 @@ class ShipmentCanceller
         if (!$this->isCancellable($shipment)) {
             throw new LocalizedException(__(
                 'Pigeon Express can only cancel a shipment before the courier collects it. '
-                . 'This one is now "%1", so it has to be handled with Pigeon Express directly.',
+                . 'This one is now "%1". For further assistance, please contact our '
+                . 'customer service.',
                 (string) $shipment->getStatus()
             ));
         }

@@ -291,7 +291,7 @@ define(['jquery', 'mage/translate'], function ($, $t) {
                 $newFee = $form.find('[data-role="pe-new-fee-value"]');
 
             $button.prop('disabled', true);
-            $message.removeClass('_error').text($t(config.recalculating || 'Asking Pigeon Express...'));
+            $message.removeClass('_error').text($t(config.recalculating || 'Loading...'));
 
             $.post(config.recalculateUrl, $form.serialize())
                 .done(function (response) {
