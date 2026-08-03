@@ -73,6 +73,59 @@ class LayoutProcessorPlugin
     }
 
     /**
+     * The stock address fields the carrier's own replace.
+     *
+     * `region` is left out on purpose. Magento's own region component decides
+     * between the dropdown and the free text box from the chosen country, and
+     * for Bulgaria, which is everywhere Pigeon Express delivers, it has already
+     * settled on the dropdown. Forcing the other one either way fights it.
+     */
+    private const REPLACED_FIELDS = ['city', 'postcode', 'region_id', 'country_id'];
+
+    /**
+     * Take the replaced fields out of the form before it is rendered.
+     *
+     * Done here rather than from the component that manages them as the chosen
+     * method changes, because that one can only run once Knockout has already
+     * drawn the form: the fields appeared, then vanished a moment later. Marked
+     * invisible in the layout, they are never drawn in the first place.
+     *
+     * This is the state the page opens in. From there the component takes over,
+     * and hands the fields straight back if the customer picks a carrier that
+     * is not this one.
+     *
+     * @param array<string, mixed> $shippingAddress
+     */
+    private function hideReplacedFields(array &$shippingAddress): void
+    {
+        if (!$this->config->isOverrideAddressFields()) {
+            return;
+        }
+
+        $fields = &$shippingAddress['children']['shipping-address-fieldset']['children'];
+        if (!is_array($fields)) {
+            return;
+        }
+
+        foreach (self::REPLACED_FIELDS as $name) {
+            if (isset($fields[$name])) {
+                $fields[$name]['visible'] = false;
+            }
+        }
+
+        // Street is a group of two lines rather than a field. Its own wrapper
+        // carries a legend and no visibility of its own, so the stylesheet
+        // takes that, keyed off a class on the body which is set server side
+        // for the same reason this is.
+        if (isset($fields['street']['children']) && is_array($fields['street']['children'])) {
+            foreach ($fields['street']['children'] as &$line) {
+                $line['visible'] = false;
+            }
+            unset($line);
+        }
+    }
+
+    /**
      * Add location autocomplete to shipping step (shippingAdditional region).
      * Only allow selection from backend results (no free text).
      *
@@ -86,6 +139,7 @@ class LayoutProcessorPlugin
             ['shipping-step']['children']['shippingAddress'];
 
         $this->applyCarrierLogo($shippingAddress);
+        $this->hideReplacedFields($shippingAddress);
 
         $children = &$shippingAddress['children'];
 

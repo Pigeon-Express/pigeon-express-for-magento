@@ -12,5 +12,11 @@
         <css src="PigeonExpress_Shipping::css/checkout/carrier-logo.css"/>
     </head>
     <body>
+        <!-- Renders nothing: it puts a class on the body early enough that the
+             address fields the carrier replaces are never drawn at all. -->
+        <referenceContainer name="before.body.end">
+            <block class="PigeonExpress\Shipping\Block\Checkout\BodyClass"
+                   name="pigeonexpress.checkout.body.class"/>
+        </referenceContainer>
     </body>
 </page>
