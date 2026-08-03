@@ -15,7 +15,7 @@
         <dd class="pigeonexpress-delivery-location-value">
             <?php if ($block->getLocationName() !== '') : ?>
                 <strong><?= $escaper->escapeHtml($block->getLocationName()) ?></strong>
-                <?php if ($block->getLocationAddress() !== '') : ?> — <?php endif; ?>
+                <?php if ($block->getLocationAddress() !== '') : ?>, <?php endif; ?>
             <?php endif; ?>
             <?= $escaper->escapeHtml($block->getLocationAddress()) ?>
         </dd>

@@ -50,3 +50,63 @@ body.pigeonexpress-shipping-active .shipping-address-item:not(:last-child) {
 .pigeonexpress-location-autocomplete .loading {
     margin-left: 0.5rem;
 }
+
+/* -- City first picker ---------------------------------------------------- */
+
+.pigeonexpress-city {
+    position: relative;
+}
+
+.pigeonexpress-location-filter {
+    margin-bottom: .8rem;
+}
+
+/* The city suggestions float over the page; the location list is part of it,
+   because it is the thing being chosen from rather than a hint. */
+.pigeonexpress-results.-standing {
+    max-height: 24rem;
+    position: static;
+}
+
+.pigeonexpress-empty {
+    color: #666;
+    margin: .4rem 0 0;
+}
+
+/* -- Carrier address fields ----------------------------------------------- */
+
+/* The stock street, city and postcode give way to the carrier's own. Country
+   and region stay: they are Magento's to validate, and nothing here replaces
+   them. Unlike the office case these are not filled with placeholders, the real
+   values are written into them. */
+.pigeonexpress-address-override .field.street,
+.pigeonexpress-address-override .field.city,
+.pigeonexpress-address-override .field.postcode,
+.pigeonexpress-address-override .field.zip {
+    display: none !important;
+}
+
+.pigeonexpress-address-fields .field {
+    position: relative;
+}
+
+.pigeonexpress-readonly {
+    color: #333;
+    display: inline-block;
+    padding: .6rem 0;
+}
+
+.pigeonexpress-link {
+    background: none;
+    border: 0;
+    color: #006bb4;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+}
+
+.pigeonexpress-building {
+    border-left: 2px solid #e8e8e8;
+    margin-bottom: 1.5rem;
+    padding-left: 1.5rem;
+}

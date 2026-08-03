@@ -61,13 +61,20 @@ class LocationAutocomplete implements HttpGetActionInterface
     {
         $type = (string) $this->request->getParam('type', '');
         $query = (string) $this->request->getParam('q', '');
+        $cityId = (int) $this->request->getParam('city_id');
         $storeId = (int) $this->storeManager->getStore()->getId();
 
         if ($type !== ConfigInterface::DELIVERY_TYPE_OFFICE && $type !== ConfigInterface::DELIVERY_TYPE_APS) {
             return $this->resultJsonFactory->create()->setData([]);
         }
 
-        $results = $this->locationSearch->search($type, $query, $storeId, 0);
+        // With a city, every pickup point in it, unpaged. The customer is
+        // choosing from a list rather than searching, so one that stops at
+        // twenty would simply hide the rest of Sofia.
+        $results = $cityId > 0
+            ? $this->locationSearch->listByCity($type, $cityId, $storeId)
+            : $this->locationSearch->search($type, $query, $storeId, 0);
+
         return $this->resultJsonFactory->create()->setData($results);
     }
 }

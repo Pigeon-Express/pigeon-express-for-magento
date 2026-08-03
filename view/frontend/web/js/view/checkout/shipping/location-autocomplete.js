@@ -38,6 +38,8 @@ define([
         resultsVisible: false,
         /** @type {number} */
         _searchTimeout: 0,
+        /** @type {number} */
+        _cityTimeout: 0,
 
         /**
          * @returns {void}
@@ -50,6 +52,33 @@ define([
             this.isLoading = ko.observable(false);
             this.selectedLocation = ko.observable(null);
             this.resultsVisible = ko.observable(false);
+
+            // The city comes first. Sofia alone has 43 offices and 84 lockers,
+            // so searching the whole country in one box either buries the right
+            // answer or hides it behind a result limit.
+            this.cityQuery = ko.observable('');
+            this.cityResults = ko.observableArray([]);
+            this.cityResultsVisible = ko.observable(false);
+            this.selectedCity = ko.observable(null);
+            this.locations = ko.observableArray([]);
+            this.locationFilter = ko.observable('');
+
+            // A city can hold 84 lockers, which is too many to scroll blindly,
+            // so the list stays filterable. Every one of them is still in it.
+            this.filteredLocations = ko.computed(function () {
+                var needle = (this.locationFilter() || '').toLowerCase().trim(),
+                    all = this.locations();
+
+                if (!needle) {
+                    return all;
+                }
+
+                return all.filter(function (location) {
+                    return ((location.name || '') + ' ' + (location.address || ''))
+                        .toLowerCase().indexOf(needle) !== -1;
+                });
+            }, this);
+
             window.pigeonexpressCheckoutPayload = window.pigeonexpressCheckoutPayload || {};
 
             var self = this;
@@ -62,6 +91,9 @@ define([
                     self.searchQuery('');
                     self.results([]);
                     self.resultsVisible(false);
+                    // Offices and lockers are different lists, so a city chosen
+                    // under one method cannot carry over to the other.
+                    self.clearCity();
                     self.updateCheckoutPayload();
                 }
             });
@@ -92,6 +124,92 @@ define([
                 return this.apsMethod;
             }
             return this.officeMethod;
+        },
+
+        /**
+         * Search the city list for whichever pickup type is selected.
+         */
+        onCityInput: function (data, event) {
+            var self = this,
+                q = (event && event.target && event.target.value) || '';
+
+            q = typeof q === 'string' ? q.trim() : '';
+            this.cityQuery(q);
+
+            if (this._cityTimeout) {
+                clearTimeout(this._cityTimeout);
+            }
+
+            if (q.length < this.minChars) {
+                this.cityResults([]);
+                this.cityResultsVisible(false);
+                return;
+            }
+
+            this._cityTimeout = setTimeout(function () {
+                $.getJSON(url.build('pigeonexpress/checkout/citySearch'), {
+                    type: self.getSearchType(),
+                    q: q
+                }).done(function (data) {
+                    self.cityResults((data && data.items) || []);
+                    self.cityResultsVisible(true);
+                }).fail(function () {
+                    self.cityResults([]);
+                });
+            }, this.searchDelay);
+        },
+
+        /**
+         * Take a city and load everything in it.
+         */
+        selectCity: function (city) {
+            var self = this;
+
+            this.selectedCity(city);
+            this.cityQuery(city.name || '');
+            this.cityResults([]);
+            this.cityResultsVisible(false);
+            this.locationFilter('');
+            this.selectedLocation(null);
+            this.locations([]);
+            this.isLoading(true);
+
+            $.getJSON(url.build('pigeonexpress/checkout/locationAutocomplete'), {
+                type: this.getSearchType(),
+                city_id: city.id
+            }).done(function (data) {
+                self.locations(Array.isArray(data) ? data : []);
+            }).fail(function () {
+                self.locations([]);
+            }).always(function () {
+                self.isLoading(false);
+            });
+        },
+
+        /**
+         * Back to choosing a city, which invalidates whatever was picked in it.
+         */
+        clearCity: function () {
+            this.selectedCity(null);
+            this.cityQuery('');
+            this.cityResults([]);
+            this.cityResultsVisible(false);
+            this.locations([]);
+            this.locationFilter('');
+        },
+
+        /**
+         * How the pickup point is described in the list.
+         */
+        locationLabel: function (location) {
+            return (location.name || '') + (location.address ? ' \u2014 ' + location.address : '');
+        },
+
+        /**
+         * Placeholder for the city box, by type.
+         */
+        getCityPlaceholder: function () {
+            return $t('Start typing a town or city');
         },
 
         /**

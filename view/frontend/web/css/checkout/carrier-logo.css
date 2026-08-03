@@ -1,0 +1,27 @@
+/**
+ * The carrier logo on the shipping method row.
+ *
+ * The artwork is a wide lockup, roughly 2.8:1, not a square badge, so it is
+ * bounded by height and left to find its own width. Two of the four versions are
+ * white on transparent and get a dark plate behind them, because the alternative
+ * is an invisible smudge on Luma's white table.
+ */
+
+.pigeonexpress-carrier-logo {
+    display: block;
+    height: 2.4rem;
+    max-width: 14rem;
+    width: auto;
+}
+
+.pigeonexpress-carrier-logo.-on-dark {
+    background: #00327d;
+    border-radius: 3px;
+    box-sizing: content-box;
+    padding: .4rem .6rem;
+}
+
+/* The carrier column is sized for a word, not a picture. */
+.table-checkout-shipping-method .col-carrier {
+    vertical-align: middle;
+}

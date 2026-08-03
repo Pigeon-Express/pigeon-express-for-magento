@@ -14,7 +14,8 @@ define([
 ], function (ko, quote, customer, createShippingAddressAction, Component, registry) {
     'use strict';
 
-    var bodyClassHideAddress = 'pigeonexpress-office-or-aps-selected';
+    var bodyClassHideAddress = 'pigeonexpress-office-or-aps-selected',
+        bodyClassOverrideAddress = 'pigeonexpress-address-override';
     var bodyClassPhoneRequired = 'pigeonexpress-telephone-required';
 
     var placeholders = {
@@ -160,14 +161,25 @@ define([
                 var isOfficeOrAps = isPigeonExpress &&
                     (method.method_code === 'office' || method.method_code === 'aps');
                 var isAddress = isPigeonExpress && method.method_code === 'address';
-
-                console.log('PigeonExpress: shipping method changed', method, 'isOfficeOrAps =', isOfficeOrAps, 'isAddress =', isAddress);
+                var settings = (window.checkoutConfig && window.checkoutConfig.pigeonexpress) || {};
+                var overrideAddress = isAddress && !!settings.override_address_fields;
 
                 if (isOfficeOrAps) {
                     document.body.classList.add(bodyClassHideAddress);
                     detachFromCustomerAddress();
                 } else {
                     document.body.classList.remove(bodyClassHideAddress);
+                }
+
+                // The carrier's own address fields replace the stock ones, so
+                // the stock street, city and postcode are hidden. Unlike the
+                // office case they are not filled with placeholders: our fields
+                // write the real values straight into them, because the Magento
+                // address is what tax, invoices and emails all read.
+                if (overrideAddress) {
+                    document.body.classList.add(bodyClassOverrideAddress);
+                } else {
+                    document.body.classList.remove(bodyClassOverrideAddress);
                 }
 
                 if (isPigeonExpress) {

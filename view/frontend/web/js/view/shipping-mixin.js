@@ -1,6 +1,7 @@
 /**
  * Pigeon Express: when any Pigeon Express shipping method is selected,
  * force the new-address form and hide saved address cards.
+
  */
 define([
     'Magento_Checkout/js/model/quote',

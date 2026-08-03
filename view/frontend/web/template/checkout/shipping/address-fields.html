@@ -1,0 +1,113 @@
+<!--
+  Pigeon Express address fields, shown in place of Magento's own when the
+  merchant has turned the override on. The city and street come from the
+  carrier's lists so the parcel is addressed to somewhere it recognises.
+-->
+<div class="pigeonexpress-address-fields" data-bind="visible: isVisible(), if: isVisible()">
+
+    <div class="field required pigeonexpress-city">
+        <label class="label" data-bind="attr: { for: uid + '-city' }">
+            <span data-bind="i18n: 'City'"></span>
+        </label>
+        <div class="control">
+            <input type="text"
+                   class="input-text"
+                   data-bind="
+                       attr: { id: uid + '-city', placeholder: $t('Start typing a town or city') },
+                       value: cityQuery,
+                       valueUpdate: 'afterkeydown',
+                       event: { input: onCityInput }
+                   "
+                   autocomplete="off"/>
+            <ul class="pigeonexpress-results"
+                data-bind="visible: cityResultsVisible() && cityResults().length > 0, foreach: cityResults"
+                role="listbox">
+                <li role="option"
+                    class="pigeonexpress-result-item"
+                    data-bind="text: label, click: $parent.selectCity.bind($parent, $data)"></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="field pigeonexpress-postcode" data-bind="visible: selectedCity()">
+        <label class="label"><span data-bind="i18n: 'Postal code'"></span></label>
+        <div class="control">
+            <span class="pigeonexpress-readonly"
+                  data-bind="text: selectedCity() ? selectedCity().postcode : ''"></span>
+        </div>
+    </div>
+
+    <div class="field required pigeonexpress-street" data-bind="visible: selectedCity()">
+        <label class="label" data-bind="attr: { for: uid + '-street' }">
+            <span data-bind="i18n: 'Street'"></span>
+        </label>
+        <div class="control">
+            <input type="text"
+                   class="input-text"
+                   data-bind="
+                       attr: { id: uid + '-street', placeholder: $t('Start typing a street') },
+                       value: streetQuery,
+                       valueUpdate: 'afterkeydown',
+                       event: { input: onStreetInput }
+                   "
+                   autocomplete="off"/>
+            <ul class="pigeonexpress-results"
+                data-bind="visible: streetResultsVisible() && streetResults().length > 0, foreach: streetResults"
+                role="listbox">
+                <li role="option"
+                    class="pigeonexpress-result-item"
+                    data-bind="text: label, click: $parent.selectStreet.bind($parent, $data)"></li>
+            </ul>
+            <p class="pigeonexpress-empty" data-bind="visible: streetNotice(), text: streetNotice()"></p>
+        </div>
+    </div>
+
+    <div class="field pigeonexpress-street-number" data-bind="visible: selectedCity()">
+        <label class="label" data-bind="attr: { for: uid + '-no' }">
+            <span data-bind="i18n: 'Street number'"></span>
+        </label>
+        <div class="control">
+            <input type="text"
+                   class="input-text"
+                   data-bind="attr: { id: uid + '-no' }, value: streetNumber, valueUpdate: 'afterkeydown'"
+                   autocomplete="off"/>
+        </div>
+    </div>
+
+    <div class="field pigeonexpress-building-toggle" data-bind="visible: selectedCity()">
+        <button type="button" class="action pigeonexpress-link" data-bind="click: toggleBuilding">
+            <span data-bind="i18n: showBuilding() ? 'Hide building details' : 'Add block, entrance, floor or apartment'"></span>
+        </button>
+    </div>
+
+    <div class="pigeonexpress-building" data-bind="visible: selectedCity() && showBuilding()">
+        <div class="field">
+            <label class="label"><span data-bind="i18n: 'Block'"></span></label>
+            <div class="control">
+                <input type="text" class="input-text"
+                       data-bind="value: buildingNumber, valueUpdate: 'afterkeydown'" autocomplete="off"/>
+            </div>
+        </div>
+        <div class="field">
+            <label class="label"><span data-bind="i18n: 'Entrance'"></span></label>
+            <div class="control">
+                <input type="text" class="input-text"
+                       data-bind="value: entrance, valueUpdate: 'afterkeydown'" autocomplete="off"/>
+            </div>
+        </div>
+        <div class="field">
+            <label class="label"><span data-bind="i18n: 'Floor'"></span></label>
+            <div class="control">
+                <input type="text" class="input-text"
+                       data-bind="value: floor, valueUpdate: 'afterkeydown'" autocomplete="off"/>
+            </div>
+        </div>
+        <div class="field">
+            <label class="label"><span data-bind="i18n: 'Apartment'"></span></label>
+            <div class="control">
+                <input type="text" class="input-text"
+                       data-bind="value: apartment, valueUpdate: 'afterkeydown'" autocomplete="off"/>
+            </div>
+        </div>
+    </div>
+</div>
