@@ -121,6 +121,8 @@ class LocationSync implements LocationSyncInterface
                 'name'        => (string) ($row['name'] ?? ''),
                 'name_en'     => isset($row['name_en']) ? (string) $row['name_en'] : null,
                 'postal_code' => isset($row['postal_code']) ? (string) $row['postal_code'] : null,
+                'district'    => isset($row['district']) ? (string) $row['district'] : null,
+                'district_en' => isset($row['district_en']) ? (string) $row['district_en'] : null,
             ];
         }
 
@@ -129,7 +131,11 @@ class LocationSync implements LocationSyncInterface
         $table      = $resource->getMainTable();
 
         if (!empty($rows)) {
-            $connection->insertOnDuplicate($table, array_values($rows), ['name', 'name_en', 'postal_code']);
+            $connection->insertOnDuplicate(
+                $table,
+                array_values($rows),
+                ['name', 'name_en', 'postal_code', 'district', 'district_en']
+            );
         }
 
         $count = count($rows);

@@ -70,6 +70,8 @@
         <column xsi:type="varchar" name="name" length="255" nullable="false" default="" comment="City Name (Bulgarian)"/>
         <column xsi:type="varchar" name="name_en" length="255" nullable="true" comment="City Name (English)"/>
         <column xsi:type="varchar" name="postal_code" length="20" nullable="true" comment="Postal Code"/>
+        <column xsi:type="varchar" name="district" length="255" nullable="true" comment="District (Bulgarian)"/>
+        <column xsi:type="varchar" name="district_en" length="255" nullable="true" comment="District (English)"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="entity_id"/>
         </constraint>

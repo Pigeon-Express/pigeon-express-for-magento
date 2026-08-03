@@ -57,7 +57,9 @@
             "api_id": true,
             "name": true,
             "name_en": true,
-            "postal_code": true
+            "postal_code": true,
+            "district": true,
+            "district_en": true
         },
         "index": {
             "PIGEONEXPRESS_CITY_NAME": true,

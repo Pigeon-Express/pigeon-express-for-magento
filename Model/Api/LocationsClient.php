@@ -96,6 +96,11 @@ class LocationsClient implements LocationsClientInterface
                 'name'        => (string) $city->getName(),
                 'name_en'     => $city->getNameEn(),
                 'postal_code' => $city->getPostalCode(),
+                // Bulgaria is one of the countries Magento will not accept an
+                // address for without a region, and this is the only place a
+                // region for a Pigeon Express city can come from.
+                'district'    => $city->getDistrict(),
+                'district_en' => $city->getDistrictEn(),
             ];
         }
 
