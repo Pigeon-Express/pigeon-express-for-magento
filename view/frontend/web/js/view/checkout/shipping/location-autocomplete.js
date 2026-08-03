@@ -341,7 +341,6 @@ define([
             this.searchQuery(item.name + (item.address ? ', ' + item.address : ''));
             this.results([]);
             this.resultsVisible(false);
-            console.log('[PE location-autocomplete] selectLocation', item);
             this.updateCheckoutPayload();
             // Persist selection to backend immediately so collectRates can see location_id.
             var payload = this.getPayload();
@@ -349,12 +348,10 @@ define([
                 url.build('pigeonexpress/checkout/setLocation'),
                 payload
             ).done(function (response) {
-                console.log('[PE setLocation] response', response);
                 if (response && response.success && quote.shippingAddress()) {
                     var locationStr = item.name + (item.address ? ', ' + item.address : '');
                     var locCity = item.city || '';
                     var locPostcode = item.postcode || '';
-                    console.log('[PE location-autocomplete] city/postcode from location', locCity, locPostcode);
                     self.updateAddressFields(locCity, locPostcode);
                     self.updateQuoteAddressStreet(locationStr, locCity, locPostcode);
                     rateRegistry.clear(quote.shippingAddress().getCacheKey());
@@ -373,7 +370,6 @@ define([
             this.searchQuery('');
             this.results([]);
             this.resultsVisible(false);
-            console.log('[PE location-autocomplete] clearSelection');
             this.updateCheckoutPayload();
             this.updateQuoteAddressStreet('');
         },
@@ -383,7 +379,6 @@ define([
          */
         updateCheckoutPayload: function () {
             window.pigeonexpressCheckoutPayload = this.getPayload();
-            console.log('[PE location-autocomplete] updateCheckoutPayload', window.pigeonexpressCheckoutPayload);
         },
 
         /**

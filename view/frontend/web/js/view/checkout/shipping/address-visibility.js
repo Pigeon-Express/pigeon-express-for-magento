@@ -46,7 +46,7 @@ define([
 
         // Keep real address data, only remove customerAddressId so placeholders
         // written later by populatePlaceholders() won't overwrite the saved address.
-        var newAddress = createShippingAddressAction({
+        createShippingAddressAction({
             firstname: currentAddress.firstname || '',
             lastname: currentAddress.lastname || '',
             telephone: currentAddress.telephone || '',
@@ -59,13 +59,9 @@ define([
             region_code: currentAddress.regionCode || null,
             save_in_address_book: 0
         });
-
-        console.log('PigeonExpress: detached from customer address, created temp address', newAddress);
     }
 
     function populatePlaceholders(isOfficeOrAps) {
-        console.log('PigeonExpress: populatePlaceholders called, isOfficeOrAps =', isOfficeOrAps);
-
         registry.async('checkout.steps.shipping-step.shippingAddress.shipping-address-fieldset')(function (fieldset) {
             ['street', 'city', 'postcode', 'region_id', 'country_id'].forEach(function (fieldName) {
                 var path = 'checkout.steps.shipping-step.shippingAddress.shipping-address-fieldset.' + fieldName;
@@ -77,7 +73,6 @@ define([
 
                 registry.get(path, function (cmp) {
                     if (!cmp) {
-                        console.log('PigeonExpress: component not found', fieldName, path);
                         return;
                     }
 
@@ -85,20 +80,8 @@ define([
                     var hasVisible = typeof cmp.visible === 'function';
 
                     if (!hasValue && !hasVisible) {
-                        console.log('PigeonExpress: component has neither value nor visible observable', fieldName, path, cmp);
                         return;
                     }
-
-                    console.log(
-                        'PigeonExpress: processing field',
-                        fieldName,
-                        'path',
-                        path,
-                        'current value',
-                        hasValue ? cmp.value() : undefined,
-                        'visible',
-                        hasVisible ? cmp.visible() : undefined
-                    );
 
                     if (isOfficeOrAps) {
                         // Прячем поле через observable visible, если он есть
@@ -112,12 +95,10 @@ define([
                                 var streetVal = cmp.value();
                                 if (!streetVal) {
                                     // Пишем то же, что и в город, чтобы валидация прошла
-                                    console.log('PigeonExpress: setting street to', placeholders.city);
                                     cmp.value(placeholders.city);
                                 }
                             } else if (placeholders[fieldName]) {
                                 if (!cmp.value()) {
-                                    console.log('PigeonExpress: setting', fieldName, 'to', placeholders[fieldName]);
                                     cmp.value(placeholders[fieldName]);
                                 }
                             }
@@ -133,12 +114,10 @@ define([
                             if (fieldName === 'street') {
                                 var currentStreet = cmp.value();
                                 if (currentStreet === placeholders.city) {
-                                    console.log('PigeonExpress: clearing street placeholder');
                                     cmp.value('');
                                 }
                             } else if (placeholders[fieldName]) {
                                 if (cmp.value() === placeholders[fieldName]) {
-                                    console.log('PigeonExpress: clearing', fieldName, 'placeholder');
                                     cmp.value('');
                                 }
                             }
