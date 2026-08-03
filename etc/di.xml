@@ -131,13 +131,8 @@
         <plugin name="pigeonexpress_order_address_load" sortOrder="10"
                 type="PigeonExpress\Shipping\Plugin\Sales\OrderAddressLoadPlugin"/>
     </type>
-    <type name="Magento\Checkout\Model\CompositeConfigProvider">
-        <arguments>
-            <argument name="configProviders" xsi:type="array">
-                <item name="pigeonexpress_checkout" xsi:type="object">PigeonExpress\Shipping\Model\CheckoutConfigProvider</item>
-            </argument>
-        </arguments>
-    </type>
+    <!-- CompositeConfigProvider is registered in etc/frontend/di.xml, not here:
+         an area definition beats a global one for that argument. -->
     <type name="Magento\Quote\Model\Quote\Address\ToOrder">
         <plugin name="pigeonexpress_cod_fee_to_order"
                 type="PigeonExpress\Shipping\Plugin\Quote\ToOrderPlugin"/>

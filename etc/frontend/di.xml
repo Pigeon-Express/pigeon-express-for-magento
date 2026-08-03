@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!--
+ * Pigeon Express Shipping - frontend DI
+ *
+ * The checkout config provider has to be registered here rather than in the
+ * global di.xml. Magento_Checkout declares the whole configProviders array in
+ * its own etc/frontend/di.xml, and that area definition wins over a global one,
+ * so an entry added globally is dropped and never reaches window.checkoutConfig.
+-->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <type name="Magento\Checkout\Model\CompositeConfigProvider">
+        <arguments>
+            <argument name="configProviders" xsi:type="array">
+                <item name="pigeonexpress_checkout" xsi:type="object">PigeonExpress\Shipping\Model\CheckoutConfigProvider</item>
+            </argument>
+        </arguments>
+    </type>
+</config>
