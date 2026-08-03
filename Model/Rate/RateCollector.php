@@ -16,6 +16,8 @@ use Magento\Quote\Model\Quote\Address\RateRequest;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\RateClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Exception\MissingDimensionsException;
+use PigeonExpress\Shipping\Exception\UnshippableException;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
 use PigeonExpress\Shipping\Model\QuoteAddressLocationPersistor;
 use PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory as CityCollectionFactory;
@@ -111,36 +113,68 @@ class RateCollector
             $this->resolveCodFee($payload, $calc, $storeId);
 
             return (float) ($calc['total_price'] ?? 0.0);
+        } catch (UnshippableException $e) {
+            // The carrier will not take this parcel at any price, so the method
+            // is hidden rather than quoted. Falling back to a flat rate here
+            // would sell a delivery that cannot happen.
+            if ($this->config->isLoggingEnabled($storeId)) {
+                $this->logger->warning('[PigeonExpress] Method hidden, parcel cannot be carried: ' . $e->getMessage(), [
+                    'deliveryType' => $deliveryType,
+                    'storeId' => $storeId,
+                ]);
+            }
+            throw $e;
+        } catch (MissingDimensionsException $e) {
+            // Nothing can be described to the carrier, so the method goes away.
+            if ($this->config->isLoggingEnabled($storeId)) {
+                $this->logger->warning('[PigeonExpress] Dynamic rate unavailable due to missing product dimensions', [
+                    'deliveryType' => $deliveryType,
+                    'storeId' => $storeId,
+                ]);
+            }
+            throw $e;
         } catch (ApiException $e) {
-            // Special case: missing product dimensions → surface to carrier so method becomes unavailable.
-            $msg = (string) $e->getMessage();
-            if (strpos($msg, 'Product dimensions (length/width/height) are not configured') !== false) {
-                if ($this->config->isLoggingEnabled($storeId)) {
-                    $this->logger->warning('[PigeonExpress] Dynamic rate unavailable due to missing product dimensions', [
-                        'deliveryType' => $deliveryType,
-                        'storeId' => $storeId,
-                    ]);
-                }
-                throw $e;
+            return $this->fallbackOrHide($e, $deliveryType, $storeId);
+        } catch (\Throwable $e) {
+            return $this->fallbackOrHide($e, $deliveryType, $storeId);
+        }
+    }
+
+    /**
+     * The flat rate, when there is one, and otherwise no method at all.
+     *
+     * A store on dynamic pricing keeps no flat rate: the field is hidden and
+     * cleared on save, so it is always zero. Returning it as a fallback offered
+     * the customer free shipping every time the carrier could not be reached,
+     * which is worse than the method being absent, and silently so. A rethrow
+     * here reaches the carrier, which skips the delivery type.
+     *
+     * @throws \Throwable
+     */
+    private function fallbackOrHide(\Throwable $e, string $deliveryType, int $storeId): float
+    {
+        $flatRate = (float) $this->config->getDeliveryTypeFlatRate($deliveryType, $storeId);
+
+        if ($flatRate <= 0.0) {
+            if ($this->config->isLoggingEnabled($storeId)) {
+                $this->logger->warning(
+                    '[PigeonExpress] Method hidden, no price could be obtained and no flat rate is set: '
+                    . $e->getMessage(),
+                    ['deliveryType' => $deliveryType, 'storeId' => $storeId]
+                );
             }
 
-            // Other API errors → graceful fallback to flat rate.
-            if ($this->config->isLoggingEnabled($storeId)) {
-                $this->logger->warning('[PigeonExpress] Dynamic rate failed, falling back to flat rate: ' . $msg, [
-                    'deliveryType' => $deliveryType,
-                    'storeId' => $storeId,
-                ]);
-            }
-            return (float) $this->config->getDeliveryTypeFlatRate($deliveryType, $storeId);
-        } catch (\Throwable $e) {
-            if ($this->config->isLoggingEnabled($storeId)) {
-                $this->logger->warning('[PigeonExpress] Dynamic rate failed, falling back to flat rate: ' . $e->getMessage(), [
-                    'deliveryType' => $deliveryType,
-                    'storeId' => $storeId,
-                ]);
-            }
-            return (float) $this->config->getDeliveryTypeFlatRate($deliveryType, $storeId);
+            throw $e;
         }
+
+        if ($this->config->isLoggingEnabled($storeId)) {
+            $this->logger->warning('[PigeonExpress] Dynamic rate failed, falling back to flat rate: ' . $e->getMessage(), [
+                'deliveryType' => $deliveryType,
+                'storeId' => $storeId,
+            ]);
+        }
+
+        return $flatRate;
     }
 
     /**
@@ -161,15 +195,22 @@ class RateCollector
                     'storeId' => $storeId,
                 ]);
             }
-            throw new ApiException(__('APS delivery requires all products to have dimensions (length/width/height) configured.'));
+            throw new MissingDimensionsException(
+                __('APS delivery requires all products to have dimensions (length/width/height) configured.')
+            );
         }
 
         $payload = [
             'pickup_type' => $configPickupType,
             'delivery_type' => $apiDeliveryType,
-            'packages' => $this->packageBuilder->build($lines, $storeId, (float) $request->getPackageWeight()),
+            'packages' => $this->packageBuilder->build(
+                $lines,
+                $storeId,
+                $deliveryType,
+                (float) $request->getPackageWeight()
+            ),
             'service_type' => 'standard',
-            'who_pays' => 'sender',
+            'who_pays' => $this->config->getWhoPays($storeId),
         ];
 
         // COD is deliberately excluded: the quote total collector adds that fee,

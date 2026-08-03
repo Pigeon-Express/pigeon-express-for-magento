@@ -19,6 +19,7 @@ use PigeonExpress\PigeonExpress;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\ShipmentClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Model\Service\CarrierLimits;
 use Psr\Log\LoggerInterface;
 
 class ShipmentClient implements ShipmentClientInterface
@@ -37,12 +38,17 @@ class ShipmentClient implements ShipmentClientInterface
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var CarrierLimits */
+    private $limits;
+
     public function __construct(
         ConfigInterface $config,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        CarrierLimits $limits
     ) {
         $this->config = $config;
         $this->logger = $logger;
+        $this->limits = $limits;
     }
 
     public function create(array $payload, int $storeId): array
@@ -115,6 +121,14 @@ class ShipmentClient implements ShipmentClientInterface
             } catch (SdkValidationException $e) {
                 // Validation errors are not retryable, surface field details immediately.
                 $lastException = $e;
+
+                // A refusal at this point still tells us what the carrier will
+                // carry, and a merchant may only ever reach the limit here.
+                $this->limits->learnFromRefusal(
+                    $e->getErrors(),
+                    (string) ($payload['delivery_type'] ?? ''),
+                    $storeId
+                );
                 if ($this->config->isLoggingEnabled($storeId)) {
                     $this->logger->warning('[PigeonExpress] Shipment API validation error', [
                         'storeId' => $storeId,
@@ -176,7 +190,9 @@ class ShipmentClient implements ShipmentClientInterface
         $pickupType    = (string) ($payload['pickup_type'] ?? 'office');
         $deliveryType  = (string) ($payload['delivery_type'] ?? 'office');
         $serviceType   = (string) ($payload['service_type'] ?? 'standard');
-        $whoPays       = (string) ($payload['who_pays'] ?? 'sender');
+        // The caller always sets this. The fallback matches the module default so
+        // the two cannot disagree if it ever stops.
+        $whoPays       = (string) ($payload['who_pays'] ?? ConfigInterface::WHO_PAYS_RECEIVER);
 
         $request = new CreateShipmentRequest(
             $receiverName,
@@ -222,5 +238,92 @@ class ShipmentClient implements ShipmentClientInterface
         }
 
         return $request;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function cancel(string $referenceNumber, int $storeId): array
+    {
+        $referenceNumber = trim($referenceNumber);
+        if ($referenceNumber === '') {
+            throw new ApiException(__('Cannot cancel a shipment without a reference number.'));
+        }
+
+        if ($this->config->isLoggingEnabled($storeId)) {
+            $this->logger->info('[PigeonExpress] ShipmentClient::cancel', [
+                'storeId' => $storeId,
+                'reference_number' => $referenceNumber,
+            ]);
+        }
+
+        try {
+            $result = $this->client($storeId)->shipments()->cancel($referenceNumber);
+        } catch (\Throwable $e) {
+            $message = $this->buildErrorMessage($e);
+            if ($this->config->isLoggingEnabled($storeId)) {
+                $this->logger->warning('[PigeonExpress] Cancel failed: ' . $message, [
+                    'reference_number' => $referenceNumber,
+                ]);
+            }
+            throw new ApiException(__('Failed to cancel Pigeon Express shipment: %1', $message));
+        }
+
+        return $result;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function label(string $referenceNumber, ?string $format, bool $download, int $storeId): array
+    {
+        $referenceNumber = trim($referenceNumber);
+        if ($referenceNumber === '') {
+            throw new ApiException(__('Cannot fetch a label without a reference number.'));
+        }
+
+        try {
+            $label = $this->client($storeId)->shipments()->label($referenceNumber, $format, $download);
+        } catch (\Throwable $e) {
+            $message = $this->buildErrorMessage($e);
+            if ($this->config->isLoggingEnabled($storeId)) {
+                $this->logger->warning('[PigeonExpress] Label fetch failed: ' . $message, [
+                    'reference_number' => $referenceNumber,
+                    'format' => $format,
+                ]);
+            }
+            throw new ApiException(__('Failed to fetch the Pigeon Express label: %1', $message));
+        }
+
+        if (!isset($label['body']) || $label['body'] === '') {
+            throw new ApiException(__('Pigeon Express returned an empty label for %1.', $referenceNumber));
+        }
+
+        return $label;
+    }
+
+    /**
+     * Build a configured SDK client.
+     *
+     * @throws ApiException
+     */
+    private function client(int $storeId): PigeonExpress
+    {
+        $apiKey = $this->config->getApiKey($storeId);
+        if ($apiKey === '') {
+            throw new ApiException(__('Pigeon Express API key is not configured.'));
+        }
+
+        $apiSecret = $this->config->getApiSecret($storeId);
+        if ($apiSecret === '') {
+            $apiSecret = $apiKey;
+        }
+
+        $options = ['timeout' => 30];
+        if ($this->config->isTestMode($storeId)) {
+            $options['base_url'] = self::DEMO_BASE_URL;
+        }
+
+        return new PigeonExpress($apiKey, $apiSecret, $options);
     }
 }

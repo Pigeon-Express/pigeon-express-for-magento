@@ -12,11 +12,12 @@ namespace PigeonExpress\Shipping\Model;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Sales\Api\Data\OrderInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Api\RateClientInterface;
 use PigeonExpress\Shipping\Api\ShipmentClientInterface;
 use PigeonExpress\Shipping\Api\ShipmentSenderInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
-use PigeonExpress\Shipping\Model\Api\AddressResolver;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
+use PigeonExpress\Shipping\Model\Shipment\AddressForm;
 use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
 use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment\CollectionFactory as ShipmentCollectionFactory;
@@ -30,14 +31,17 @@ class ShipmentSender implements ShipmentSenderInterface
     /** @var ShipmentClientInterface */
     private $shipmentClient;
 
+    /** @var RateClientInterface */
+    private $rateClient;
+
     /** @var OrderAddressLocationPersistor */
     private $locationPersistor;
 
     /** @var LocationToApiIdResolver */
     private $locationToApiIdResolver;
 
-    /** @var AddressResolver */
-    private $addressResolver;
+    /** @var AddressForm */
+    private $addressForm;
 
     /** @var ShipmentCollectionFactory */
     private $shipmentCollectionFactory;
@@ -60,9 +64,10 @@ class ShipmentSender implements ShipmentSenderInterface
     public function __construct(
         ConfigInterface $config,
         ShipmentClientInterface $shipmentClient,
+        RateClientInterface $rateClient,
         OrderAddressLocationPersistor $locationPersistor,
         LocationToApiIdResolver $locationToApiIdResolver,
-        AddressResolver $addressResolver,
+        AddressForm $addressForm,
         ShipmentCollectionFactory $shipmentCollectionFactory,
         PackageBuilder $packageBuilder,
         ServiceCodesBuilder $serviceCodesBuilder,
@@ -72,9 +77,10 @@ class ShipmentSender implements ShipmentSenderInterface
     ) {
         $this->config = $config;
         $this->shipmentClient = $shipmentClient;
+        $this->rateClient = $rateClient;
         $this->locationPersistor = $locationPersistor;
         $this->locationToApiIdResolver = $locationToApiIdResolver;
-        $this->addressResolver = $addressResolver;
+        $this->addressForm = $addressForm;
         $this->shipmentCollectionFactory = $shipmentCollectionFactory;
         $this->packageBuilder = $packageBuilder;
         $this->serviceCodesBuilder = $serviceCodesBuilder;
@@ -128,21 +134,39 @@ class ShipmentSender implements ShipmentSenderInterface
         $locationId   = $locationData['location_id'] ?? '';
         $instructions = $locationData['instructions'] ?? '';
 
-        // Build packages using the same geometry rules as rating.
-        $packages = $this->buildPackages($order, $storeId);
+        // What the admin filled in on the order screen, or what the order itself
+        // says when nothing was submitted. Either way it goes through the same
+        // checks, so a shipment created by any route is checked the same way.
+        $fields = isset($overrides['address_fields']) && is_array($overrides['address_fields'])
+            ? $overrides['address_fields']
+            : $this->addressForm->fromOrder(
+                $address,
+                $instructions,
+                $deliveryType !== '' ? $deliveryType : ConfigInterface::DELIVERY_TYPE_ADDRESS,
+                $locationId,
+                (string) ($locationData['location_name'] ?? '')
+            );
 
-        // Receiver info.
-        $receiverName = trim($address->getFirstname() . ' ' . $address->getLastname());
-        if ($receiverName === '') {
-            $receiverName = 'Customer';
+        $checked = $this->addressForm->validate($fields, $storeId);
+        if ($this->addressForm->hasErrors($checked['issues'])) {
+            throw new LocalizedException(__($this->addressForm->firstError($checked['issues'])));
         }
-        $receiverPhone = isset($overrides['receiver_phone']) && $overrides['receiver_phone'] !== ''
-            ? (string) $overrides['receiver_phone']
-            : (string) $address->getTelephone();
-        if ($receiverPhone === '') {
-            throw new LocalizedException(__('Shipping address is missing telephone number.'));
-        }
-        $receiverPhone = $this->normalizePhone($receiverPhone);
+        $fields = $checked['fields'];
+
+        // The admin may have redirected the parcel, for instance because the
+        // customer rang to ask for an office instead of their home. The order
+        // keeps what was chosen at checkout; only the waybill changes.
+        $deliveryType = $this->addressForm->deliveryType($fields);
+        $locationId = $fields['location_id'];
+
+        // Built only now: a locker takes a smaller, lighter parcel than a door
+        // does, so the limits depend on where the admin has just decided to send
+        // it rather than on what was chosen at checkout.
+        $packages = $this->buildPackages($order, $storeId, $deliveryType);
+
+        $receiverName = $fields['contact_name'] !== '' ? $fields['contact_name'] : 'Customer';
+        $receiverPhone = $fields['contact_phone'];
+        $instructions = $fields['note'];
 
         // COD detection via configured payment methods.
         $codAmount = $this->detectCodAmount($order);
@@ -155,8 +179,7 @@ class ShipmentSender implements ShipmentSenderInterface
         [$apiDeliveryType, $deliveryPayload] = $this->buildDeliveryPayload(
             $deliveryType,
             $locationId,
-            $address,
-            $storeId
+            $fields
         );
 
         // Assemble final payload.
@@ -166,7 +189,7 @@ class ShipmentSender implements ShipmentSenderInterface
             'pickup_type'    => $pickupType,
             'delivery_type'  => $apiDeliveryType,
             'service_type'   => 'standard',
-            'who_pays'       => 'sender',
+            'who_pays'       => $fields['who_pays'],
             'packages'       => $packages,
         ];
 
@@ -229,12 +252,84 @@ class ShipmentSender implements ShipmentSenderInterface
     }
 
     /**
-     * Check if a shipment record already exists for the given order.
+     * What Pigeon Express charges today to carry this order as the form describes it.
+     *
+     * Deliberately separate from what the customer paid. Redirecting a parcel to
+     * an office costs something different from carrying it to a door, and a
+     * merchant deciding whether to agree to that should be able to see the
+     * difference rather than discover it on an invoice. Nothing is written back
+     * to the order: this only answers a question.
+     *
+     * @param array<string, string> $fields Checked shipment form values
+     * @return array{price: float, currency: string}
+     * @throws LocalizedException
+     * @throws ApiException
+     */
+    public function priceFor(OrderInterface $order, array $fields): array
+    {
+        $storeId = (int) $order->getStoreId();
+        $deliveryType = $this->addressForm->deliveryType($fields);
+
+        [$apiDeliveryType, $deliveryPayload] = $this->buildDeliveryPayload(
+            $deliveryType,
+            $fields['location_id'] ?? '',
+            $fields
+        );
+
+        $pickupType = $this->config->getPickupType($storeId);
+
+        $payload = [
+            'pickup_type'   => $pickupType,
+            'delivery_type' => $apiDeliveryType,
+            'service_type'  => 'standard',
+            'who_pays'      => $this->addressForm->whoPays($fields),
+            'packages'      => $this->buildPackages($order, $storeId, $deliveryType),
+        ];
+
+        // COD is excluded on purpose. Its fee is charged to the customer through
+        // the order total, not to the merchant through the shipping price, so
+        // including it here would quote a figure nobody is asked to pay.
+        $serviceCodes = $this->serviceCodesBuilder->build(
+            $deliveryType,
+            $apiDeliveryType,
+            $storeId,
+            0.0,
+            false,
+            $this->detectGoodsValue($order)
+        );
+        if (!empty($serviceCodes)) {
+            $payload['service_codes'] = $serviceCodes;
+        }
+
+        $payload = array_merge(
+            $payload,
+            $this->buildPickupPayload($pickupType, $storeId),
+            $deliveryPayload
+        );
+
+        $calculation = $this->rateClient->calculate($payload, $storeId);
+
+        return [
+            'price'    => (float) ($calculation['total_price'] ?? 0.0),
+            'currency' => (string) ($calculation['currency'] ?? ''),
+        ];
+    }
+
+    /**
+     * The live shipment for an order, if there is one.
+     *
+     * Cancelled shipments are deliberately ignored. Once Pigeon Express has
+     * cancelled a waybill the order has nothing in transit, so the merchant must
+     * be able to create a fresh one. The cancelled row is kept as history and a
+     * new row is created alongside it, rather than the old one being reused.
      */
     private function findExistingShipment(int $orderId): ?Shipment
     {
         $collection = $this->shipmentCollectionFactory->create();
         $collection->addFieldToFilter('order_id', ['eq' => $orderId]);
+        $collection->addFieldToFilter('status', ['neq' => ShipmentCanceller::STATUS_CANCELLED]);
+        // Newest first, so a re-sent order reports its current waybill.
+        $collection->setOrder('entity_id', 'DESC');
         $collection->setPageSize(1);
         /** @var Shipment $item */
         $item = $collection->getFirstItem();
@@ -245,17 +340,47 @@ class ShipmentSender implements ShipmentSenderInterface
     }
 
     /**
+     * @inheritDoc
+     */
+    public function packagesFor(OrderInterface $order, string $deliveryType = ''): array
+    {
+        return $this->buildPackages(
+            $order,
+            (int) $order->getStoreId(),
+            $deliveryType !== '' ? $deliveryType : ConfigInterface::DELIVERY_TYPE_ADDRESS
+        );
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function codAmountFor(OrderInterface $order): float
+    {
+        return $this->detectCodAmount($order);
+    }
+
+    /**
      * Build the packages array for the shipment, using the same geometry rules
      * as rating so the waybill matches what the customer was quoted.
      *
      * @return array<int, array{weight:float, length:float, width:float, height:float}>
      */
-    private function buildPackages(OrderInterface $order, int $storeId): array
-    {
+    private function buildPackages(
+        OrderInterface $order,
+        int $storeId,
+        string $deliveryType = ConfigInterface::DELIVERY_TYPE_ADDRESS
+    ): array {
+        // The order's own weight, recorded when it was placed, is what shipped.
+        // The catalogue is not: a product edited since would silently rewrite
+        // the weight on a waybill for an order that left months ago.
+        $recorded = (float) $order->getWeight();
+
         return $this->packageBuilder->build(
             $this->buildPackageLines($order),
             $storeId,
-            (float) $order->getWeight()
+            $deliveryType,
+            $recorded,
+            $recorded > 0.0 ? $recorded : null
         );
     }
 
@@ -378,10 +503,12 @@ class ShipmentSender implements ShipmentSenderInterface
     /**
      * Build delivery portion of payload and return [apiDeliveryType, payloadFragment].
      *
-     * @param string $deliveryType
-     * @param string $locationId
-     * @param \Magento\Sales\Api\Data\OrderAddressInterface $address
-     * @param int $storeId
+     * The recipient is named on the address itself, not only at the top of the
+     * payload. Pigeon Express matches customers by phone, and an address block
+     * without a contact lets it substitute an address it already holds for that
+     * number, silently overriding what the customer entered.
+     *
+     * @param array<string, string> $fields Checked shipment form values
      * @return array{0:string, 1:array<string,mixed>}
      * @throws LocalizedException
      * @throws ApiException
@@ -389,8 +516,7 @@ class ShipmentSender implements ShipmentSenderInterface
     private function buildDeliveryPayload(
         string $deliveryType,
         string $locationId,
-        \Magento\Sales\Api\Data\OrderAddressInterface $address,
-        int $storeId
+        array $fields
     ): array {
         if ($deliveryType === ConfigInterface::DELIVERY_TYPE_OFFICE
             || $deliveryType === ConfigInterface::DELIVERY_TYPE_APS
@@ -403,14 +529,7 @@ class ShipmentSender implements ShipmentSenderInterface
             return [$apiDeliveryType, ['delivery_office_id' => $apiId]];
         }
 
-        // Default: address delivery.
-        $streetRaw = $address->getStreet();
-        $resolved = $this->addressResolver->resolve([
-            'city'     => $address->getCity(),
-            'street'   => $streetRaw,
-            'postcode' => $address->getPostcode(),
-        ], $storeId);
-        return ['address', ['delivery_address' => $resolved]];
+        return ['address', ['delivery_address' => $this->addressForm->toApiAddress($fields)]];
     }
 
     /**
@@ -488,4 +607,5 @@ class ShipmentSender implements ShipmentSenderInterface
 
         return $items;
     }
+
 }

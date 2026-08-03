@@ -102,8 +102,11 @@ class LocationSearch implements LocationSearchInterface
         $collection->addFieldToFilter('is_active', 1);
         $like = '%' . $this->escapeLikeValue($q) . '%';
         $this->joinCityData($collection);
+        // Not main_table.city: the sync only ever writes city_id, so that column
+        // is NULL on every row and a filter on it can never match. The readable
+        // city comes from the joined city table instead.
         $collection->addFieldToFilter(
-            ['main_table.name', 'main_table.address', 'main_table.city'],
+            ['main_table.name', 'main_table.address', 'pe_city.name'],
             [
                 ['like' => $like],
                 ['like' => $like],
@@ -139,8 +142,11 @@ class LocationSearch implements LocationSearchInterface
         $collection->addFieldToFilter('is_active', 1);
         $like = '%' . $this->escapeLikeValue($q) . '%';
         $this->joinCityData($collection);
+        // Not main_table.city: the sync only ever writes city_id, so that column
+        // is NULL on every row and a filter on it can never match. The readable
+        // city comes from the joined city table instead.
         $collection->addFieldToFilter(
-            ['main_table.name', 'main_table.address', 'main_table.city'],
+            ['main_table.name', 'main_table.address', 'pe_city.name'],
             [
                 ['like' => $like],
                 ['like' => $like],
@@ -160,6 +166,93 @@ class LocationSearch implements LocationSearchInterface
             ];
         }
         return $items;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function listByCity(string $type, int $cityId, int $storeId = 0): array
+    {
+        if ($cityId <= 0) {
+            return [];
+        }
+
+        if ($type === ConfigInterface::DELIVERY_TYPE_OFFICE) {
+            $collection = $this->officeCollectionFactory->create();
+        } elseif ($type === ConfigInterface::DELIVERY_TYPE_APS) {
+            $collection = $this->apsCollectionFactory->create();
+        } else {
+            return [];
+        }
+
+        $collection->addFieldToFilter('is_active', 1);
+        $this->joinCityData($collection);
+        $collection->getSelect()->where('main_table.city_id = ?', $cityId);
+        $collection->setOrder('main_table.name', 'ASC');
+
+        // No page size on purpose. Every pickup point in the city has to be
+        // reachable, and the configured search limit would hide most of Sofia.
+        $items = [];
+        foreach ($collection as $item) {
+            $items[] = [
+                'id' => (int) $item->getId(),
+                'name' => (string) $item->getName(),
+                'address' => (string) $item->getAddress(),
+                'city' => (string) ($item->getData('city_resolved') ?? ''),
+                'postcode' => (string) ($item->getData('postcode_resolved') ?? ''),
+                'type' => $type,
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function searchCitiesWithLocations(string $type, string $query, int $limit = 20): array
+    {
+        $query = trim($query);
+        if ($query === '') {
+            return [];
+        }
+
+        if ($type === ConfigInterface::DELIVERY_TYPE_OFFICE) {
+            $locationTable = $this->resource->getTableName('pigeonexpress_office');
+        } elseif ($type === ConfigInterface::DELIVERY_TYPE_APS) {
+            $locationTable = $this->resource->getTableName('pigeonexpress_aps');
+        } else {
+            return [];
+        }
+
+        $connection = $this->resource->getConnection();
+        $like = str_replace(['\\', '_', '%'], ['\\\\', '\_', '\%'], $query) . '%';
+
+        $select = $connection->select()
+            ->from(['c' => $this->resource->getTableName('pigeonexpress_city')], ['api_id', 'name', 'postal_code'])
+            ->join(['l' => $locationTable], 'l.city_id = c.api_id AND l.is_active = 1', ['count' => 'COUNT(l.entity_id)'])
+            ->where('c.name LIKE ? OR c.name_en LIKE ? OR c.postal_code LIKE ?', $like)
+            ->group(['c.api_id', 'c.name', 'c.postal_code'])
+            // Same ordering the admin city picker uses: district capitals are the
+            // codes ending in 000, and they are what most orders go to.
+            ->order(new \Zend_Db_Expr("(c.postal_code LIKE '%000') DESC"))
+            ->order(new \Zend_Db_Expr('CHAR_LENGTH(c.name) ASC'))
+            ->order('c.name ASC')
+            ->limit($limit > 0 ? min($limit, 50) : 20);
+
+        $rows = [];
+        foreach ($connection->fetchAll($select) as $row) {
+            $postcode = (string) ($row['postal_code'] ?? '');
+            $rows[] = [
+                'id' => (int) $row['api_id'],
+                'name' => (string) $row['name'],
+                'postcode' => $postcode,
+                'label' => $postcode !== '' ? $row['name'] . ' (' . $postcode . ')' : (string) $row['name'],
+                'count' => (int) $row['count'],
+            ];
+        }
+
+        return $rows;
     }
 
     /**

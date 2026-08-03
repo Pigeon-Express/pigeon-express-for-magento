@@ -20,6 +20,7 @@ use Magento\Shipping\Model\Carrier\AbstractCarrier;
 use Magento\Shipping\Model\Carrier\CarrierInterface;
 use Magento\Shipping\Model\Rate\ResultFactory;
 use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Exception\UnshippableException;
 use PigeonExpress\Shipping\Model\Rate\RateCollector;
 use Psr\Log\LoggerInterface;
 
@@ -146,6 +147,19 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
                         'error' => $e->getMessage(),
                     ]);
                 }
+
+                // A parcel the carrier will not take is worth saying out loud.
+                // The cart is otherwise fine, so a method that simply disappears
+                // reads as a bug in the shop rather than as a limit on the
+                // parcel, and the customer has no idea what to change.
+                if ($e instanceof UnshippableException) {
+                    $error = $this->_rateErrorFactory->create();
+                    $error->setCarrier($this->_code);
+                    $error->setCarrierTitle($this->getConfigData('title') ?: 'Pigeon Express');
+                    $error->setErrorMessage($e->getMessage());
+                    $result->append($error);
+                }
+
                 continue;
             }
 

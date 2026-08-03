@@ -19,6 +19,7 @@ use PigeonExpress\PigeonExpress;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\RateClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Model\Service\CarrierLimits;
 use Psr\Log\LoggerInterface;
 
 class RateClient implements RateClientInterface
@@ -57,14 +58,19 @@ class RateClient implements RateClientInterface
     /** @var CacheInterface */
     private $cache;
 
+    /** @var CarrierLimits */
+    private $limits;
+
     public function __construct(
         ConfigInterface $config,
         LoggerInterface $logger,
-        CacheInterface $cache
+        CacheInterface $cache,
+        CarrierLimits $limits
     ) {
         $this->config = $config;
         $this->logger = $logger;
         $this->cache = $cache;
+        $this->limits = $limits;
     }
 
     public function calculate(array $payload, int $storeId): array
@@ -191,7 +197,7 @@ class RateClient implements RateClientInterface
 
                 $data = $calculation->toArray();
                 // DTO toArray() exposes both the legacy and the current field names.
-                return [
+                $result = [
                     'shipping_price' => isset($data['delivery_fee']) ? (float) $data['delivery_fee'] : 0.0,
                     'total_price' => isset($data['total']) ? (float) $data['total'] : 0.0,
                     // Authoritative total of every additional service fee the API applied.
@@ -204,8 +210,25 @@ class RateClient implements RateClientInterface
                         ? $data['service_codes']
                         : [],
                 ];
+
+                $this->limits->learnFromAcceptance(
+                    is_array($payload['packages'] ?? null) ? $payload['packages'] : [],
+                    (string) ($payload['delivery_type'] ?? ''),
+                    $storeId
+                );
+
+                return $result;
             } catch (SdkValidationException $e) {
                 $lastException = $e;
+
+                // The carrier has just told us what it will not carry. That is
+                // the only place those numbers are published, so they are kept.
+                $this->limits->learnFromRefusal(
+                    $e->getErrors(),
+                    (string) ($payload['delivery_type'] ?? ''),
+                    $storeId
+                );
+
                 if ($this->config->isLoggingEnabled($storeId)) {
                     $this->logger->warning('[PigeonExpress] Rate API attempt ' . $attempt . ' validation failed: ' . $e->getMessage(), [
                         'errors' => $e->getErrors(),

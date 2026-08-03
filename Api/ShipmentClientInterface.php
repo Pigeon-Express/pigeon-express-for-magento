@@ -26,4 +26,25 @@ interface ShipmentClientInterface
      * @throws ApiException
      */
     public function create(array $payload, int $storeId): array;
+
+    /**
+     * Cancel a shipment at Pigeon Express.
+     *
+     * Only possible while the shipment is still registered. Once the courier has
+     * it, the API refuses and so must we.
+     *
+     * @return array<string,mixed> Raw response data
+     * @throws \PigeonExpress\Shipping\Exception\ApiException
+     */
+    public function cancel(string $referenceNumber, int $storeId): array;
+
+    /**
+     * Fetch a shipping label for streaming to the browser.
+     *
+     * @param string|null $format One of default, pdf150, zpl300, a4
+     * @param bool $download Ask for an attachment rather than inline display
+     * @return array{body:string, content_type:string, filename:string}
+     * @throws \PigeonExpress\Shipping\Exception\ApiException
+     */
+    public function label(string $referenceNumber, ?string $format, bool $download, int $storeId): array;
 }
