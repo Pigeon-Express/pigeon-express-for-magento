@@ -17,12 +17,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   permanently absent: Override Address Fields did nothing whichever way it was
   set, and the stock street, city and postcode were never hidden. It is
   registered in the frontend di.xml now.
-- **A hidden address field could stop checkout without saying why.** Magento
-  skips validation on a field whose visible observable is false, so the stock
-  street, city and postcode are hidden with CSS instead and keep being checked,
-  they being the address of record. Their error message then rendered inside a
-  hidden element, leaving Next doing nothing and explaining nothing. The message
-  is now repeated on the field the customer can actually see.
+- **Most of the stock address stayed on screen with the override on.** The
+  fields were hidden by a stylesheet matching classes Luma does not put on them:
+  in the checkout an address field carries no `city` or `postcode` class, only a
+  name attribute, so only the street wrapper, which is a fieldset and does carry
+  one, ever disappeared. City, postal code, region and country sat there in full
+  view beside the carrier's own. They are hidden through each field's own
+  visible observable now, which is how the office and locker case had been doing
+  it all along. The stray second street line that case left behind is gone with
+  them.
+- **Checkout would move on from an empty street.** Two faults, either enough on
+  its own. The stock street was still being validated while hidden, so its
+  complaint rendered inside a hidden element and stopped the step without
+  showing anything; and the carrier's fields only ever wrote a street they had
+  one for, so a street the customer typed and then deleted stayed behind in the
+  field that reaches the order, passing a check the visible form should have
+  failed. The stock fields now mirror the carrier's exactly, empty included, and
+  the carrier's fields are checked in their own right when the step is
+  submitted, with the message shown against the field it belongs to.
+- **A postal code the carrier does not hold left an order that could not be
+  placed.** Pigeon Express has no code on record for two dozen of the smallest
+  settlements, and Magento will not take a Bulgarian address without one. The
+  box is opened for the customer to fill in where that happens, and stays read
+  only everywhere else.
 - **The office and locker search could never match on a city name.** The filter
   read a column the location sync never writes, so it only ever appeared to work
   because the city name happens to sit inside the free-text address. It reads the
