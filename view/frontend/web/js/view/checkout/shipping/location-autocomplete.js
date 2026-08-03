@@ -316,22 +316,58 @@ define([
          * @param {string} city
          * @param {string} postcode
          */
-        updateAddressFields: function (city, postcode) {
-            var fieldset = 'checkout.steps.shipping-step.shippingAddress.shipping-address-fieldset.';
-            if (city) {
-                registry.get(fieldset + 'city', function (cmp) {
+        /**
+         * The chosen counter, written the way it should read on the order.
+         *
+         * The type is said out loud because the address of a parcel locker is
+         * the address of the supermarket it stands outside, and nothing else on
+         * the order would say the parcel is not being carried to a door.
+         */
+        locationStreetLine: function (location) {
+            if (!location) {
+                return '';
+            }
+
+            var type = location.type === this.apsMethod ? $t('Parcel locker') : $t('Office'),
+                parts = [];
+
+            if (location.name) {
+                parts.push(location.name);
+            }
+
+            if (location.address) {
+                parts.push(location.address);
+            }
+
+            return '(' + type + ') ' + parts.join(', ');
+        },
+
+        /**
+         * Put the chosen counter into Magento's own address fields.
+         *
+         * Written rather than left alone, because the customer may have typed a
+         * street address before switching to collection, and the fields are the
+         * address of record: whatever is in them is what reaches the order, the
+         * invoice and the confirmation email. Leaving them would send a parcel
+         * to a counter under a heading giving the customer's own front door.
+         */
+        applyLocationToAddress: function (location) {
+            var fieldset = 'checkout.steps.shipping-step.shippingAddress.shipping-address-fieldset.',
+                values = {
+                    'street.0': this.locationStreetLine(location),
+                    'street.1': '',
+                    'city': location.city || '',
+                    'postcode': location.postcode || '',
+                    'region_id': location.region_id || ''
+                };
+
+            Object.keys(values).forEach(function (name) {
+                registry.get(fieldset + name, function (cmp) {
                     if (cmp && typeof cmp.value === 'function') {
-                        cmp.value(city);
+                        cmp.value(values[name]);
                     }
                 });
-            }
-            if (postcode) {
-                registry.get(fieldset + 'postcode', function (cmp) {
-                    if (cmp && typeof cmp.value === 'function') {
-                        cmp.value(postcode);
-                    }
-                });
-            }
+            });
         },
 
         /**
@@ -382,10 +418,10 @@ define([
                 payload
             ).done(function (response) {
                 if (response && response.success && quote.shippingAddress()) {
-                    var locationStr = item.name + (item.address ? ', ' + item.address : '');
+                    var locationStr = self.locationStreetLine(item);
                     var locCity = item.city || '';
                     var locPostcode = item.postcode || '';
-                    self.updateAddressFields(locCity, locPostcode);
+                    self.applyLocationToAddress(item);
                     self.updateQuoteAddressStreet(locationStr, locCity, locPostcode);
                     rateRegistry.clear(quote.shippingAddress().getCacheKey());
                     newAddressProcessor.getRates(quote.shippingAddress());
