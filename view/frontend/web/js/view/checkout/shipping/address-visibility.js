@@ -38,12 +38,22 @@ define([
     var FIELDSET = 'checkout.steps.shipping-step.shippingAddress.shipping-address-fieldset';
 
     /**
-     * Every stock field the carrier's own address replaces. Name, company,
-     * email and telephone are deliberately absent: nothing here collects them,
-     * and the telephone least of all, it being how Pigeon Express identifies a
-     * recipient.
+     * Every stock field the carrier's own address replaces.
+     *
+     * Name, company, email and telephone are deliberately absent: nothing here
+     * collects them, and the telephone least of all, it being how Pigeon
+     * Express identifies a recipient.
+     *
+     * So is `region`. Magento's own region component decides between the
+     * dropdown and the free text box from the chosen country, and for Bulgaria,
+     * which is everywhere Pigeon Express delivers, it has already settled on the
+     * dropdown and hidden this one. Handing it back would put a second, empty
+     * State/Province box on the form.
+     *
+     * The same list is hidden in the layout before any of this runs: see
+     * LayoutProcessorPlugin. Keep the two in step.
      */
-    var STOCK_FIELDS = ['street.0', 'street.1', 'city', 'postcode', 'region_id', 'region', 'country_id'];
+    var STOCK_FIELDS = ['street.0', 'street.1', 'city', 'postcode', 'region_id', 'country_id'];
 
     /**
      * What an office or locker delivery puts in the fields it hides. The parcel
