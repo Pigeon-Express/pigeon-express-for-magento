@@ -35,6 +35,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed. The stock fields now mirror the carrier's exactly, empty included, and
   the carrier's fields are checked in their own right when the step is
   submitted, with the message shown against the field it belongs to.
+- **The delivery details in the order email were shown as raw markup.** The
+  customer was reading `<p class="pigeonexpress-delivery-email"><strong>` and the
+  rest of it. Magento reads this back with `{{var shipping_msg}}`, which escapes
+  whatever it is given, in both strict and legacy template modes, so tags put
+  there never styled anything: they were printed. It is plain text now, and no
+  longer escaped here either, which would have turned an ampersand in a street
+  name into `&amp;` once the template escaped it a second time. The carrier and
+  the delivery type went with the markup, Magento printing the shipping
+  description directly above and that already reading "Pigeon Express - Office
+  Delivery"; saying it again is how the message came to be four lines long.
 - **No order could be placed at all: "regionId is required".** Bulgaria is one
   of the countries in Magento's `general/region/state_required` list, so an
   address without a region is refused when the order is submitted. Hiding the
