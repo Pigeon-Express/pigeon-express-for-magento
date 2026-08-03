@@ -35,6 +35,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed. The stock fields now mirror the carrier's exactly, empty included, and
   the carrier's fields are checked in their own right when the step is
   submitted, with the message shown against the field it belongs to.
+- **No order could be placed at all: "regionId is required".** Bulgaria is one
+  of the countries in Magento's `general/region/state_required` list, so an
+  address without a region is refused when the order is submitted. Hiding the
+  stock region field left it empty, and nothing the customer chose supplied one,
+  a settlement not being a region. Pigeon Express does hold the district each
+  settlement belongs to, and those are the same 28 names Magento ships as
+  Bulgarian regions, so the region is now taken from there: 5,277 of the 5,284
+  settlements resolve. The seven with no district on record get the stock region
+  field back to fill in, rather than an order that fails on being placed.
+  Requires one location sync, which the upgrade does not do for you.
+- **Collection orders carried the customer's own street address.** Choosing an
+  office or a locker set the address on the quote but left Magento's own fields
+  holding whatever had been typed for a door delivery, and it is those that
+  reach the order, the invoice and the confirmation email. They now hold the
+  counter, written as "(Office) name, address" or "(Parcel locker) name,
+  address": the type is said out loud because the address of a locker is the
+  address of the supermarket it stands outside, and nothing else on the order
+  would say the parcel is not being carried to a door.
 - **A postal code the carrier does not hold left an order that could not be
   placed.** Pigeon Express has no code on record for two dozen of the smallest
   settlements, and Magento will not take a Bulgarian address without one. The
