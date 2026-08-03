@@ -199,39 +199,72 @@ define([
         },
 
         /**
-         * How the pickup point is described in the list.
+         * The chosen pickup point, in two parts: what it is called and where it
+         * is. Both read through here rather than off the object in the template,
+         * so that clearing the selection cannot momentarily be read off null:
+         * Knockout can re-evaluate a descendant binding before the `if` around
+         * it has taken the element away.
          */
-        locationLabel: function (location) {
-            return (location.name || '') + (location.address ? ' \u2014 ' + location.address : '');
+        selectedName: function () {
+            var location = this.selectedLocation();
+
+            return location ? location.name || '' : '';
+        },
+
+        selectedMeta: function () {
+            var location = this.selectedLocation();
+
+            return location ? location.address || '' : '';
         },
 
         /**
-         * Placeholder for the city box, by type.
+         * The label on the second field, which is not a generic one: an office
+         * and a parcel locker are different things to be sent to.
          */
-        getCityPlaceholder: function () {
-            return $t('Start typing a town or city');
+        locationTypeLabel: function () {
+            return this.getSearchType() === 'aps'
+                ? $t('Parcel locker')
+                : $t('Pigeon Express office');
         },
 
         /**
-         * Placeholder text by type.
+         * How many pickup points a city holds, shown against its name.
+         */
+        cityCountLabel: function (city) {
+            var count = city && city.count ? Number(city.count) : 0;
+
+            if (!count) {
+                return '';
+            }
+
+            return this.getSearchType() === 'aps'
+                ? $t('%1 parcel lockers').replace('%1', count)
+                : $t('%1 offices').replace('%1', count);
+        },
+
+        /**
+         * How much of the list is on screen. The list is never truncated, so
+         * this says how many there are rather than how many were kept.
+         */
+        resultCountLabel: function () {
+            var shown = this.filteredLocations().length,
+                all = this.locations().length;
+
+            if (shown === all) {
+                return $t('%1 to choose from').replace('%1', all);
+            }
+
+            return $t('%1 of %2 match').replace('%1', shown).replace('%2', all);
+        },
+
+        /**
+         * Placeholder for the box that filters the list, by type.
          * @returns {string}
          */
         getPlaceholder: function () {
             return this.getSearchType() === 'aps'
-                ? $t('Search APS (parcel locker)...')
-                : $t('Search office...');
-        },
-
-        /**
-         * Display string for selected location (name + address).
-         * @returns {string}
-         */
-        displayValue: function () {
-            var loc = this.selectedLocation();
-            if (!loc) {
-                return '';
-            }
-            return (loc.name || '') + (loc.address ? ', ' + loc.address : '');
+                ? $t('Filter the parcel lockers')
+                : $t('Filter the offices');
         },
 
         /**

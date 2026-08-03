@@ -5,84 +5,114 @@
   search blind: Sofia alone has 43 offices and 84 lockers. The second list is
   filterable but never truncated, so every pickup point in the city is reachable.
   Selection is still only ever from the carrier's own list, never free text.
+
+  Laid out as the carrier's address fields are, on the same grid and in the same
+  panel, so the two read as one thing. Both fields are on the form from the
+  start: the second says what it is waiting for rather than appearing once the
+  first is answered, because a form that grows under the cursor is hard to judge
+  the length of.
 -->
-<div class="pigeonexpress-location-autocomplete" data-bind="visible: isVisible(), if: isVisible()">
+<div class="pe-panel pigeonexpress-location-autocomplete" data-bind="visible: isVisible(), if: isVisible()">
+    <div class="pe-grid">
 
-    <div class="field pigeonexpress-city">
-        <label class="label" data-bind="attr: { for: uid + '-city' }">
-            <span data-bind="i18n: 'City'"></span>
-        </label>
-        <div class="control">
-            <input type="text"
-                   class="input-text"
-                   data-bind="
-                       attr: { id: uid + '-city', placeholder: getCityPlaceholder() },
-                       value: cityQuery,
-                       valueUpdate: 'afterkeydown',
-                       event: { input: onCityInput }
-                   "
-                   autocomplete="off"
-                   role="combobox"
-                   aria-expanded="false"
-                   aria-haspopup="listbox" />
+        <div class="field required pe-span-12">
+            <span class="pe-label-row">
+                <label class="label" data-bind="attr: { for: uid + '-city' }">
+                    <span data-bind="i18n: 'City'"></span>
+                </label>
+            </span>
+            <div class="control pigeonexpress-suggest-wrap">
+                <input type="text"
+                       class="input-text"
+                       data-bind="
+                           attr: { id: uid + '-city', placeholder: $t('Start typing') },
+                           value: cityQuery,
+                           valueUpdate: 'afterkeydown',
+                           event: { input: onCityInput }
+                       "
+                       autocomplete="off"
+                       role="combobox"
+                       aria-haspopup="listbox" />
 
-            <ul class="pigeonexpress-results"
-                data-bind="visible: cityResultsVisible() && cityResults().length > 0, foreach: cityResults"
-                role="listbox">
-                <li role="option"
-                    class="pigeonexpress-result-item"
-                    data-bind="
-                        text: label + ($data.count ? ' · ' + $data.count : ''),
-                        click: $parent.selectCity.bind($parent, $data)
-                    "></li>
-            </ul>
-        </div>
-    </div>
-
-    <div class="field pigeonexpress-location" data-bind="visible: selectedCity()">
-        <label class="label" data-bind="attr: { for: uid }">
-            <span data-bind="i18n: 'Delivery location'"></span>
-        </label>
-        <div class="control">
-            <span class="loading" data-bind="visible: isLoading">...</span>
-
-            <!-- ko ifnot: selectedLocation() -->
-            <input type="text"
-                   class="input-text pigeonexpress-location-filter"
-                   data-bind="
-                       attr: { id: uid, placeholder: getPlaceholder() },
-                       value: locationFilter,
-                       valueUpdate: 'afterkeydown',
-                       visible: !isLoading() && locations().length > 0
-                   "
-                   autocomplete="off" />
-
-            <ul class="pigeonexpress-results -standing"
-                data-bind="visible: !isLoading() && filteredLocations().length > 0, foreach: filteredLocations"
-                role="listbox">
-                <li role="option"
-                    class="pigeonexpress-result-item"
-                    data-bind="
-                        text: $parent.locationLabel($data),
-                        click: $parent.selectLocation.bind($parent, $data)
-                    "></li>
-            </ul>
-
-            <p class="pigeonexpress-empty"
-               data-bind="visible: !isLoading() && locations().length > 0 && filteredLocations().length === 0,
-                          i18n: 'Nothing here matches. Clear the filter to see them all.'"></p>
-
-            <p class="pigeonexpress-empty"
-               data-bind="visible: !isLoading() && locations().length === 0,
-                          i18n: 'Pigeon Express has nowhere to collect from in this city.'"></p>
-            <!-- /ko -->
-
-            <div class="pigeonexpress-selected" data-bind="visible: selectedLocation()">
-                <span data-bind="text: displayValue()"></span>
-                <button type="button" class="action clear" data-bind="click: clearSelection">
-                    <span data-bind="i18n: 'Change'"></span>
-                </button>
+                <ul class="pigeonexpress-suggest"
+                    data-bind="visible: cityResultsVisible() && cityResults().length > 0, foreach: cityResults"
+                    role="listbox">
+                    <li role="option"
+                        class="pigeonexpress-suggest-item"
+                        data-bind="click: $parent.selectCity.bind($parent, $data)">
+                        <span class="pigeonexpress-suggest-name" data-bind="text: label"></span>
+                        <span class="pigeonexpress-suggest-meta"
+                              data-bind="visible: $data.count, text: $parent.cityCountLabel($data)"></span>
+                    </li>
+                </ul>
             </div>
         </div>
+
+        <div class="field required pe-span-12">
+            <span class="pe-label-row">
+                <label class="label" data-bind="attr: { for: uid }">
+                    <span data-bind="text: locationTypeLabel()"></span>
+                </label>
+            </span>
+            <div class="control">
+
+                <!-- ko if: selectedLocation() -->
+                <div class="pigeonexpress-selected">
+                    <span class="pigeonexpress-selected-label" data-bind="i18n: 'Selected:'"></span>
+                    <span class="pigeonexpress-selected-name" data-bind="text: selectedName()"></span>
+                    <button type="button" class="pigeonexpress-change" data-bind="click: clearSelection">
+                        <span data-bind="i18n: 'Change'"></span>
+                    </button>
+                    <span class="pigeonexpress-selected-meta" data-bind="text: selectedMeta()"></span>
+                </div>
+                <!-- /ko -->
+
+                <!-- ko ifnot: selectedLocation() -->
+
+                <!-- ko ifnot: selectedCity() -->
+                <p class="pe-message _warn" data-bind="i18n: 'Choose a city first'"></p>
+                <!-- /ko -->
+
+                <!-- ko if: selectedCity() -->
+                <p class="pe-hint" data-bind="visible: isLoading, i18n: 'Looking...'"></p>
+
+                <input type="text"
+                       class="input-text pigeonexpress-location-filter"
+                       data-bind="
+                           attr: { id: uid, placeholder: getPlaceholder() },
+                           value: locationFilter,
+                           valueUpdate: 'afterkeydown',
+                           visible: !isLoading() && locations().length > 0
+                       "
+                       autocomplete="off" />
+
+                <ul class="pigeonexpress-suggest -standing"
+                    data-bind="visible: !isLoading() && filteredLocations().length > 0, foreach: filteredLocations"
+                    role="listbox">
+                    <li role="option"
+                        class="pigeonexpress-suggest-item"
+                        data-bind="click: $parent.selectLocation.bind($parent, $data)">
+                        <span class="pigeonexpress-suggest-name" data-bind="text: $data.name"></span>
+                        <span class="pigeonexpress-suggest-meta" data-bind="text: $data.address"></span>
+                    </li>
+                </ul>
+
+                <p class="pe-hint"
+                   data-bind="visible: !isLoading() && filteredLocations().length > 0,
+                              text: resultCountLabel()"></p>
+
+                <p class="pe-message _warn"
+                   data-bind="visible: !isLoading() && locations().length > 0 && filteredLocations().length === 0,
+                              i18n: 'Nothing here matches. Clear the filter to see them all.'"></p>
+
+                <p class="pe-message _warn"
+                   data-bind="visible: !isLoading() && locations().length === 0,
+                              i18n: 'Pigeon Express has nowhere to collect from in this city.'"></p>
+                <!-- /ko -->
+
+                <!-- /ko -->
+            </div>
+        </div>
+
     </div>
 </div>

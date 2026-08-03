@@ -64,7 +64,6 @@ Delivered,Delivered
 "Delivery (Pigeon Express)","Delivery (Pigeon Express)"
 "Delivery address","Delivery address"
 "Delivery instructions","Delivery instructions"
-"Delivery location","Delivery location"
 "Delivery Price","Delivery Price"
 "Delivery to an automated parcel station chosen by the customer.","Delivery to an automated parcel station chosen by the customer."
 "Delivery to a Pigeon Express counter office chosen by the customer.","Delivery to a Pigeon Express counter office chosen by the customer."
@@ -213,8 +212,6 @@ Returned,Returned
 "Schedule Location Sync","Schedule Location Sync"
 "Schedules a manual sync of offices and APS lockers from Pigeon Express API. Runs on the next cron tick (~1 min).","Schedules a manual sync of offices and APS lockers from Pigeon Express API. Runs on the next cron tick (~1 min)."
 Search...,Search...
-"Search APS (parcel locker)...","Search APS (parcel locker)..."
-"Search office...","Search office..."
 Select,Select
 "Select delivery location","Select delivery location"
 "Select product attribute used for package height (cm). If empty, a default value will be used.","Select product attribute used for package height (cm). If empty, a default value will be used."
@@ -240,7 +237,6 @@ Select,Select
 "Start typing","Start typing"
 "Start typing and choose from the list. The list is Pigeon Express's own, and villages often share a name, so the postal code is shown to tell them apart.","Start typing and choose from the list. The list is Pigeon Express's own, and villages often share a name, so the postal code is shown to tell them apart."
 "Start typing a town or a street and choose the counter from the list.","Start typing a town or a street and choose the counter from the list."
-"Start typing a town or city","Start typing a town or city"
 Status,Status
 Street,Street
 "Street (display)","Street (display)"
@@ -292,3 +288,12 @@ Type,Type
 "Width Attribute","Width Attribute"
 "With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's own lists instead of typing them. This is what stops a loosely typed street reaching the carrier, which is the usual cause of a parcel being delivered to a different address it already holds for that phone number. With No, Magento's standard address fields are used.","With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's own lists instead of typing them. This is what stops a loosely typed street reaching the carrier, which is the usual cause of a parcel being delivered to a different address it already holds for that phone number. With No, Magento's standard address fields are used."
 "Zebra ZPL, 300 dpi","Zebra ZPL, 300 dpi"
+"Selected:","Selected:"
+"Change","Change"
+"Looking...","Looking..."
+"Filter the offices","Filter the offices"
+"Filter the parcel lockers","Filter the parcel lockers"
+"%1 offices","%1 offices"
+"%1 parcel lockers","%1 parcel lockers"
+"%1 to choose from","%1 to choose from"
+"%1 of %2 match","%1 of %2 match"
