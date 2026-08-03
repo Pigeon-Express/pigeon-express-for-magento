@@ -1,13 +1,12 @@
 """%1"" is not a usable phone number. Check it with the customer.","""%1"" is not a usable phone number. Check it with the customer."
 "-- Not selected --","-- Not selected --"
 "-- Select pickup office --","-- Select pickup office --"
-"                        <strong>It does not change what the customer is charged at checkout.</strong> Pigeon Express quotes the same price either way"," so if you choose Receiver the courier collects the delivery charge on top of anything Magento has already billed. Set your shipping rate to zero for the affected delivery types"
 "<strong>You are responsible for taking every parcel to this office yourself.</strong> No courier will collect from your address while this option is selected. Choose the office you will actually deliver to, since it is also the origin used to calculate shipping rates.","<strong>You are responsible for taking every parcel to this office yourself.</strong> No courier will collect from your address while this option is selected. Choose the office you will actually deliver to, since it is also the origin used to calculate shipping rates."
 "A4 sheet","A4 sheet"
 "Additional Services","Additional Services"
 "Address (pickup from your address)","Address (pickup from your address)"
 "Address Delivery","Address Delivery"
-Apartment,Apartment
+"Apartment","Apartment"
 "API Key","API Key"
 "API Secret","API Secret"
 "API Setup","API Setup"
@@ -16,9 +15,9 @@ Apartment,Apartment
 "Asking Pigeon Express...","Asking Pigeon Express..."
 "Ask Pigeon Express what this shipment costs as described above","Ask Pigeon Express what this shipment costs as described above"
 "Black and grey","Black and grey"
-Block,Block
-Building,Building
-Cancelled,Cancelled
+"Block","Block"
+"Building","Building"
+"Cancelled","Cancelled"
 "Cancelled. Nothing is in transit for this order.","Cancelled. Nothing is in transit for this order."
 "Cancel Pigeon Express Shipment","Cancel Pigeon Express Shipment"
 "Cancel shipment","Cancel shipment"
@@ -31,7 +30,7 @@ Cancelled,Cancelled
 "Carrier name and availability.","Carrier name and availability."
 "Carrier Title","Carrier Title"
 "Cash on delivery value","Cash on delivery value"
-Change,Change
+"Change","Change"
 "Charged instead of asking the API for a price. Cleared automatically if Pricing Mode is switched back to Dynamic.","Charged instead of asking the API for a price. Cleared automatically if Pricing Mode is switched back to Dynamic."
 "Checkout Logo","Checkout Logo"
 "Check the details below, then send. They go on the waybill and are not saved back to the order.","Check the details below, then send. They go on the waybill and are not saved back to the order."
@@ -40,12 +39,12 @@ Change,Change
 "Choose a parcel locker from the list.","Choose a parcel locker from the list."
 "Choose a Pigeon Express office from the list.","Choose a Pigeon Express office from the list."
 "Choose from the list where you can. That attaches the street to the waybill exactly as Pigeon Express holds it. Typing it by hand still works, but the carrier may not recognise it.","Choose from the list where you can. That attaches the street to the waybill exactly as Pigeon Express holds it. Typing it by hand still works, but the carrier may not recognise it."
-City,City
+"City","City"
 "City (display)","City (display)"
 "City ID","City ID"
-cm,cm
+"cm","cm"
 "COD Payment Methods","COD Payment Methods"
-Comment,Comment
+"Comment","Comment"
 "Comment: %1","Comment: %1"
 "Could not cancel the Pigeon Express shipment. Check the log for details.","Could not cancel the Pigeon Express shipment. Check the log for details."
 "Could not load the Pigeon Express label. Check the log for details.","Could not load the Pigeon Express label. Check the log for details."
@@ -60,7 +59,7 @@ Comment,Comment
 "Default Length (cm)","Default Length (cm)"
 "Default Weight (kg)","Default Weight (kg)"
 "Default Width (cm)","Default Width (cm)"
-Delivered,Delivered
+"Delivered","Delivered"
 "Delivery (Pigeon Express)","Delivery (Pigeon Express)"
 "Delivery address","Delivery address"
 "Delivery instructions","Delivery instructions"
@@ -72,10 +71,10 @@ Delivered,Delivered
 "Digital Return Receipt","Digital Return Receipt"
 "Displayed Error Message","Displayed Error Message"
 "Door to door delivery to the address the customer enters.","Door to door delivery to the address the customer enters."
-Download,Download
+"Download","Download"
 "Dynamic (via API)","Dynamic (via API)"
-edit,edit
-Enable,Enable
+"edit","edit"
+"Enable","Enable"
 "Enable delivery to address.","Enable delivery to address."
 "Enable Logging / Error Handling","Enable Logging / Error Handling"
 "Enable or disable the Pigeon Express shipping carrier.","Enable or disable the Pigeon Express shipping carrier."
@@ -83,7 +82,7 @@ Enable,Enable
 "Enter a phone number. The courier calls the recipient before delivering.","Enter a phone number. The courier calls the recipient before delivering."
 "Enter a street. Without one the parcel cannot be delivered to an address.","Enter a street. Without one the parcel cannot be delivered to an address."
 "Enter the name of the person receiving the parcel.","Enter the name of the person receiving the parcel."
-Entrance,Entrance
+"Entrance","Entrance"
 "Every other limit is asked of Pigeon Express as parcels are priced, so this configuration does not repeat them. The locker compartment is the exception: the API accepts an oversized parcel without complaint and only the recipient finds out it will not go in. Leave any side at 0 to stop checking.","Every other limit is asked of Pigeon Express as parcels are priced, so this configuration does not repeat them. The locker compartment is the exception: the API accepts an oversized parcel without complaint and only the recipient finds out it will not go in. Leave any side at 0 to stop checking."
 "Failed to calculate Pigeon Express rate: %1","Failed to calculate Pigeon Express rate: %1"
 "Failed to cancel Pigeon Express shipment: %1","Failed to cancel Pigeon Express shipment: %1"
@@ -95,10 +94,10 @@ Entrance,Entrance
 "Failed to send shipment to Pigeon Express. Please check the logs.","Failed to send shipment to Pigeon Express. Please check the logs."
 "Fixed (flat rate override)","Fixed (flat rate override)"
 "Flat Rate Price","Flat Rate Price"
-Floor,Floor
+"Floor","Floor"
 "For the courier","For the courier"
 "Full colour","Full colour"
-General,General
+"General","General"
 "Height Attribute","Height Attribute"
 "How your parcels reach Pigeon Express: you take them to one of their offices, or a courier collects them from your address. This is also the origin used when calculating rates.","How your parcels reach Pigeon Express: you take them to one of their offices, or a courier collects them from your address. This is also the origin used when calculating rates."
 "ID Verification and Document Signature","ID Verification and Document Signature"
@@ -108,11 +107,11 @@ General,General
 "Insure the contents of every parcel. The sum insured is the value of the goods in the order, sent to Pigeon Express as declared_value. Pigeon Express sets the premium.","Insure the contents of every parcel. The sum insured is the value of the goods in the order, sent to Pigeon Express as declared_value. Pigeon Express sets the premium."
 "In transit","In transit"
 "Invalid order ID.","Invalid order ID."
-kg,kg
+"kg","kg"
 "Label shown at checkout for this delivery type.","Label shown at checkout for this delivery type."
 "Length Attribute","Length Attribute"
 "Let the recipient check the parcel before paying. &quot;Inspection only&quot; allows looking; &quot;Inspection and testing&quot; also allows trying the product. These are two separately priced Pigeon Express services and only one is ever requested. Not available for parcel locker delivery, where nobody is present.","Let the recipient check the parcel before paying. &quot;Inspection only&quot; allows looking; &quot;Inspection and testing&quot; also allows trying the product. These are two separately priced Pigeon Express services and only one is ever requested. Not available for parcel locker delivery, where nobody is present."
-Location,Location
+"Location","Location"
 "Location Autocomplete Results","Location Autocomplete Results"
 "Location Sync","Location Sync"
 "Location sync has been scheduled. It will run on the next cron tick (~1 min).","Location sync has been scheduled. It will run on the next cron tick (~1 min)."
@@ -126,18 +125,18 @@ Location,Location
 "Message shown when the method is unavailable.","Message shown when the method is unavailable."
 "More than one street in %1 is called %2. Pick the right one from the list, otherwise %3 is used.","More than one street in %1 is called %2. Pick the right one from the list, otherwise %3 is used."
 "New shipping fee","New shipping fee"
-No,No
-No.,No.
+"No","No"
+"No.","No."
 "No logo","No logo"
 "No order was specified.","No order was specified."
 "No street number. The courier may not be able to find the address.","No street number. The courier may not be able to find the address."
-Note,Note
+"Note","Note"
 "Note / Description","Note / Description"
 "Note for the courier","Note for the courier"
 "Nothing found","Nothing found"
 "Nothing here matches. Clear the filter to see them all.","Nothing here matches. Clear the filter to see them all."
-Number,Number
-Office,Office
+"Number","Number"
+"Office","Office"
 "Office (Pigeon Express office)","Office (Pigeon Express office)"
 "Office Delivery","Office Delivery"
 "Offices, lockers, cities and the service catalogue are refreshed nightly.","Offices, lockers, cities and the service catalogue are refreshed nightly."
@@ -162,7 +161,7 @@ Office,Office
 "Payment methods that trigger a cash on delivery fee. The fee itself is set by Pigeon Express and is read from the API for every quote, so it is not configurable here. It is added to the shipping cost.","Payment methods that trigger a cash on delivery fee. The fee itself is set by Pigeon Express and is read from the API for every quote, so it is not configurable here. It is added to the shipping cost."
 "PE city ID. Filled by autocomplete or enter manually.","PE city ID. Filled by autocomplete or enter manually."
 "PE street ID for selected city. Optional if using address line as additional_info.","PE street ID for selected city. Optional if using address line as additional_info."
-Phone,Phone
+"Phone","Phone"
 "Phone number is required for Pigeon Express delivery.","Phone number is required for Pigeon Express delivery."
 "Pickup address city is not configured.","Pickup address city is not configured."
 "Pickup Location","Pickup Location"
@@ -197,22 +196,22 @@ Phone,Phone
 "Print Pigeon Express Label","Print Pigeon Express Label"
 "Product dimensions (length/width/height) are not configured for this store.","Product dimensions (length/width/height) are not configured for this store."
 "Product Weight and Dimensions","Product Weight and Dimensions"
-Recalculate,Recalculate
+"Recalculate","Recalculate"
 "Receiver (the courier collects it on delivery)","Receiver (the courier collects it on delivery)"
-Recipient,Recipient
+"Recipient","Recipient"
 "Recipient Inspection","Recipient Inspection"
 "Recipient name","Recipient name"
 "Reference Number","Reference Number"
-Registered,Registered
+"Registered","Registered"
 "Request for a paper return receipt (at sender's expense).","Request for a paper return receipt (at sender's expense)."
 "Request for a return receipt in electronic format.","Request for a return receipt in electronic format."
 "Requires special packaging (requires_special_packaging). Enable only after Pigeon Express activates this service.","Requires special packaging (requires_special_packaging). Enable only after Pigeon Express activates this service."
-Returned,Returned
+"Returned","Returned"
 "Return of original documents from the recipient to the sender after signing.","Return of original documents from the recipient to the sender after signing."
 "Schedule Location Sync","Schedule Location Sync"
 "Schedules a manual sync of offices and APS lockers from Pigeon Express API. Runs on the next cron tick (~1 min).","Schedules a manual sync of offices and APS lockers from Pigeon Express API. Runs on the next cron tick (~1 min)."
-Search...,Search...
-Select,Select
+"Search...","Search..."
+"Select","Select"
 "Select delivery location","Select delivery location"
 "Select product attribute used for package height (cm). If empty, a default value will be used.","Select product attribute used for package height (cm). If empty, a default value will be used."
 "Select product attribute used for package length (cm). If empty, a default value will be used.","Select product attribute used for package length (cm). If empty, a default value will be used."
@@ -237,8 +236,8 @@ Select,Select
 "Start typing","Start typing"
 "Start typing and choose from the list. The list is Pigeon Express's own, and villages often share a name, so the postal code is shown to tell them apart.","Start typing and choose from the list. The list is Pigeon Express's own, and villages often share a name, so the postal code is shown to tell them apart."
 "Start typing a town or a street and choose the counter from the list.","Start typing a town or a street and choose the counter from the list."
-Status,Status
-Street,Street
+"Status","Status"
+"Street","Street"
 "Street (display)","Street (display)"
 "Street ID","Street ID"
 "Street list unavailable, type it by hand","Street list unavailable, type it by hand"
@@ -262,10 +261,10 @@ Street,Street
 "This shipment has already been cancelled.","This shipment has already been cancelled."
 "This shipment has no reference number, so it cannot be cancelled.","This shipment has no reference number, so it cannot be cancelled."
 "This shipment weighs %1 kg across %2 item(s). Pigeon Express carries at most %3 kg per parcel, and an item cannot be split between parcels. Send it in separate orders, or arrange it with Pigeon Express directly.","This shipment weighs %1 kg across %2 item(s). Pigeon Express carries at most %3 kg per parcel, and an item cannot be split between parcels. Send it in separate orders, or arrange it with Pigeon Express directly."
-Title,Title
+"Title","Title"
 "Too late to cancel here. Pigeon Express only allows it before the courier collects the parcel.","Too late to cancel here. Pigeon Express only allows it before the courier collects the parcel."
 "Tracking Number","Tracking Number"
-Type,Type
+"Type","Type"
 "Type: %1","Type: %1"
 "Unsupported delivery type ""%1"".","Unsupported delivery type ""%1""."
 "Used when a product has no height value. Set to 0 to hide shipping methods for products without dimensions.","Used when a product has no height value. Set to 0 to hide shipping methods for products without dimensions."
@@ -289,7 +288,6 @@ Type,Type
 "With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's own lists instead of typing them. This is what stops a loosely typed street reaching the carrier, which is the usual cause of a parcel being delivered to a different address it already holds for that phone number. With No, Magento's standard address fields are used.","With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's own lists instead of typing them. This is what stops a loosely typed street reaching the carrier, which is the usual cause of a parcel being delivered to a different address it already holds for that phone number. With No, Magento's standard address fields are used."
 "Zebra ZPL, 300 dpi","Zebra ZPL, 300 dpi"
 "Selected:","Selected:"
-"Change","Change"
 "Looking...","Looking..."
 "Filter the offices","Filter the offices"
 "Filter the parcel lockers","Filter the parcel lockers"
@@ -297,7 +295,6 @@ Type,Type
 "%1 parcel lockers","%1 parcel lockers"
 "%1 to choose from","%1 to choose from"
 "%1 of %2 match","%1 of %2 match"
-"Office","Office"
 "This is a required field.","This is a required field."
 "Who Pigeon Express invoices for the shipping. This can be changed per shipment on the order screen.<br/>
                         <strong>It does not change what the customer is charged at checkout.</strong> Pigeon Express quotes the same price either way, so if you choose Receiver the courier collects the delivery charge on top of anything Magento has already billed. Set your shipping rate to zero for the affected delivery types, or leave this on Sender.","Who Pigeon Express invoices for the shipping. This can be changed per shipment on the order screen.<br/>
