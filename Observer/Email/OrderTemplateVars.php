@@ -20,11 +20,6 @@ use PigeonExpress\Shipping\Model\OrderAddressLocationPersistor;
 class OrderTemplateVars implements ObserverInterface
 {
     /**
-     * @var ConfigInterface
-     */
-    private $config;
-
-    /**
      * @var OrderAddressLocationPersistor
      */
     private $locationPersistor;
@@ -35,11 +30,9 @@ class OrderTemplateVars implements ObserverInterface
     private $orderAddressExtensionFactory;
 
     public function __construct(
-        ConfigInterface $config,
         OrderAddressLocationPersistor $locationPersistor,
         OrderAddressExtensionInterfaceFactory $orderAddressExtensionFactory
     ) {
-        $this->config = $config;
         $this->locationPersistor = $locationPersistor;
         $this->orderAddressExtensionFactory = $orderAddressExtensionFactory;
     }
@@ -76,32 +69,45 @@ class OrderTemplateVars implements ObserverInterface
             return;
         }
 
-        $type = $ext->getPigeonexpressDeliveryType();
-        $storeId = $order->getStoreId() !== null ? (int) $order->getStoreId() : null;
-        $typeLabel = $type ? (string) $this->config->getDeliveryTypeTitle($type, $storeId) : '';
         $locationName = (string) ($ext->getPigeonexpressLocationName() ?? '');
         $locationAddress = (string) ($ext->getPigeonexpressLocationAddress() ?? '');
         $instructions = (string) ($ext->getPigeonexpressInstructions() ?? '');
 
-        $lines = [];
-        $lines[] = '<strong>' . $this->escape((string) __('Pigeon Express')) . '</strong>';
-        if ($typeLabel !== '') {
-            $lines[] = $this->escape((string) __('Type: %1', $typeLabel));
-        }
+        // Plain text, and no markup of our own.
+        //
+        // This is read back out with {{var shipping_msg}}, which escapes
+        // whatever it is given, in both strict and legacy template modes. Tags
+        // put here do not style the message, they are shown to the customer as
+        // the tags they are. There is nowhere in a stock template to put real
+        // markup without replacing the merchant's own email, which is the whole
+        // reason this goes through shipping_msg to begin with.
+        //
+        // Nor is it escaped here: the template does that, and doing it twice
+        // turns an ampersand in a street name into "&amp;".
+        $parts = [];
         if ($locationName !== '') {
-            $lines[] = $this->escape($locationName);
+            $parts[] = $locationName;
         }
         if ($locationAddress !== '') {
-            $lines[] = $this->escape($locationAddress);
+            $parts[] = $locationAddress;
         }
+
+        // The carrier and the delivery type are deliberately absent: Magento
+        // prints shipping_description directly above this, and that already
+        // reads "Pigeon Express - Office Delivery". Saying it again here is how
+        // the message came to be four lines long.
+        $message = implode(', ', $parts);
+
         if ($instructions !== '') {
-            $lines[] = $this->escape((string) __('Comment: %1', $instructions));
+            $comment = (string) __('Comment: %1', $instructions);
+            $message = $message === '' ? $comment : $message . '. ' . $comment;
         }
 
-        $html = '<p class="pigeonexpress-delivery-email">' . implode('<br/>', $lines) . '</p>';
+        $transport->setData('pigeonexpress_show', $message !== '');
 
-        $transport->setData('pigeonexpress_show', true);
-        $transport->setData('pigeonexpress_html', $html);
+        if ($message === '') {
+            return;
+        }
 
         // Magento's own order confirmation template renders shipping_msg right
         // below the shipping description, in every stock and customised variant.
@@ -109,15 +115,7 @@ class OrderTemplateVars implements ObserverInterface
         // merchant's email template, which is what the removed reflection plugin
         // used to do.
         $existing = (string) ($transport->getData('shipping_msg') ?? '');
-        $transport->setData('shipping_msg', $existing !== '' ? $existing . $html : $html);
-    }
-
-    /**
-     * Escape a value for inclusion in the email HTML.
-     */
-    private function escape(string $value): string
-    {
-        return htmlspecialchars($value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $transport->setData('shipping_msg', $existing !== '' ? $existing . ' ' . $message : $message);
     }
 
     /**
