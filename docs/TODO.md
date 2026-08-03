@@ -48,8 +48,8 @@ All P1 items are now closed. Notes on how a few were resolved:
 | 9 | Honour `option_group`. Services in the same group are mutually exclusive and the module can currently send two at once, which the API rejects | S | **Done** |
 | 10 | Use the stored `input_type` to decide which service codes carry a value, instead of the hardcoded assumption | S | **Done** |
 | 11 | Restrict services per delivery type. A locker cannot do ID verification or a paper receipt. WooCommerce models this, Magento does not | M | **Done** |
-| 12 | No label retrieval. `GET /v1/shipments/{ref}/label` is unused, so merchants cannot print from Magento | M | Deferred |
-| 13 | No cancellation. `POST /v1/shipments/{ref}/cancel` is unused | S | Deferred |
+| 12 | No label retrieval. `GET /v1/shipments/{ref}/label` is unused, so merchants cannot print from Magento | M | **Done** |
+| 13 | No cancellation. `POST /v1/shipments/{ref}/cancel` is unused | S | **Done** |
 | 14 | No tracking refresh. `GET /v1/shipments/{ref}/track` and the bulk variant are unused, and there is no tracking UI | M | Deferred |
 | 15 | No COD payout reconciliation. `GET /v1/payments/completed` is unused | M | Deferred |
 | 16 | No `external_reference` on created shipments. One line, and a prerequisite for reconciliation | S | Deferred |
@@ -77,9 +77,10 @@ paginate nor filter by type. Fixing the SDK removed the reason to bypass it.
 
 ## What is left
 
-Every P1, P2 and P3 item above is closed. The only work still outstanding is the
-courier operations set, which needs an admin surface the module does not have and
-so was deliberately deferred to its own release with a design pass:
+Every P1, P2 and P3 item above is closed, and label printing and cancellation
+have since been added. What remains of the courier operations set all depends on
+the same unresolved question: whether the module should create native Magento
+shipments instead of only its own records. See the note below the table.
 
 | # | Item | Effort |
 |---|------|--------|
@@ -99,6 +100,19 @@ Also still missing, and worth doing before those:
 - **`RateCollector::buildCalculatePayload()` is still untested.** It is the most
   important method in the module and it is private, large, and reaches into the
   checkout session. Extracting the payload assembly would make it testable.
+- **Native Magento shipments.** The module records its own `pigeonexpress_shipment`
+  row and never creates a `sales_shipment`, so the order's Shipments tab stays
+  empty, the customer sees no tracking in their account, no shipment email is
+  sent, the order never reaches Complete through shipping, and partial shipments
+  are impossible. Items 14 and 15 are hard to do well without this. It is the
+  single largest remaining integration gap.
+- **The customer still types their street freely at checkout.** The admin form
+  now catches a bad address before the waybill is created, but it catches it late
+  and only if somebody reads the screen. The city and street pickers already
+  exist as admin endpoints and could be offered at checkout, which would remove
+  the guesswork at source instead of correcting it afterwards. This is the
+  natural companion to the native shipments work below, and the two would share
+  the same lookups.
 - **Two services are mapped but unavailable.** `requires_special_packaging` and
   `sms_notification_receiver` are not in the account catalogue, so they are
   skipped and logged, and the admin panel now says so. Either ask Pigeon Express

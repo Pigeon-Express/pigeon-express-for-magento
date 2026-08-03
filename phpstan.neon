@@ -26,6 +26,10 @@ parameters:
     bootstrapFiles:
         - ../../../../vendor/autoload.php
     treatPhpDocTypesAsCertain: false
+    # Whether the Factory rule below matches depends on whether generated/code
+    # happens to exist, which differs between a CI checkout and a live install.
+    # Without this the build goes red for the wrong reason.
+    reportUnmatchedIgnoredErrors: false
     ignoreErrors:
         # Magento generates *Factory and *\Interceptor classes at build time, so
         # they do not exist as source files for the analyser to read.

@@ -35,6 +35,7 @@ On order placement `Observer\Sales\OrderPlaceAfter` hands off to
 |-------|-------------|
 | Carrier and rating | `Model/Carrier/PigeonExpress.php`, `Model/Rate/RateCollector.php`, `Model/Rate/LocationToApiIdResolver.php` |
 | API clients | `Model/Api/RateClient.php`, `LocationsClient.php`, `AdditionalServicesClient.php`, `ShipmentClient.php`, `AddressResolver.php`. All go through the SDK |
+| Shipment form | `Model/Shipment/AddressForm.php` decides what is good enough to ship. `Model/Api/AddressResolver.php` answers the lookups it asks. `Controller/Adminhtml/Order/CitySearch.php` and `StreetSearch.php` serve the pickers |
 | Pricing of services | `Model/Service/CodFeeResolver.php`, `Model/Service/ServiceCodesBuilder.php`, `Model/Total/Quote/CodFee.php`, `Model/AdditionalServiceRepository.php` |
 | Package geometry | `Model/Package/PackageBuilder.php`, the only place weight, dimensions and parcel splitting are decided |
 | Persistence | `etc/db_schema.xml`, `Model/ResourceModel/*` |

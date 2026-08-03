@@ -9,6 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The office and locker search could never match on a city name.** The filter
+  read a column the location sync never writes, so it only ever appeared to work
+  because the city name happens to sit inside the free-text address. It reads the
+  joined city table now.
+- **A carrier that could not be reached offered free shipping.** Any failure to
+  price a delivery type fell back to its flat rate, and a store on dynamic
+  pricing keeps no flat rate: the field is hidden and cleared on save, so it is
+  always zero. An API outage, an unconfigured pickup office, a parcel with no
+  tariff, all of them quoted 0.00 and sold the delivery for nothing, silently. A
+  delivery type that cannot be priced is now hidden instead, and the flat rate is
+  used only where one is actually set.
+- **The check that hides a method for missing dimensions never fired in a
+  translated admin.** It matched on the text of its own error message, so it
+  worked in English and nowhere else. On a Bulgarian store the parcel locker
+  method was quoted at 0.00 instead of being hidden whenever a product had no
+  dimensions. It is a distinct exception type now, and the text is irrelevant.
+- **Every label download failed.** Preview worked, but choosing any format from
+  the download menu, and ZPL by any route, bounced back to the order screen with
+  "Could not load the Pigeon Express label". The helper used to send the file
+  returns a response object where the controller declares a result object, so the
+  type error was caught by the surrounding handler and reported as an API
+  problem. Labels are now streamed directly, which also stops a copy of every one
+  being written into var/ on the way past. Each format arrives under its own
+  filename, so downloading two of them no longer produces a file and a copy.
+- **Parcel limits are no longer written into the module at all.** One figure was
+  applied to everything: 30 kg per parcel and 200 cm on every axis. A 35 kg cart
+  was therefore declared as two parcels and priced as two, which the customer
+  paid for, and a 220 cm parcel was declared 20 cm shorter than it is. The limits
+  are now learned from Pigeon Express and remembered: a refusal names the limit it
+  refused on, and a parcel that prices proves the ceiling is at least that high. A
+  tariff written above today's ceiling, or the 250 cm rule being dropped, is
+  picked up on the next quote without a release.
+- **A parcel too big for a locker is now refused instead of resized.** The API
+  does not check the compartment, so an oversized parcel was accepted, dispatched,
+  and would not go in. It is measured as a box rather than axis by axis, because a
+  parcel can be turned round.
+- One waybill is capped at ten parcels, which is what Pigeon Express allows. Past
+  that the order is refused with a notice saying how many parcels it needs, rather
+  than being split across two reference numbers.
+- A parcel the carrier will not take now says so at checkout instead of the
+  delivery method quietly disappearing from the list.
+- **One heavy item could be declared as two parcels.** Splitting was pure
+  arithmetic, so a single 41 kg item became two of 20.5 kg. Nobody can hand the
+  courier half an item, and the waybill promised two parcels where one would
+  arrive. Splitting is now bounded by how many items there are, and where a single
+  item exceeds the carrier limit the shipment is refused with an explanation
+  rather than invented. Checkout hides the method instead of quoting for it.
+- **A waybill's weight came from the catalogue, not from the order.** Editing a
+  product's weight retroactively changed what past orders said they weighed, so
+  an order placed at 1 kg could be sent to the carrier as 41 kg. Shipments now use
+  the weight recorded on the order. Rating still reads the catalogue, because a
+  cart is live.
 - **Cash on delivery was overcharged.** The fee was hardcoded at 2.5 percent of
   the subtotal with a 0.80 minimum, while Pigeon Express charges 1.5 percent. On
   top of that the fee was applied twice: once by the API inside the quoted
@@ -25,6 +77,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first product that happened to have dimensions and declared a single parcel
   with a fallback of 10x10x10 cm. Both now use the same rules, and the rules are
   the ones rating already used, so existing quotes keep their prices.
+- **Deliveries could go to the wrong address.** Pigeon Express identifies a
+  recipient by phone number, and replaces an address it cannot resolve with
+  whatever it already holds for that number. The module made that likely: it
+  searched for streets using the prefix the customer typed ("ул. Витоша"), while
+  the carrier stores the bare name ("ВИТОША") with the type in a separate field,
+  so the match almost always failed on real orders. The address then travelled as
+  a free text note and the carrier substituted its own. Street prefixes are now
+  stripped before lookup, the street is also sent by name, the recipient is named
+  on the address itself, and block, entrance, floor and apartment are sent as
+  structured fields instead of being buried in a note.
 - **Tax inclusive shipping understated the charge.** The fee was added after the
   tax pass and never reached `shipping_incl_tax`, so any tax inclusive display of
   shipping was short by the fee.
@@ -47,6 +109,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already stored, instead of deactivating most of the merchant's pickup points.
 
 ### Added
+
+- **A shipment form on the order screen, instead of a single Send button.** The
+  recipient, phone, city, street, number, block, entrance, floor, apartment,
+  postal code and courier note are laid out as ordinary fields, filled in from
+  the order, and anything that will not do is marked with the reason. The city
+  and street fields search Pigeon Express as you type, so choosing from the list
+  attaches the carrier's own identifier and there is nothing to guess at. An
+  admin who has just phoned the customer can correct the address and send.
+  Corrections apply to that shipment only and never overwrite what the customer
+  entered. A rejected form comes back with the values still in it.
+- Where two streets in a city share a name, which happens in София, the type the
+  customer wrote decides between them, and where it cannot, the form says so
+  rather than picking one.
+- **A parcel can be redirected when the customer rings up.** The delivery type is
+  the first control on the shipment form, so an order placed for home delivery
+  can be sent to an office or a parcel locker instead. The address fields give way
+  to a picker for the counter, searched against the same synced list checkout
+  uses. The order keeps what the customer chose and was charged; only the waybill
+  changes.
+- **Who pays the shipping** is now a setting rather than always the sender, both
+  as a store default and per shipment on the order form. It defaults to Receiver.
+  Note that Pigeon Express quotes the same price either way and Magento still
+  charges whatever the shipping rate says, so with Receiver the courier collects
+  the delivery charge on top of anything already billed. A store that does not
+  want that should zero its own rate for the affected delivery types, or set this
+  to Sender.
+- **Checkout asks for the address the way the carrier holds it.** With Override
+  Address Fields on, which is the default, a customer choosing address delivery
+  picks their city and street from Pigeon Express's own lists rather than typing
+  them, with optional block, entrance, floor and apartment. The real values are
+  written into Magento's own address fields rather than replacing them, so tax,
+  invoices, emails and the address book all still read the same address the
+  waybill will. Set it to No for Magento's standard fields.
+- **Offices and lockers are chosen by city first.** One search box across the
+  whole country either buried the right counter or hid it behind a result limit:
+  Sofia alone has 43 offices and 84 lockers. Now the city comes first, offering
+  only cities that actually have somewhere to collect from, and then every pickup
+  point in that city, filterable but never truncated.
+- A carrier logo can be shown beside the methods at checkout, chosen from the
+  four Pigeon Express supplies. No logo by default. The two drawn in white say so
+  in the setting, and get a dark plate behind them so they are not invisible.
+- The form ends with a summary of what actually goes on the waybill: parcel
+  weight, dimensions and piece count by the same rules used for rating, the
+  amount the courier is to collect, and the shipping fee.
+- **Recalculate** asks Pigeon Express what the carriage costs for the destination
+  currently on the form. The existing fee is relabelled as the old one and the
+  new figure is added beneath it, rather than replacing it. Redirecting a parcel
+  changes one and not the other, and that difference is the thing worth seeing.
+  It saves nothing and changes no total.
+- The label can be downloaded in any of the four formats Pigeon Express produces:
+  its default, thermal 100 x 150 mm, an A4 sheet, and Zebra ZPL for a thermal
+  printer. Preview stays a single click on the default one.
+- A cancelled waybill is struck through in the shipment list rather than being
+  distinguishable only by reading its status.
 
 - Additional services catalogue, synced nightly from the API alongside offices,
   lockers and cities, and stored with the last fee the API charged for each
@@ -72,6 +188,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The Pickup Location section now states plainly that choosing an office means
   you take your parcels to that office yourself, since no courier collects from
   your address in that mode.
+- Shipments can be cancelled from the order screen while Pigeon Express still
+  allows it, which is before the courier collects the parcel. Once collected the
+  button is replaced by an explanation, rather than failing at the API.
+- After a cancellation the order can be shipped again. A new waybill is created
+  alongside the cancelled one rather than replacing it, so the order screen shows
+  both and nothing is lost from the record.
+- The shipping label can be opened from the order screen and printed or saved
+  from the browser. It is fetched on demand rather than stored, so it is always
+  the current one.
 - Quoted prices are cached briefly, which removes the repeated identical API
   calls Magento's checkout previously made on every totals recalculation.
 - Unit test suite and static analysis.

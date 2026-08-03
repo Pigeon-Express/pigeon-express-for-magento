@@ -305,6 +305,34 @@ house number.
 **Fail if:** the log shows the street was not found, or `additional_info` is sent
 instead of `street_id`. Before this release large cities always failed.
 
+### E1b. The address on the label matches the order · P1, critical
+
+This is the defect that sent parcels to the wrong place.
+
+**Path:** place an **Address Delivery** order with a full Bulgarian address, for
+example city `София`, street `ул. Витоша 15`, plus a second street line
+`бл. 5, вх. А, ет. 3, ап. 12`. Send it, then read the payload in the log.
+
+**Expect** in `delivery_address`:
+
+- `street_id` present, a real number, **not** just `street_name`
+- `street_name` without the `ул.` prefix
+- `street_number`, and `building_number`, `entrance`, `floor`, `apartment`
+  each in their own field
+- `contact_name` and `contact_phone` matching the order's shipping address
+- `additional_info` holding the address as the customer typed it
+
+**Then open the label** and confirm the printed address is the customer's, not a
+different one.
+
+**Fail if:** `street_id` is missing for a street that exists, or the label shows an
+address that is not the one on the order. Both mean the carrier resolved the
+destination from the phone number instead.
+
+**Also test a deliberately wrong street**, for example `ул. Несъществуваща 999`.
+It must still be accepted, fall back to `street_name`, and log a warning that the
+street was not matched. The label should be verified before dispatch in that case.
+
 ### E2. Other large cities · P2
 
 **Repeat E1** with `Пловдив`, `Варна` and `Бургас`, using a well known street in
@@ -320,6 +348,223 @@ instead of an id. It must not error or hide the method.
 ---
 
 ## 8. Order placement and waybill
+
+### F0. The shipment form is filled in from the order · P1
+
+**Path:** place an **Address Delivery** order, do not send it, open
+`Sales > Orders >` the order.
+
+**Expect:** a **Create Pigeon Express Shipment** panel, already filled in, laid
+out two fields to a row:
+
+```
+Delivery type   [ Address Delivery ▾ ]
+─────────────────────────────────────
+Recipient name        | Phone
+City                  | Postal code
+Street        (wider) | No.
+Block  Entrance  Floor  Apartment
+Note for the courier
+─────────────────────────────────────
+[ Send to Pigeon Express ]   Delivery 24,47 €
+```
+
+The panel is boxed and capped in width rather than stretched across the screen,
+and drops to one field per row on a narrow window. The block, floor and apartment
+must be in their own boxes even when the customer typed the whole address on one
+line. The `?` icons sit on the same line as their label and open an explanation
+on hover.
+
+**Exactly four fields carry the red required asterisk:** Name, Phone, City and
+Street. Street number, postal code, the building boxes and the note must not.
+Those four are the only ones that stop a shipment being created.
+
+**There is no separate "Delivery (Pigeon Express)" section any more.** The type
+is the first control on the form and the price sits beside the Send button.
+
+**Fail if:** the panel is missing, the form is empty, the alignment is ragged, or
+it shows database ids anywhere. An admin should never see the word "id" on this
+screen.
+
+### F0a. Redirecting a parcel · P1
+
+**Path:** on an address-delivery order, change **Delivery type** to
+`Office Delivery`.
+
+**Expect:** the city, street, number, building and postal code fields disappear
+and a single **Pigeon Express office** field takes their place. Typing a town
+lists offices with their addresses. Choosing one and sending creates the waybill
+as an office delivery.
+
+**Then check the log:** the payload carries `delivery_office_id` and no
+`delivery_address` at all.
+
+**Then switch to** `APS (Parcel Locker)`: the field relabels to **Parcel
+locker**, and any office already chosen is cleared, because the two lists are
+different.
+
+**Then switch back to** `Address Delivery`: the address fields return, filled in
+as before, and the chosen office is dropped.
+
+**Also check the order itself is unchanged.** Redirecting a parcel changes the
+waybill only. What the customer chose and was charged stays on the order.
+
+**Fail if:** an office and a street address are ever sent together, or the order's
+own delivery type changes.
+
+### F0a1. Weight limits · P1, money
+
+**Path:** an order whose total weight is under 40 kg, then one over it.
+
+**Expect:** the module holds no limits of its own. It asks Pigeon Express, and
+remembers the answers, so these figures are what the carrier currently says
+rather than anything configured:
+
+| | Address | Office | Locker |
+|---|---|---|---|
+| Weight per parcel | 40 kg | 40 kg | 30 kg |
+| Size per parcel | 250 x 180 x 150 cm | same | not checked by the API |
+
+There is **no limit on what an order may weigh in total**. A heavy order to an
+address or an office simply becomes more parcels, up to **ten on one waybill**.
+
+**Past ten parcels the order is refused rather than split across two waybills.**
+On the order screen the summary is replaced by a notice naming how many parcels
+it needs; at checkout the method is replaced by the same notice instead of
+silently disappearing. Splitting one order across two reference numbers is
+deliberately not automated: half of it failing leaves a worse mess than being
+told to split the order by hand.
+
+Up to 40 kg travels as a single parcel to an address, so 30 to 40 kg must not be
+split. The same weight to a locker is refused.
+
+**The one limit the module owns** is the locker compartment, at
+**[CONFIG] > General > Locker Compartment Width / Height / Depth**, default
+61 x 37 x 44 cm. The API accepts an oversized parcel to a locker without
+complaint, so only this stops it. Set any side to 0 to turn the check off.
+
+**When Pigeon Express changes a limit, nothing needs releasing.** Ask the
+developer to check `var/log/pigeonexpress.log` for "Carrier limits updated" after
+a parcel is refused; the new figure is taken from the refusal itself.
+
+**Then a single item weighing more than 40 kg:** the method must not be offered
+at checkout, and on the order screen the summary is replaced by a message saying
+the item cannot be split between parcels. It must **not** be declared as two.
+
+**Fail if:** a one item order ever shows more than one package piece. Weight
+divides on paper, objects do not.
+
+### F0a2. The shipment summary · P1, money
+
+**Path:** look under the buttons.
+
+**Expect:** what is actually going on the waybill, one row each:
+
+```
+Package weight            41.00 kg
+Package dimensions        30 × 20 × 15 cm
+Package pieces            2
+Cash on delivery value    100,00 €
+Shipping fee              24,47 €
+```
+
+Weight, size and count must match the parcels the waybill declares, including
+the split at 30 kg: a heavy order shows more than one piece. Cash on delivery
+appears only on a cash order.
+
+**Fail if:** any figure renders as visible markup such as
+`<span class="price">`.
+
+### F0a3. Recalculate · P1, money
+
+**Path:** press **Recalculate** beside the Send button.
+
+**Expect:** the Shipping fee row relabels to **Old shipping fee** and a **New
+shipping fee** row appears beneath it. Redirect the parcel to an office and press
+it again: the new figure changes, because carrying a parcel to a counter costs
+less than carrying it to a door.
+
+The two rows are deliberately kept apart. The old one is what was charged at
+checkout and never moves. The new one is what the carriage costs now, for the
+destination currently on the form.
+
+**Then clear the Phone field and press Recalculate:** it must report what to fix
+rather than a price.
+
+**Fail if:** pressing it changes the order total, the shipping amount, or
+anything else that is saved. It only asks a question.
+
+**Fail if:** the quoted figure includes the cash on delivery fee. That fee is
+charged to the customer through the order, not to the merchant through carriage.
+
+### F0b. The city picker · P1
+
+**Path:** clear the City field and type `Соф`.
+
+**Expect:** a list appears within a moment. **София (1000)** is the first entry,
+not a village with a similar name. Choosing it fills the postal code from the
+carrier's own data and clears the street.
+
+**Then pick a different city:** the postal code follows it. A code left over from
+the previous town is worse than none, and the code is exactly what tells two
+villages of the same name apart.
+
+**Fail if:** nothing appears, or large cities are buried under similarly named
+villages.
+
+### F0c. The street picker · P1
+
+**Path:** with a city chosen, type the first few letters of a street.
+
+**Expect:** streets from that city, with their type shown, and the one you typed
+at the top of the list. Choosing one fills the field.
+
+**Then clear the City field and try again:** the list must say **Choose a city
+first** rather than returning nothing.
+
+### F0d. A street the carrier does not know is flagged · P1
+
+**Path:** type a street that does not exist, for example `Несъществуваща`, into
+the Street field of an order in София, and send.
+
+**Expect:** the send is refused and the Street field is outlined with a message
+saying the street is not in the Pigeon Express list and that the carrier may
+deliver to another address it already holds for this phone number. Typing a real
+street and sending again succeeds.
+
+Note the shipment is not *blocked* by this: it is a warning, and pressing Send a
+second time without changing anything goes through. What must not happen is it
+going out silently on the first press with no warning shown.
+
+### F0e. Two streets with the same name · P2
+
+**Path:** on an order to София, type `Витоша` in the Street field and send.
+
+**Expect:** a message that more than one street in София is called ВИТОША, naming
+which one will be used. Picking `булевард ВИТОША` from the list clears it.
+
+**Why:** София has a квартал and a булевард both called ВИТОША, in different
+parts of the city.
+
+### F0f. Missing details stop the send · P1
+
+**Path:** clear the Phone field and press Send. Then set it to `12345` and press
+Send again.
+
+**Expect:** both are refused with the Phone field outlined in red, and nothing is
+sent to Pigeon Express. The rest of what you typed is still on the form
+afterwards.
+
+**Fail if:** the form resets and your corrections are lost, or the send reaches
+the API and fails there. The point is to catch it before the call.
+
+### F0g. Corrections do not touch the order · P1
+
+**Path:** correct the address on the form, send, then look at the order's
+shipping address.
+
+**Expect:** the shipment carries what you typed, and the order still shows what
+the customer entered. The original address stays on record for disputes.
 
 ### F1. Waybill payload shape · P1, money
 
@@ -386,6 +631,99 @@ insured, so it must not be included.
 
 **Then:** set Insurance back to No, place another order, and confirm
 `declared_value` is absent entirely.
+
+### F6b. Label preview · P1
+
+**Path:** on a sent order, `Sales > Orders >` open it, Pigeon Express Shipment
+section > **Preview Label**.
+
+**Expect:** a new tab showing the label as a PDF. It must be printable and
+saveable from the browser's own PDF viewer.
+
+**Fail if:** the tab shows an error, a download prompt for an unknown file type,
+or raw text instead of a PDF.
+
+The actions sit on the right of the shipment panel: **Preview Label**,
+**Download** with a format menu, and **Cancel Shipment**.
+
+### F6b2. Label formats · P1
+
+**Path:** click the arrow beside **Download** and take each of the four in turn.
+
+**Expect:** every one downloads a file: default, thermal 100 x 150 mm, A4 sheet,
+and Zebra ZPL at 300 dpi. Each arrives under its own name, so downloading two of
+them for one shipment gives two files rather than a file and a copy:
+
+```
+458465909663.pdf
+458465909663-100x150.pdf
+458465909663-a4.pdf
+458465909663.zpl
+```
+
+The menu closes on a second click, on a click elsewhere, and on Escape.
+
+**Fail if:** any format bounces back to the order screen with "Could not load the
+Pigeon Express label". Every download did that before this release.
+
+**Fail if:** ZPL opens in the browser instead of downloading. It is a printer
+program, not a document.
+
+### F6b3. Who pays the shipping · P1, money
+
+**Path:** `Stores > Configuration > Sales > Delivery Methods > Pigeon Express >
+General > Who Pays the Shipping`. It ships set to **Receiver**.
+
+**Expect:** orders show **Receiver** preselected on the shipment form, and the
+created waybill carries `"who_pays":"receiver"` in the log.
+
+**Then change it to Sender on one order's form only:** that waybill goes out as
+sender while the store setting stays on receiver. The form wins for that
+shipment; the setting is only the default.
+
+**Read this before testing:** Pigeon Express quotes the **same price either way**,
+and Magento still charges the customer whatever the shipping rate says. Setting
+Receiver does not make delivery free at checkout, it means the courier collects
+the delivery charge on top. A store that wants receiver-pays has to zero its own
+shipping rate for the affected delivery types as well.
+
+**Fail if:** switching this changes the price Recalculate reports. It should not.
+
+### F6c. Cancel a shipment · P1
+
+**Path:** on a freshly sent order, same section > **Cancel Shipment**.
+
+**Expect:** a confirmation dialog first. On confirming, a success message naming
+the reference number, and the row for that waybill now reads **Cancelled**,
+greyed and **struck through**, so it is void at a glance rather than only in one
+word of a status column. The label and cancel actions are gone.
+
+**Then:** try to cancel again. It must be refused, not silently repeated.
+
+**Also:** confirm in the Pigeon Express demo portal that the shipment really is
+cancelled, not just marked so locally.
+
+### F6d. An order can be shipped again after cancelling · P1
+
+**Path:** cancel a shipment (F6c), then stay on the order screen.
+
+**Expect:** the shipment table still lists the cancelled waybill, greyed, and
+below it a message saying the order has nothing in transit plus a
+**Create New Shipment** button.
+
+**Then:** click it. A second waybill is created with a **different reference
+number**. The table now lists both, newest first, and the Preview Label and
+Cancel Shipment actions apply to the new one.
+
+**Fail if:** the button is missing, or the order cannot be shipped again, or the
+old reference number is reused, or the cancelled row disappears.
+
+### F6e. Cancelling a collected shipment is refused · P2
+
+Developer assisted, since it needs a shipment past `shipment_registered`.
+
+**Expect:** the Cancel button is absent and the explanatory note is shown
+instead. The module must not offer an action the API will reject.
 
 ### F6. Double send is refused · P2
 

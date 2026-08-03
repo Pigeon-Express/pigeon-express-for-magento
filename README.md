@@ -308,7 +308,7 @@ Could not resolve delivery location to API id
 2. For **Office** or **APS** delivery, an autocomplete input appears to search and select a location
 3. Selected location is saved to the quote and persisted to the order
 4. Location details are included in the order confirmation email
-5. Admin opens the order and clicks **"Send to Pigeon Express"** to dispatch the shipment to the PE API
+5. Admin opens the order, checks the shipment form, and sends it to Pigeon Express
 6. A shipment record is created with reference number, tracking number, and full API payload/response
 
 ---
@@ -320,10 +320,22 @@ After an order is placed, the admin can send it to the Pigeon Express API to cre
 ### Sending an order
 
 1. Open the order in **Sales → Orders → [order]**
-2. Click **"Send to Pigeon Express"** in the Pigeon Express delivery info block
-3. The module calls the PE API, creates a shipment, and stores the result
-4. On success: reference number, tracking number, and delivery price are displayed in the order view
-5. On error: an error message is shown, check `var/log/pigeonexpress.log` for details
+2. Check the **Create Pigeon Express Shipment** form. It is filled in from the
+   order, and anything that will not do is marked with the reason
+3. Correct anything that needs it. The City and Street fields search Pigeon
+   Express as you type; choosing from the list is what attaches the carrier's own
+   identifier to the waybill
+4. Press **Send to Pigeon Express**
+5. On success: reference number, tracking number, and delivery price are displayed in the order view
+6. On error: the form comes back with your values and the reason, and nothing was sent
+
+Corrections apply to that shipment only. The order keeps the address the customer
+entered, so it stays on record if the delivery is later disputed.
+
+This matters more than it looks. Pigeon Express identifies a recipient by phone
+number, and an address block it cannot resolve is quietly replaced with whatever
+address it already holds for that number, so the parcel goes elsewhere while the
+label reads correctly.
 
 The shipment data (API request payload and response) is stored in `pigeonexpress_shipment` for audit purposes.
 
