@@ -14,6 +14,14 @@
                                   title="Send Pigeon Express Shipment"
                                   translate="title"
                                   sortOrder="100" />
+                        <resource id="PigeonExpress_Shipping::cancel_shipment"
+                                  title="Cancel Pigeon Express Shipment"
+                                  translate="title"
+                                  sortOrder="110" />
+                        <resource id="PigeonExpress_Shipping::print_label"
+                                  title="Print Pigeon Express Label"
+                                  translate="title"
+                                  sortOrder="120" />
                     </resource>
                 </resource>
                 <resource id="Magento_Backend::stores">

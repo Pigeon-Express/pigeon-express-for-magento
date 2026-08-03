@@ -1,80 +1,463 @@
 <?php
 /**
- * Admin order view: Pigeon Express delivery details.
+ * Admin order view: the Pigeon Express shipment panel and the form that creates it.
+ *
  * @var \PigeonExpress\Shipping\Block\Delivery\Info $block
  * @var \Magento\Framework\Escaper $escaper
  */
+
+/**
+ * A help bubble beside a label.
+ */
+$peHelp = function (string $text) use ($escaper) {
+    if ($text === '') {
+        return '';
+    }
+
+    return '<span class="admin__field-tooltip">'
+        . '<a class="admin__field-tooltip-action action-help"><span>'
+        . $escaper->escapeHtml(__('What is this?')) . '</span></a>'
+        . '<span class="admin__field-tooltip-content">' . $escaper->escapeHtml($text) . '</span>'
+        . '</span>';
+};
+
+/**
+ * One field of the form, laid out with its label above the control so two can
+ * sit side by side.
+ *
+ * A field that failed a check is outlined and carries the reason underneath:
+ * boxed and red when it stops the shipment, plain amber when it only risks a
+ * misdelivery. Required is Magento's own asterisk, which is why the label stays
+ * a direct child of the field.
+ *
+ * @param string $name    Form field name, also the id suffix
+ * @param string $label   What the admin reads
+ * @param int    $span    Width in twelfths of the form
+ * @param array  $options required, tooltip, textarea, group, attributes
+ */
+$peField = function (string $name, string $label, int $span = 6, array $options = []) use ($block, $escaper, $peHelp) {
+    $required = !empty($options['required']);
+    $blocking = $block->isFieldInvalid($name);
+    $message = $block->getFieldMessage($name);
+    $id = 'pe_' . $name;
+
+    $state = $blocking ? ' _error' : ($block->isFieldQuestionable($name) ? ' _warn' : '');
+    $group = isset($options['group'])
+        ? ' data-pe-group="' . $escaper->escapeHtmlAttr($options['group']) . '"'
+        : '';
+
+    $attributes = '';
+    foreach (($options['attributes'] ?? []) as $key => $value) {
+        $attributes .= ' ' . $escaper->escapeHtmlAttr($key) . '="' . $escaper->escapeHtmlAttr($value) . '"';
+    }
+
+    $control = !empty($options['textarea'])
+        ? '<textarea class="admin__control-textarea" rows="2" id="' . $escaper->escapeHtmlAttr($id) . '"'
+            . ' name="pe[' . $escaper->escapeHtmlAttr($name) . ']"' . $attributes . '>'
+            . $escaper->escapeHtml($block->getFieldValue($name)) . '</textarea>'
+        : '<input type="text" class="admin__control-text" id="' . $escaper->escapeHtmlAttr($id) . '"'
+            . ' name="pe[' . $escaper->escapeHtmlAttr($name) . ']"'
+            . ' value="' . $escaper->escapeHtmlAttr($block->getFieldValue($name)) . '"' . $attributes . '/>';
+
+    if ($message === '') {
+        $note = '';
+    } elseif ($blocking) {
+        $note = '<div class="admin__field-error pe-message">' . $escaper->escapeHtml($message) . '</div>';
+    } else {
+        $note = '<div class="admin__field-note pe-message _warn">' . $escaper->escapeHtml($message) . '</div>';
+    }
+
+    return '<div class="admin__field pe-span-' . (int) $span . ($required ? ' _required' : '') . $state . '"'
+        . $group . '>'
+        . '<span class="pe-label-row">'
+        . '<label class="admin__field-label" for="' . $escaper->escapeHtmlAttr($id) . '">'
+        . '<span>' . $escaper->escapeHtml($label) . '</span></label>'
+        . $peHelp((string) ($options['tooltip'] ?? ''))
+        . '</span>'
+        . '<div class="admin__field-control">' . $control . $note . '</div>'
+        . '</div>';
+};
+
+/**
+ * One of the small boxes in the building row.
+ */
+$peSubField = function (string $name, string $label) use ($block, $escaper) {
+    $id = 'pe_' . $name;
+
+    return '<span class="pe-subfield">'
+        . '<label for="' . $escaper->escapeHtmlAttr($id) . '">' . $escaper->escapeHtml($label) . '</label>'
+        . '<input type="text" class="admin__control-text" id="' . $escaper->escapeHtmlAttr($id) . '"'
+        . ' name="pe[' . $escaper->escapeHtmlAttr($name) . ']"'
+        . ' value="' . $escaper->escapeHtmlAttr($block->getFieldValue($name)) . '"/>'
+        . '</span>';
+};
 ?>
 <?php if ($block->isPigeonExpress()) : ?>
-<section class="admin__page-section pigeonexpress-delivery-info">
-    <div class="admin__page-section-title">
-        <span class="title"><?= $escaper->escapeHtml(__('Delivery (Pigeon Express)')) ?></span>
-    </div>
-    <div class="admin__page-section-content">
-        <table class="admin__table-secondary order-information-table">
-            <tr>
-                <th><?= $escaper->escapeHtml(__('Delivery Type')) ?></th>
-                <td><?= $escaper->escapeHtml($block->getDeliveryTypeLabel()) ?></td>
-            </tr>
-            <?php if ($block->getLocationName() !== '' || $block->getLocationAddress() !== '') : ?>
-            <tr>
-                <th><?= $escaper->escapeHtml(__('Location')) ?></th>
-                <td>
-                    <?php if ($block->getLocationName() !== '') : ?>
-                        <strong><?= $escaper->escapeHtml($block->getLocationName()) ?></strong>
-                        <?php if ($block->getLocationAddress() !== '') : ?><br/><?php endif; ?>
-                    <?php endif; ?>
-                    <?= $escaper->escapeHtml(nl2br((string)$block->getLocationAddress()), ['br']) ?>
-                </td>
-            </tr>
-            <?php endif; ?>
-            <?php if ($block->getFormattedDeliveryPrice() !== '') : ?>
-            <tr>
-                <th><?= $escaper->escapeHtml(__('Delivery Price')) ?></th>
-                <td><?= /* @noEscape — formatPrice() returns trusted Magento HTML (currency span) */ $block->getFormattedDeliveryPrice() ?></td>
-            </tr>
-            <?php endif; ?>
-        </table>
-    </div>
-</section>
-
-<?php $existingShipment = $block->getExistingShipment(); ?>
-<?php if ($existingShipment) : ?>
+<?php $shipments = $block->getShipmentHistory(); ?>
+<?php if ($shipments) : ?>
 <section class="admin__page-section pigeonexpress-shipment-info">
     <div class="admin__page-section-title">
         <span class="title"><?= $escaper->escapeHtml(__('Pigeon Express Shipment')) ?></span>
     </div>
     <div class="admin__page-section-content">
-        <table class="admin__table-secondary">
-            <tr>
-                <th><?= $escaper->escapeHtml(__('Reference Number')) ?></th>
-                <td><?= $escaper->escapeHtml($existingShipment->getReferenceNumber()) ?></td>
-            </tr>
-            <?php if ($existingShipment->getTrackingNumber()) : ?>
-            <tr>
-                <th><?= $escaper->escapeHtml(__('Tracking Number')) ?></th>
-                <td><?= $escaper->escapeHtml($existingShipment->getTrackingNumber()) ?></td>
-            </tr>
-            <?php endif; ?>
-        </table>
+        <div class="pe-panel pe-shipment-panel">
+            <div class="pe-shipment-main">
+                <table class="pe-shipment-table">
+                    <thead>
+                        <tr>
+                            <th><?= $escaper->escapeHtml(__('Reference Number')) ?></th>
+                            <th><?= $escaper->escapeHtml(__('Tracking Number')) ?></th>
+                            <th><?= $escaper->escapeHtml(__('Status')) ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($shipments as $shipment) : ?>
+                        <?php $tracking = (string) $shipment->getTrackingNumber(); ?>
+                        <tr<?= $block->isCancelled($shipment) ? ' class="pe-cancelled"' : '' ?>>
+                            <td><?= $escaper->escapeHtml($shipment->getReferenceNumber()) ?></td>
+                            <td><?= $tracking !== '' ? $escaper->escapeHtml($tracking) : '&mdash;' ?></td>
+                            <td><?= $escaper->escapeHtml($block->getStatusLabel($shipment)) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pe-shipment-actions">
+                <?php if ($block->hasActiveShipment()) : ?>
+                    <a href="<?= $escaper->escapeUrl($block->getLabelUrl()) ?>" target="_blank"
+                       class="action-default scalable pe-action"
+                       title="<?= $escaper->escapeHtmlAttr(__('Open the label in a new tab, where it can be printed or saved')) ?>">
+                        <span><?= $escaper->escapeHtml(__('Preview Label')) ?></span>
+                    </a>
+
+                    <?php $formats = $block->getLabelFormats(); ?>
+                    <?php if ($formats) : ?>
+                    <div class="actions-split pe-action"
+                         data-mage-init='<?= $escaper->escapeHtmlAttr(json_encode([
+                             "PigeonExpress_Shipping/js/split-dropdown" => new \stdClass(),
+                         ])) ?>'>
+                        <a href="<?= $escaper->escapeUrl($formats[0]['url']) ?>" class="action-default">
+                            <span><?= $escaper->escapeHtml(__('Download')) ?></span>
+                        </a>
+                        <button type="button" class="action-toggle"
+                                title="<?= $escaper->escapeHtmlAttr(__('Choose a label format')) ?>">
+                            <span><?= $escaper->escapeHtml(__('Select')) ?></span>
+                        </button>
+                        <ul class="dropdown-menu">
+                            <?php foreach ($formats as $format) : ?>
+                            <li>
+                                <a href="<?= $escaper->escapeUrl($format['url']) ?>">
+                                    <?= $escaper->escapeHtml($format['label']) ?>
+                                </a>
+                            </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($block->isShipmentCancellable()) : ?>
+                    <form action="<?= $escaper->escapeUrl($block->getCancelUrl()) ?>" method="post"
+                          class="pe-action pe-cancel-form"
+                          data-mage-init='<?= $escaper->escapeHtmlAttr(json_encode([
+                              "PigeonExpress_Shipping/js/confirm-submit" => [
+                                  "title" => (string) __("Cancel shipment"),
+                                  "message" => (string) __("Cancel this shipment with Pigeon Express? This cannot be undone."),
+                              ],
+                          ])) ?>'>
+                        <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
+                        <button type="submit" class="action-default scalable"
+                                title="<?= $escaper->escapeHtmlAttr(__('Cancel Shipment')) ?>">
+                            <span><?= $escaper->escapeHtml(__('Cancel Shipment')) ?></span>
+                        </button>
+                    </form>
+                    <?php else : ?>
+                    <p class="pe-hint">
+                        <?= $escaper->escapeHtml(__(
+                            'Too late to cancel here. Pigeon Express only allows it before the courier collects the parcel.'
+                        )) ?>
+                    </p>
+                    <?php endif; ?>
+                <?php else : ?>
+                    <p class="pe-hint">
+                        <?= $escaper->escapeHtml(__('Cancelled. Nothing is in transit for this order.')) ?>
+                    </p>
+                <?php endif; ?>
+            </div>
+        </div>
     </div>
 </section>
-<?php elseif ($block->getSendUrl() !== '') : ?>
+<?php endif; ?>
+
+<?php if (!$block->hasActiveShipment() && $block->getSendUrl() !== '') : ?>
 <section class="admin__page-section pigeonexpress-send-section">
+    <div class="admin__page-section-title">
+        <span class="title"><?= $escaper->escapeHtml(__('Create Pigeon Express Shipment')) ?></span>
+    </div>
     <div class="admin__page-section-content">
-        <form action="<?= $escaper->escapeUrl($block->getSendUrl()) ?>" method="post">
+        <form action="<?= $escaper->escapeUrl($block->getSendUrl()) ?>" method="post"
+              class="pe-panel pigeonexpress-shipment-form"
+              data-pe-type="<?= $escaper->escapeHtmlAttr($block->getFieldValue('delivery_type')) ?>"
+              data-mage-init='<?= $escaper->escapeHtmlAttr(json_encode([
+                  "PigeonExpress_Shipping/js/shipment-form" => [
+                      "citySearchUrl" => $block->getCitySearchUrl(),
+                      "streetSearchUrl" => $block->getStreetSearchUrl(),
+                      "locationSearchUrl" => $block->getLocationSearchUrl(),
+                      "recalculateUrl" => $block->getRecalculateUrl(),
+                      "oldFeeLabel" => (string) __("Old shipping fee"),
+                      "recalculating" => (string) __("Asking Pigeon Express..."),
+                      "unreachable" => (string) __("Could not reach Pigeon Express."),
+                      "noResults" => (string) __("Nothing found"),
+                      "streetsUnavailable" => (string) __("Street list unavailable, type it by hand"),
+                      "chooseCityFirst" => (string) __("Choose a city first"),
+                      "requiredMessage" => (string) __("This is needed before the shipment can be created."),
+                      "officeLabel" => (string) __("Pigeon Express office"),
+                      "apsLabel" => (string) __("Parcel locker"),
+                  ],
+              ])) ?>'>
             <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
-            <div style="margin-bottom:8px;">
-                <label for="pe_receiver_phone" style="display:block;font-weight:600;margin-bottom:4px;">
-                    <?= $escaper->escapeHtml(__('Receiver Phone')) ?>
-                </label>
-                <input type="text" id="pe_receiver_phone" name="receiver_phone"
-                       value="<?= $escaper->escapeHtmlAttr($block->getNormalizedReceiverPhone()) ?>"
-                       style="width:220px;" class="input-text"/>
+            <input type="hidden" name="pe[city_id]" id="pe_city_id"
+                   value="<?= $escaper->escapeHtmlAttr($block->getFieldValue('city_id')) ?>"/>
+            <input type="hidden" name="pe[street_id]" id="pe_street_id"
+                   value="<?= $escaper->escapeHtmlAttr($block->getFieldValue('street_id')) ?>"/>
+            <input type="hidden" name="pe[location_id]" id="pe_location_id"
+                   value="<?= $escaper->escapeHtmlAttr($block->getFieldValue('location_id')) ?>"/>
+
+            <div class="pe-grid">
+                <div class="admin__field pe-span-6 pe-type-field">
+                    <span class="pe-label-row">
+                        <label class="admin__field-label" for="pe_delivery_type">
+                            <span><?= $escaper->escapeHtml(__('Delivery type')) ?></span>
+                        </label>
+                        <?= /* @noEscape: built by $peHelp, which escapes its text */ $peHelp((string) __(
+                            'Where this parcel goes. Change it if the customer has asked for something else since '
+                            . 'ordering. It changes the waybill only, not what the customer was charged.'
+                        )) ?>
+                    </span>
+                    <div class="admin__field-control">
+                        <select class="admin__control-select" id="pe_delivery_type" name="pe[delivery_type]"
+                                data-role="pe-delivery-type">
+                            <?php foreach ($block->getDeliveryTypeOptions() as $option) : ?>
+                            <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"
+                                <?= $block->getFieldValue('delivery_type') === $option['value'] ? 'selected' : '' ?>>
+                                <?= $escaper->escapeHtml($option['label']) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="admin__field pe-span-6 pe-type-field">
+                    <span class="pe-label-row">
+                        <label class="admin__field-label" for="pe_who_pays">
+                            <span><?= $escaper->escapeHtml(__('Who Pays the Shipping')) ?></span>
+                        </label>
+                        <?= /* @noEscape */ $peHelp((string) __(
+                            'Who Pigeon Express invoices for this delivery. It does not change what the customer '
+                            . 'was charged at checkout, and the carrier quotes the same price either way, so '
+                            . 'choosing Receiver means the courier collects the delivery charge on top of '
+                            . 'anything already billed.'
+                        )) ?>
+                    </span>
+                    <div class="admin__field-control">
+                        <select class="admin__control-select" id="pe_who_pays" name="pe[who_pays]">
+                            <?php foreach ($block->getWhoPaysOptions() as $option) : ?>
+                            <option value="<?= $escaper->escapeHtmlAttr($option['value']) ?>"
+                                <?= $block->getFieldValue('who_pays') === $option['value'] ? 'selected' : '' ?>>
+                                <?= $escaper->escapeHtml($option['label']) ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+
+                <?= /* @noEscape: built by $peField, which escapes every value */ $peField(
+                    'contact_name',
+                    (string) __('Recipient name'),
+                    6,
+                    [
+                        'required' => true,
+                        'tooltip'  => (string) __('The person the courier hands the parcel to.'),
+                    ]
+                ) ?>
+                <?= /* @noEscape */ $peField(
+                    'contact_phone',
+                    (string) __('Phone'),
+                    6,
+                    [
+                        'required' => true,
+                        'tooltip'  => (string) __(
+                            'The courier calls this number before delivering. Pigeon Express also uses it to '
+                            . 'identify the recipient, so a wrong number can send the parcel to another address '
+                            . 'it already holds for that person.'
+                        ),
+                    ]
+                ) ?>
+
+                <?= /* @noEscape */ $peField(
+                    'location',
+                    (string) __('Pigeon Express office'),
+                    12,
+                    [
+                        'required'   => true,
+                        'group'      => 'location',
+                        'tooltip'    => (string) __(
+                            'Start typing a town or a street and choose the counter from the list.'
+                        ),
+                        'attributes' => [
+                            'data-role'    => 'pe-location',
+                            'autocomplete' => 'off',
+                            'placeholder'  => (string) __('Start typing'),
+                        ],
+                    ]
+                ) ?>
+
+                <?= /* @noEscape */ $peField(
+                    'city',
+                    (string) __('City'),
+                    8,
+                    [
+                        'required'   => true,
+                        'group'      => 'address',
+                        'tooltip'    => (string) __(
+                            'Start typing and choose from the list. The list is Pigeon Express\'s own, and '
+                            . 'villages often share a name, so the postal code is shown to tell them apart.'
+                        ),
+                        'attributes' => [
+                            'data-role'    => 'pe-city',
+                            'autocomplete' => 'off',
+                            'placeholder'  => (string) __('Start typing'),
+                        ],
+                    ]
+                ) ?>
+                <?= /* @noEscape */ $peField('postal_code', (string) __('Postal code'), 4, [
+                    'group'      => 'address',
+                    'tooltip'    => (string) __(
+                        'Set by the city you choose, and not editable. Pigeon Express holds one code per '
+                        . 'settlement and routes by city and street, so a code typed by hand could only '
+                        . 'ever disagree with the city on the same form.'
+                    ),
+                    'attributes' => ['readonly' => 'readonly', 'tabindex' => '-1'],
+                ]) ?>
+
+                <?= /* @noEscape */ $peField(
+                    'street',
+                    (string) __('Street'),
+                    8,
+                    [
+                        'required'   => true,
+                        'group'      => 'address',
+                        'tooltip'    => (string) __(
+                            'Choose from the list where you can. That attaches the street to the waybill '
+                            . 'exactly as Pigeon Express holds it. Typing it by hand still works, but the '
+                            . 'carrier may not recognise it.'
+                        ),
+                        'attributes' => [
+                            'data-role'    => 'pe-street',
+                            'autocomplete' => 'off',
+                            'placeholder'  => (string) __('Start typing'),
+                        ],
+                    ]
+                ) ?>
+                <?= /* @noEscape */ $peField('street_number', (string) __('No.'), 4, ['group' => 'address']) ?>
+
+                <div class="admin__field pe-span-12" data-pe-group="address">
+                    <span class="pe-label-row">
+                        <label class="admin__field-label">
+                            <span><?= $escaper->escapeHtml(__('Building')) ?></span>
+                        </label>
+                        <?= /* @noEscape */ $peHelp((string) __(
+                            'Optional. Read out of the order address where it was written there. Each one is sent '
+                            . 'to Pigeon Express as its own field, which the courier can route on.'
+                        )) ?>
+                    </span>
+                    <div class="admin__field-control">
+                        <div class="pe-subfields">
+                            <?= /* @noEscape */ $peSubField('building_number', (string) __('Block')) ?>
+                            <?= /* @noEscape */ $peSubField('entrance', (string) __('Entrance')) ?>
+                            <?= /* @noEscape */ $peSubField('floor', (string) __('Floor')) ?>
+                            <?= /* @noEscape */ $peSubField('apartment', (string) __('Apartment')) ?>
+                        </div>
+                    </div>
+                </div>
+
+                <?= /* @noEscape */ $peField('note', (string) __('Note for the courier'), 12, [
+                    'textarea' => true,
+                    'tooltip'  => (string) __(
+                        'Optional, and printed on the waybill. Door codes, landmarks, or when to call.'
+                    ),
+                ]) ?>
             </div>
-            <button type="submit" class="action-default scalable action-primary" title="<?= $escaper->escapeHtmlAttr(__('Send to Pigeon Express')) ?>">
-                <span><?= $escaper->escapeHtml(__('Send to Pigeon Express')) ?></span>
-            </button>
+
+            <div class="pe-form-actions">
+                <div class="pe-buttons">
+                    <button type="submit" class="action-default scalable action-primary"
+                            title="<?= $escaper->escapeHtmlAttr(__('Send to Pigeon Express')) ?>">
+                        <span><?= $escaper->escapeHtml(
+                            $shipments ? __('Create New Shipment') : __('Send to Pigeon Express')
+                        ) ?></span>
+                    </button>
+
+                    <button type="button" class="action-default scalable" data-role="pe-recalculate"
+                            title="<?= $escaper->escapeHtmlAttr(
+                                __('Ask Pigeon Express what this shipment costs as described above')
+                            ) ?>">
+                        <span><?= $escaper->escapeHtml(__('Recalculate')) ?></span>
+                    </button>
+                </div>
+
+                <?php if ($block->getPackageProblem() !== '') : ?>
+                <div class="admin__field-error pe-package-problem">
+                    <?= $escaper->escapeHtml($block->getPackageProblem()) ?>
+                </div>
+                <?php endif; ?>
+
+                <dl class="pe-summary">
+                    <?php if ($block->getPackageWeight() !== '') : ?>
+                    <div class="pe-summary-row">
+                        <dt><?= $escaper->escapeHtml(__('Package weight')) ?></dt>
+                        <dd><?= $escaper->escapeHtml($block->getPackageWeight()) ?></dd>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($block->getPackageDimensions() !== '') : ?>
+                    <div class="pe-summary-row">
+                        <dt><?= $escaper->escapeHtml(__('Package dimensions')) ?></dt>
+                        <dd><?= $escaper->escapeHtml($block->getPackageDimensions()) ?></dd>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($block->getPackagePieces() > 0) : ?>
+                    <div class="pe-summary-row">
+                        <dt><?= $escaper->escapeHtml(__('Package pieces')) ?></dt>
+                        <dd><?= (int) $block->getPackagePieces() ?></dd>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($block->getFormattedCodAmount() !== '') : ?>
+                    <div class="pe-summary-row">
+                        <dt><?= $escaper->escapeHtml(__('Cash on delivery value')) ?></dt>
+                        <dd><?= /* @noEscape: formatPrice() returns trusted Magento HTML */
+                            $block->getFormattedCodAmount() ?></dd>
+                    </div>
+                    <?php endif; ?>
+
+                    <?php if ($block->getFormattedDeliveryPrice() !== '') : ?>
+                    <div class="pe-summary-row">
+                        <dt data-role="pe-fee-label"><?= $escaper->escapeHtml(__('Shipping fee')) ?></dt>
+                        <dd><?= /* @noEscape: formatPrice() returns trusted Magento HTML */
+                            $block->getFormattedDeliveryPrice() ?></dd>
+                    </div>
+                    <?php endif; ?>
+
+                    <div class="pe-summary-row _quoted" data-role="pe-new-fee-row" hidden>
+                        <dt><?= $escaper->escapeHtml(__('New shipping fee')) ?></dt>
+                        <dd data-role="pe-new-fee-value"></dd>
+                    </div>
+                </dl>
+            </div>
+
+            <p class="pe-quote-message" data-role="pe-quote"></p>
         </form>
     </div>
 </section>
