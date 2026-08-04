@@ -49,6 +49,19 @@ class LayoutProcessorPlugin
      */
     private function applyCarrierLogo(array &$shippingAddress): void
     {
+        $shippingAddress['config'] = ($shippingAddress['config'] ?? []) + [];
+
+        // The row template carries two things now, the logo and the word shown
+        // in place of a zero price, so it is installed whether or not a logo is
+        // configured. Without a logo it renders the carrier title as plain text,
+        // which is exactly what Magento's own row does.
+        $shippingAddress['config']['shippingMethodItemTemplate'] =
+            'PigeonExpress_Shipping/shipping-address/shipping-method-item';
+
+        // Translated here rather than with $t in the template, so the phrase does
+        // not depend on pub/static/**/js-translation.json having been rebuilt.
+        $shippingAddress['config']['pigeonexpressFreeLabel'] = (string) __('Free');
+
         $logo = $this->config->getCheckoutLogo();
         $file = $this->logos->fileFor($logo);
 
@@ -65,9 +78,6 @@ class LayoutProcessorPlugin
             return;
         }
 
-        $shippingAddress['config'] = ($shippingAddress['config'] ?? []) + [];
-        $shippingAddress['config']['shippingMethodItemTemplate'] =
-            'PigeonExpress_Shipping/shipping-address/shipping-method-item';
         $shippingAddress['config']['pigeonexpressLogoUrl'] = $url;
         $shippingAddress['config']['pigeonexpressLogoDark'] = $this->logos->needsDarkBackdrop($logo);
     }

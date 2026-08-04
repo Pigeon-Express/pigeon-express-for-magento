@@ -107,6 +107,24 @@
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
+                    <field id="label_contents" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="135" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/label_contents</config_path>
+                        <label>Label Contents</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\LabelContents</source_model>
+                        <comment>What the waybill says the parcel holds. The carrier prints this, so everyone who handles the parcel can read it. A fixed description replaces every product name with one wording and drops the quantities, so the label reads "Contents: Clothing" rather than "Contents: 5 pcs. - Push It Messenger Bag". The insured sum and any cash on delivery travel separately and are unaffected.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="label_contents_text" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/label_contents_text</config_path>
+                        <label>Fixed Description</label>
+                        <comment>Printed in place of every product name. Something the courier can act on but a bystander learns nothing from, for example "Стоки" or "Дрехи". Left empty, the label reads "Стоки".</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="label_contents">fixed_text</field>
+                        </depends>
+                    </field>
                 </group>
                 <group id="api_setup" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="20" translate="label comment">
                     <label>API Setup</label>
@@ -241,7 +259,36 @@
                             <field id="address_pricing_mode">fixed</field>
                         </depends>
                     </field>
-                    <field id="address_review_and_test" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="105" translate="label" type="select">
+                    <field id="address_free_shipping_enabled" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="105" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/address_free_shipping_enabled</config_path>
+                        <label>Enable Free Shipping Threshold</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>A cart price rule with the Free Shipping action still applies whether or not this is on.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="address_free_shipping_threshold" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="106" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/address_free_shipping_threshold</config_path>
+                        <label>Free Shipping Threshold</label>
+                        <validate>validate-number validate-zero-or-greater</validate>
+                        <backend_model>PigeonExpress\Shipping\Model\Config\Backend\FreeShippingThreshold</backend_model>
+                        <comment>Order subtotal, after discounts, at or above which this delivery type costs nothing. Set Who Pays to Sender as well, or the courier still collects the charge on delivery. Cleared automatically if the threshold is switched off.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="address_free_shipping_enabled">1</field>
+                        </depends>
+                    </field>
+                    <field id="address_sort_order" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="107" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/address_sort_order</config_path>
+                        <label>Sort Order</label>
+                        <validate>validate-number</validate>
+                        <comment>Position among the Pigeon Express options at checkout. Lower shows first.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="address_review_and_test" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="108" translate="label" type="select">
                         <config_path>carriers/pigeonexpress/address_review_and_test</config_path>
                         <label>Recipient Inspection</label>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\ReviewAndTest</source_model>
@@ -294,7 +341,36 @@
                             <field id="office_pricing_mode">fixed</field>
                         </depends>
                     </field>
-                    <field id="office_review_and_test" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="115" translate="label" type="select">
+                    <field id="office_free_shipping_enabled" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="115" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/office_free_shipping_enabled</config_path>
+                        <label>Enable Free Shipping Threshold</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>A cart price rule with the Free Shipping action still applies whether or not this is on.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="office_free_shipping_threshold" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="116" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/office_free_shipping_threshold</config_path>
+                        <label>Free Shipping Threshold</label>
+                        <validate>validate-number validate-zero-or-greater</validate>
+                        <backend_model>PigeonExpress\Shipping\Model\Config\Backend\FreeShippingThreshold</backend_model>
+                        <comment>Order subtotal, after discounts, at or above which this delivery type costs nothing. Set Who Pays to Sender as well, or the courier still collects the charge on delivery. Cleared automatically if the threshold is switched off.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="office_free_shipping_enabled">1</field>
+                        </depends>
+                    </field>
+                    <field id="office_sort_order" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="117" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/office_sort_order</config_path>
+                        <label>Sort Order</label>
+                        <validate>validate-number</validate>
+                        <comment>Position among the Pigeon Express options at checkout. Lower shows first.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="office_review_and_test" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="118" translate="label" type="select">
                         <config_path>carriers/pigeonexpress/office_review_and_test</config_path>
                         <label>Recipient Inspection</label>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\ReviewAndTest</source_model>
@@ -345,6 +421,35 @@
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="aps_pricing_mode">fixed</field>
+                        </depends>
+                    </field>
+                    <field id="aps_free_shipping_enabled" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="125" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/aps_free_shipping_enabled</config_path>
+                        <label>Enable Free Shipping Threshold</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>A cart price rule with the Free Shipping action still applies whether or not this is on.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="aps_free_shipping_threshold" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="126" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/aps_free_shipping_threshold</config_path>
+                        <label>Free Shipping Threshold</label>
+                        <validate>validate-number validate-zero-or-greater</validate>
+                        <backend_model>PigeonExpress\Shipping\Model\Config\Backend\FreeShippingThreshold</backend_model>
+                        <comment>Order subtotal, after discounts, at or above which this delivery type costs nothing. Set Who Pays to Sender as well, or the courier still collects the charge on delivery. Cleared automatically if the threshold is switched off.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="aps_free_shipping_enabled">1</field>
+                        </depends>
+                    </field>
+                    <field id="aps_sort_order" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="127" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/aps_sort_order</config_path>
+                        <label>Sort Order</label>
+                        <validate>validate-number</validate>
+                        <comment>Position among the Pigeon Express options at checkout. Lower shows first.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
                 </group>

@@ -9,8 +9,8 @@ Internal. Never ships to clients, see [RELEASE.md](RELEASE.md).
 | [WOOCOMMERCE-REFERENCE.md](WOOCOMMERCE-REFERENCE.md) | Deciding how a feature should behave. The WooCommerce plugin is the behavioural reference |
 | [TODO.md](TODO.md) | Picking up work, or checking whether a bug is already known |
 | [TESTING.md](TESTING.md) | Running the test suites, or adding a test |
-| [QA-TEST-PLAN.md](QA-TEST-PLAN.md) | Handing a release to QA. Manual cases with admin paths |
 | [RELEASE.md](RELEASE.md) | Building a zip for a client |
+| [CHANGELOG-DEV.md](CHANGELOG-DEV.md) | The full engineering history. The shipped `CHANGELOG.md` is the client facing summary |
 
 Raw material sits in `.ai/`:
 

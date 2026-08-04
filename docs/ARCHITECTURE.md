@@ -8,16 +8,27 @@ to office, and to APS (parcel locker).
 
 ```
 Carrier\PigeonExpress::collectRates()
-  `-- one rate per enabled delivery type
-        `-- Rate\RateCollector::getRatePrice()
+  `-- one rate per enabled delivery type, in configured sort order
+        |-- Rate\FreeShipping::appliesToRequest()  cart rule or threshold
+        `-- Rate\RateCollector::getRatePrice($request, $type, $store, $isFree)
               |-- pricing mode flat?  -> config flat rate, no API call
+              |                          (0.00 when free)
               `-- pricing mode dynamic
                     |-- buildCalculatePayload()  packages, dimensions, weight,
                     |                            pickup from config,
-                    |                            delivery from the quote
+                    |                            delivery from the quote.
+                    |                            Always runs: this is what
+                    |                            rejects an unshippable parcel
+                    |-- free?  -> 0.00, no API call
                     |-- Api\RateClient::calculate()  POST /v1/shipments/calculate
                     `-- resolveCodFee()              second call, COD delta
 ```
+
+Magento then runs every rate from every carrier through
+`Rate\Result::sortRatesByPrice()`, discarding the order the carrier appended in,
+so `Plugin\Quote\ShippingRateSortPlugin` restores the configured order afterwards
+on the Pigeon Express group alone. See `docs/PRICING-AND-SERVICES.md` for what a
+free delivery does and does not change.
 
 Checkout adds a location picker on top: `Plugin\Checkout\LayoutProcessorPlugin`
 injects the KO components, and the customer's chosen office or locker travels
@@ -53,7 +64,7 @@ On order placement `Observer\Sales\OrderPlaceAfter` hands off to
 | `pigeonexpress_city` | Cities, used to resolve a quote city to an API `city_id` |
 | `pigeonexpress_additional_service` | Service catalogue plus the last API charged fee per service |
 | `pigeonexpress_quote_address` | Chosen delivery location per quote shipping address |
-| `pigeonexpress_order_address` | Chosen delivery location per order shipping address |
+| `pigeonexpress_order_address` | Chosen delivery location per order shipping address, plus `pigeonexpress_free_shipping`: whether the delivery was given away rather than merely priced at zero. Decides who the carrier bills |
 | `pigeonexpress_shipment` | Waybill records: reference number, tracking number, payload, response |
 | `sales_order.pigeonexpress_cod_fee` | COD fee as charged by the API for that order |
 

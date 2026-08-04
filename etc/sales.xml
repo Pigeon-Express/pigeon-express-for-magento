@@ -3,9 +3,14 @@
         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Sales:etc/sales.xsd">
     <section name="quote">
         <group name="totals">
+            <!-- 455, not 450: Magento's own tax collector is 450 and the fee has
+                 to land after it, tax having already derived shipping_incl_tax
+                 from the pre fee amount. A tie resolves to whichever collector
+                 happens to be merged first, which is not something to leave
+                 money resting on. -->
             <item name="pigeonexpress_cod_fee"
                   instance="PigeonExpress\Shipping\Model\Total\Quote\CodFee"
-                  sort_order="450"/>
+                  sort_order="455"/>
         </group>
     </section>
 </config>

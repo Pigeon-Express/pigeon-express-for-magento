@@ -15,6 +15,7 @@ use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\App\Request\DataPersistorInterface;
 use Magento\Framework\Controller\Result\Redirect;
 use Magento\Sales\Api\OrderRepositoryInterface;
+use PigeonExpress\Shipping\Api\FreeShippingInterface;
 use PigeonExpress\Shipping\Api\ShipmentSenderInterface;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
 use Psr\Log\LoggerInterface;
@@ -41,19 +42,24 @@ class Send extends Action implements HttpPostActionInterface
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var FreeShippingInterface */
+    private $freeShipping;
+
     public function __construct(
         Context $context,
         OrderRepositoryInterface $orderRepository,
         ShipmentSenderInterface $shipmentSender,
         AddressForm $addressForm,
         DataPersistorInterface $dataPersistor,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        FreeShippingInterface $freeShipping
     ) {
         $this->orderRepository = $orderRepository;
         $this->shipmentSender = $shipmentSender;
         $this->addressForm = $addressForm;
         $this->dataPersistor = $dataPersistor;
         $this->logger = $logger;
+        $this->freeShipping = $freeShipping;
         parent::__construct($context);
     }
 
@@ -87,7 +93,14 @@ class Send extends Action implements HttpPostActionInterface
         $submitted = $this->getRequest()->getParam('pe');
         $fields = $this->addressForm->fromRequest(is_array($submitted) ? $submitted : []);
 
-        $checked = $this->addressForm->validate($fields, (int) $order->getStoreId());
+        // The checked fields are handed straight to the sender, so who_pays has
+        // to be resolved here as well: by the time it gets there it counts as an
+        // explicit choice and the sender's own fallback will not fire.
+        $checked = $this->addressForm->validate(
+            $fields,
+            (int) $order->getStoreId(),
+            $this->freeShipping->wasAppliedToOrder($order)
+        );
 
         if ($this->addressForm->hasErrors($checked['issues'])) {
             // Hand the form back with the values and the reasons intact, rather

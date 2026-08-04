@@ -61,6 +61,12 @@ class ShipmentSender implements ShipmentSenderInterface
     /** @var \PigeonExpress\Shipping\Model\ResourceModel\Shipment */
     private $shipmentResource;
 
+    /** @var \PigeonExpress\Shipping\Api\FreeShippingInterface */
+    private $freeShipping;
+
+    /** @var \PigeonExpress\Shipping\Model\Shipment\LabelContents */
+    private $labelContents;
+
     public function __construct(
         ConfigInterface $config,
         ShipmentClientInterface $shipmentClient,
@@ -73,7 +79,9 @@ class ShipmentSender implements ShipmentSenderInterface
         ServiceCodesBuilder $serviceCodesBuilder,
         LoggerInterface $logger,
         ShipmentFactory $shipmentFactory,
-        \PigeonExpress\Shipping\Model\ResourceModel\Shipment $shipmentResource
+        \PigeonExpress\Shipping\Model\ResourceModel\Shipment $shipmentResource,
+        \PigeonExpress\Shipping\Api\FreeShippingInterface $freeShipping,
+        \PigeonExpress\Shipping\Model\Shipment\LabelContents $labelContents
     ) {
         $this->config = $config;
         $this->shipmentClient = $shipmentClient;
@@ -87,6 +95,8 @@ class ShipmentSender implements ShipmentSenderInterface
         $this->logger = $logger;
         $this->shipmentFactory = $shipmentFactory;
         $this->shipmentResource = $shipmentResource;
+        $this->freeShipping = $freeShipping;
+        $this->labelContents = $labelContents;
     }
 
     /**
@@ -147,7 +157,7 @@ class ShipmentSender implements ShipmentSenderInterface
                 (string) ($locationData['location_name'] ?? '')
             );
 
-        $checked = $this->addressForm->validate($fields, $storeId);
+        $checked = $this->addressForm->validate($fields, $storeId, !empty($locationData['free_shipping']));
         if ($this->addressForm->hasErrors($checked['issues'])) {
             throw new LocalizedException(__($this->addressForm->firstError($checked['issues'])));
         }
@@ -213,7 +223,7 @@ class ShipmentSender implements ShipmentSenderInterface
             $payload['service_codes'] = $serviceCodes;
         }
 
-        $payload['inventory_items'] = $this->buildInventoryItems($order);
+        $payload['inventory_items'] = $this->labelContents->build($order, $storeId);
 
         $payload = array_merge($payload, $pickupPayload, $deliveryPayload);
 
@@ -282,7 +292,11 @@ class ShipmentSender implements ShipmentSenderInterface
             'pickup_type'   => $pickupType,
             'delivery_type' => $apiDeliveryType,
             'service_type'  => 'standard',
-            'who_pays'      => $this->addressForm->whoPays($fields),
+            'who_pays'      => $this->addressForm->whoPays(
+                $fields,
+                $storeId,
+                $this->freeShipping->wasAppliedToOrder($order)
+            ),
             'packages'      => $this->buildPackages($order, $storeId, $deliveryType),
         ];
 
@@ -417,6 +431,41 @@ class ShipmentSender implements ShipmentSenderInterface
 
 
     /**
+     * Normalize phone to international format for PE API.
+     *
+     * Bulgarian local (08XXXXXXXXX / 10 digits starting with 0) → +3598XXXXXXXX
+     * 00359... → +359...
+     * Already +... → kept as-is
+     */
+    public static function normalizePhone(string $raw): string
+    {
+        $raw = trim($raw);
+        // Strip spaces, dashes, parentheses and dots, keeping digits and a leading +
+        $clean = preg_replace('/[\s\-\(\)\.]/', '', $raw);
+
+        if (strpos($clean, '+') === 0) {
+            return $clean;
+        }
+
+        // 00XXXXX → +XXXXX
+        if (strpos($clean, '00') === 0) {
+            return '+' . substr($clean, 2);
+        }
+
+        // Bulgarian local: 0XXXXXXXXX (10 digits starting with 0) → +359XXXXXXXXX
+        if (preg_match('/^0(\d{9})$/', $clean, $m)) {
+            return '+359' . $m[1];
+        }
+
+        // 9 raw digits, so assume Bulgarian and prepend +359
+        if (preg_match('/^\d{9}$/', $clean)) {
+            return '+359' . $clean;
+        }
+
+        return $clean;
+    }
+
+    /**
      * Value of the goods for insurance purposes.
      *
      * Products only. Shipping is not insured by the carrier, and including it
@@ -532,80 +581,5 @@ class ShipmentSender implements ShipmentSenderInterface
         return ['address', ['delivery_address' => $this->addressForm->toApiAddress($fields)]];
     }
 
-    /**
-     * Build inventory_items array from order items (required by PE API).
-     *
-     * @param \Magento\Sales\Api\Data\OrderInterface $order
-     * @return array
-     */
-    /**
-     * Normalize phone to international format for PE API.
-     *
-     * Bulgarian local (08XXXXXXXXX / 10 digits starting with 0) → +3598XXXXXXXX
-     * 00359... → +359...
-     * Already +... → kept as-is
-     */
-    public static function normalizePhone(string $raw): string
-    {
-        $raw = trim($raw);
-        // Strip spaces, dashes, parentheses and dots, keeping digits and a leading +
-        $clean = preg_replace('/[\s\-\(\)\.]/', '', $raw);
-
-        if (strpos($clean, '+') === 0) {
-            return $clean;
-        }
-
-        // 00XXXXX → +XXXXX
-        if (strpos($clean, '00') === 0) {
-            return '+' . substr($clean, 2);
-        }
-
-        // Bulgarian local: 0XXXXXXXXX (10 digits starting with 0) → +359XXXXXXXXX
-        if (preg_match('/^0(\d{9})$/', $clean, $m)) {
-            return '+359' . $m[1];
-        }
-
-        // 9 raw digits, so assume Bulgarian and prepend +359
-        if (preg_match('/^\d{9}$/', $clean)) {
-            return '+359' . $clean;
-        }
-
-        return $clean;
-    }
-
-
-
-    private function buildInventoryItems(\Magento\Sales\Api\Data\OrderInterface $order): array
-    {
-        $items = [];
-        foreach ($order->getItems() as $item) {
-            // Skip child items (e.g. simple product under configurable).
-            if ($item->getParentItemId()) {
-                continue;
-            }
-            $qty = (int) $item->getQtyOrdered();
-            if ($qty <= 0) {
-                $qty = 1;
-            }
-            $price = round((float) $item->getPrice(), 2);
-            if ($price <= 0) {
-                $price = 0.01;
-            }
-            $name = (string) $item->getName();
-            $items[] = [
-                'name'        => $name,
-                'description' => $name,
-                'quantity'    => $qty,
-                'price'       => $price,
-            ];
-        }
-
-        // Fallback: API requires at least one item.
-        if (empty($items)) {
-            $items[] = ['name' => 'Product', 'description' => 'Product', 'quantity' => 1, 'price' => 0.01];
-        }
-
-        return $items;
-    }
 
 }

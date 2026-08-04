@@ -95,4 +95,18 @@ class PigeonExpressTest extends TestCase
 
         $this->assertSame([], $this->carrier->getAllowedMethods());
     }
+
+    public function testTheAllowedMethodsFollowTheConfiguredOrder(): void
+    {
+        // The config sorts the list, and this map is what the admin order create
+        // screen offers, so the merchant sees the same order in both places.
+        $this->config->method('getEnabledDeliveryTypes')->willReturn(['office', 'aps', 'address']);
+        $this->config->method('getDeliveryTypeTitle')->willReturnMap([
+            ['address', 0, 'Address Delivery'],
+            ['office', 0, 'Office Delivery'],
+            ['aps', 0, 'APS (Parcel Locker)'],
+        ]);
+
+        $this->assertSame(['office', 'aps', 'address'], array_keys($this->carrier->getAllowedMethods()));
+    }
 }

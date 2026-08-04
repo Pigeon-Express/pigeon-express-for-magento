@@ -73,6 +73,9 @@ class Info extends Template
      */
     private $locationPersistor;
 
+    /** @var bool|null Memoised: the answer costs a query and the form asks twice. */
+    private $freeShipping;
+
     /**
      * @var OrderAddressExtensionInterfaceFactory
      */
@@ -283,7 +286,92 @@ class Info extends Template
      */
     public function getFormattedDeliveryPrice(): string
     {
+        return $this->formatMoney($this->getDeliveryPrice());
+    }
+
+    /**
+     * What the merchant is charged for this delivery.
+     *
+     * Pigeon Express bills one side or the other, never both, so the side that
+     * is not billed reads zero rather than being left out. A row that vanishes
+     * looks like missing data, and seeing both together is the point: which way
+     * round it is decides who is out of pocket.
+     */
+    public function getFormattedSenderFee(): string
+    {
+        return $this->formatMoney($this->feeForSide(ConfigInterface::WHO_PAYS_SENDER));
+    }
+
+    /**
+     * What the courier collects from the recipient on delivery.
+     */
+    public function getFormattedReceiverFee(): string
+    {
+        return $this->formatMoney($this->feeForSide(ConfigInterface::WHO_PAYS_RECEIVER));
+    }
+
+    /**
+     * Whether the merchant's own cost for this delivery is known without asking.
+     */
+    public function isSenderFeeKnown(): bool
+    {
+        return $this->isFeeKnownFor(ConfigInterface::WHO_PAYS_SENDER);
+    }
+
+    /**
+     * Whether what the courier collects is known without asking.
+     */
+    public function isReceiverFeeKnown(): bool
+    {
+        return $this->isFeeKnownFor(ConfigInterface::WHO_PAYS_RECEIVER);
+    }
+
+    /**
+     * A billed side with nothing charged has not been priced, it is not free.
+     *
+     * The only figure the order carries is what the customer paid. On a free
+     * delivery that is zero while the carrier still invoices the merchant, and
+     * the module never asked what for: a delivery given away is quoted without
+     * calling the API, there being no price to show the customer. Printing 0.00
+     * there would state a cost that is about to arrive on an invoice. The side
+     * that is not billed is a different matter: zero is simply true.
+     */
+    private function isFeeKnownFor(string $side): bool
+    {
         $price = $this->getDeliveryPrice();
+        if ($price === null) {
+            return false;
+        }
+
+        if ($this->getFieldValue('who_pays') !== $side) {
+            return true;
+        }
+
+        return $price > 0.0;
+    }
+
+    /**
+     * The delivery price if this side is the one being billed, otherwise zero.
+     *
+     * Read from the form rather than from the store setting, so it follows what
+     * the admin has actually chosen for this shipment, including the switch to
+     * the sender that a free delivery makes on their behalf.
+     */
+    private function feeForSide(string $side): ?float
+    {
+        $price = $this->getDeliveryPrice();
+        if ($price === null) {
+            return null;
+        }
+
+        return $this->getFieldValue('who_pays') === $side ? $price : 0.0;
+    }
+
+    /**
+     * In the order's currency where there is one, and the store's otherwise.
+     */
+    private function formatMoney(?float $price): string
+    {
         if ($price === null) {
             return '';
         }
@@ -791,6 +879,39 @@ class Info extends Template
     }
 
     /**
+     * Whether this order's delivery was given away rather than merely priced at zero.
+     *
+     * Read from what was recorded when the order was placed, not recalculated,
+     * so a threshold the merchant changes afterwards cannot rewrite the reason
+     * the admin is being shown.
+     */
+    public function isFreeShipping(): bool
+    {
+        if ($this->freeShipping !== null) {
+            return $this->freeShipping;
+        }
+
+        $this->freeShipping = false;
+
+        $order = $this->getOrder();
+        if (!$order) {
+            return false;
+        }
+
+        // A virtual order has no shipping address, and Magento says so by
+        // returning false rather than null.
+        $address = $order->getShippingAddress();
+        if (!$address || !$address->getId()) {
+            return false;
+        }
+
+        $data = $this->locationPersistor->getByAddressId((int) $address->getId());
+        $this->freeShipping = !empty($data['free_shipping']);
+
+        return $this->freeShipping;
+    }
+
+    /**
      * Who the carrier can bill, for the form's control.
      *
      * @return array<int, array{value:string, label:string}>
@@ -861,7 +982,11 @@ class Info extends Template
                 (string) ($location['location_name'] ?? '')
             );
 
-            $this->form = $this->addressForm->validate($fields, (int) $order->getStoreId());
+            $this->form = $this->addressForm->validate(
+                $fields,
+                (int) $order->getStoreId(),
+                !empty($location['free_shipping'])
+            );
         } catch (\Throwable $e) {
             $this->form['issues']['address'] = [
                 'severity' => AddressForm::SEVERITY_ERROR,

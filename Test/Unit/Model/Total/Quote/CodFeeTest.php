@@ -171,29 +171,59 @@ class CodFeeTest extends TestCase
         $this->assertSame(self::FEE, (float) $address->getData(CodFee::CODE));
     }
 
+    public function testNoFeeWhenTheDeliveryItselfCostNothing(): void
+    {
+        // Nothing charged for carriage, nothing charged for collecting the cash.
+        // Covers a free shipping threshold, a Free Shipping cart price rule, and
+        // a flat rate the merchant deliberately set to zero, none of which this
+        // collector has to tell apart: the shipping collector already wrote the
+        // chosen rate's price here, and it is nothing.
+        $this->config->method('getCodPaymentMethods')->willReturn(['cashondelivery']);
+        $this->resolver->expects($this->never())->method('resolve');
+
+        [$total, $address] = $this->collect('pigeonexpress_office', 'cashondelivery', 0.0);
+
+        $this->assertSame(0.0, (float) $total->getShippingAmount());
+        $this->assertSame(0.0, (float) $address->getData(CodFee::CODE));
+    }
+
+    public function testTheFeeStillAppliesWhenTheDeliveryCostSomething(): void
+    {
+        // The other half of the waiver: a paid delivery is unaffected by it.
+        $this->config->method('getCodPaymentMethods')->willReturn(['cashondelivery']);
+        $this->resolver->method('resolve')->willReturn(self::FEE);
+
+        [$total] = $this->collect('pigeonexpress_office', 'cashondelivery', 0.01);
+
+        $this->assertSame(0.01 + self::FEE, (float) $total->getShippingAmount());
+    }
+
     // -----------------------------------------------------------------------
 
     /**
      * Run a collect() cycle and hand back the objects it touched.
      *
+     * @param float|null $baseShipping What the chosen rate cost, null for the usual figure
      * @return array{0: Total, 1: Address, 2: Quote}
      */
-    private function collect(string $shippingMethod, string $paymentMethod): array
+    private function collect(string $shippingMethod, string $paymentMethod, ?float $baseShipping = null): array
     {
+        $baseShipping = $baseShipping ?? self::BASE_SHIPPING;
+
         /** @var Address $address */
         $address = $this->objectManager->getObject(Address::class);
         $address->setShippingMethod($shippingMethod);
-        $address->setShippingInclTax(self::BASE_SHIPPING);
-        $address->setBaseShippingInclTax(self::BASE_SHIPPING);
+        $address->setShippingInclTax($baseShipping);
+        $address->setBaseShippingInclTax($baseShipping);
 
         /** @var Total $total */
         $total = $this->objectManager->getObject(Total::class);
-        $total->setShippingAmount(self::BASE_SHIPPING);
-        $total->setBaseShippingAmount(self::BASE_SHIPPING);
-        $total->setTotalAmount('shipping', self::BASE_SHIPPING);
-        $total->setBaseTotalAmount('shipping', self::BASE_SHIPPING);
-        $total->setShippingInclTax(self::BASE_SHIPPING);
-        $total->setBaseShippingInclTax(self::BASE_SHIPPING);
+        $total->setShippingAmount($baseShipping);
+        $total->setBaseShippingAmount($baseShipping);
+        $total->setTotalAmount('shipping', $baseShipping);
+        $total->setBaseTotalAmount('shipping', $baseShipping);
+        $total->setShippingInclTax($baseShipping);
+        $total->setBaseShippingInclTax($baseShipping);
 
         $payment = $this->createMock(Payment::class);
         $payment->method('getMethod')->willReturn($paymentMethod);

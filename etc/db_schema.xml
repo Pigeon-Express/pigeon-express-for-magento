@@ -107,6 +107,7 @@
         <column xsi:type="text" name="pigeonexpress_location_address" nullable="true" comment="Location address"/>
         <column xsi:type="text" name="pigeonexpress_instructions" nullable="true" comment="Delivery instructions"/>
         <column xsi:type="decimal" name="pigeonexpress_delivery_price" precision="12" scale="4" nullable="true" comment="Delivery price at order place"/>
+        <column xsi:type="smallint" name="pigeonexpress_free_shipping" unsigned="true" nullable="false" default="0" comment="Delivery was given away by a threshold or a cart rule"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="address_id"/>
         </constraint>

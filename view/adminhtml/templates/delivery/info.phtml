@@ -247,7 +247,7 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                     </div>
                 </div>
 
-                <div class="admin__field pe-span-6 pe-type-field">
+                <div class="admin__field pe-span-6 pe-type-field<?= $block->isFreeShipping() ? ' pe-free-shipping' : '' ?>">
                     <span class="pe-label-row">
                         <label class="admin__field-label" for="pe_who_pays">
                             <span><?= $escaper->escapeHtml(__('Who Pays the Shipping')) ?></span>
@@ -268,6 +268,17 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                             </option>
                             <?php endforeach; ?>
                         </select>
+                        <?php if ($block->isFreeShipping()) : ?>
+                        <?php /* Why Sender is preselected on this order and not on the one before it.
+                                Without saying so, the setting looks like it has been ignored. */ ?>
+                        <div class="pe-free-shipping-note">
+                            <strong><?= $escaper->escapeHtml(__('This order has Free shipping')) ?></strong>
+                            <?= $escaper->escapeHtml(__(
+                                'Your customer completed the order with Free shipping. Changing this to '
+                                . 'Receiver would add an extra cost to the delivery.'
+                            )) ?>
+                        </div>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -442,16 +453,47 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                     <?php endif; ?>
 
                     <?php if ($block->getFormattedDeliveryPrice() !== '') : ?>
+                    <?php /* Split by side. Pigeon Express bills one or the other, never
+                            both, so the side that is not billed reads zero rather than
+                            being hidden: which way round it is is exactly what the
+                            merchant is looking for. */ ?>
+                    <?php /* A billed side with nothing charged was never priced. Saying
+                            "Calculate" rather than 0.00 keeps the page free of API calls
+                            and stops the summary claiming a cost that is about to turn up
+                            on an invoice. */ ?>
                     <div class="pe-summary-row">
-                        <dt data-role="pe-fee-label"><?= $escaper->escapeHtml(__('Shipping fee')) ?></dt>
-                        <dd><?= /* @noEscape: formatPrice() returns trusted Magento HTML */
-                            $block->getFormattedDeliveryPrice() ?></dd>
+                        <dt data-role="pe-fee-label"
+                            data-old-label="<?= $escaper->escapeHtmlAttr(__('Old shipping fee (Sender)')) ?>">
+                            <?= $escaper->escapeHtml(__('Shipping fee (Sender)')) ?>
+                        </dt>
+                        <dd><?php if ($block->isSenderFeeKnown()) : ?>
+                            <?= /* @noEscape: formatPrice() returns trusted Magento HTML */
+                                $block->getFormattedSenderFee() ?>
+                        <?php else : ?>
+                            <span class="pe-fee-unknown"><?= $escaper->escapeHtml(__('Calculate')) ?></span>
+                        <?php endif; ?></dd>
+                    </div>
+                    <div class="pe-summary-row">
+                        <dt data-role="pe-fee-label"
+                            data-old-label="<?= $escaper->escapeHtmlAttr(__('Old shipping fee (Receiver)')) ?>">
+                            <?= $escaper->escapeHtml(__('Shipping fee (Receiver)')) ?>
+                        </dt>
+                        <dd><?php if ($block->isReceiverFeeKnown()) : ?>
+                            <?= /* @noEscape: formatPrice() returns trusted Magento HTML */
+                                $block->getFormattedReceiverFee() ?>
+                        <?php else : ?>
+                            <span class="pe-fee-unknown"><?= $escaper->escapeHtml(__('Calculate')) ?></span>
+                        <?php endif; ?></dd>
                     </div>
                     <?php endif; ?>
 
                     <div class="pe-summary-row _quoted" data-role="pe-new-fee-row" hidden>
-                        <dt><?= $escaper->escapeHtml(__('New shipping fee')) ?></dt>
-                        <dd data-role="pe-new-fee-value"></dd>
+                        <dt><?= $escaper->escapeHtml(__('New shipping fee (Sender)')) ?></dt>
+                        <dd data-role="pe-new-fee-sender"></dd>
+                    </div>
+                    <div class="pe-summary-row _quoted" data-role="pe-new-fee-row" hidden>
+                        <dt><?= $escaper->escapeHtml(__('New shipping fee (Receiver)')) ?></dt>
+                        <dd data-role="pe-new-fee-receiver"></dd>
                     </div>
                 </dl>
             </div>

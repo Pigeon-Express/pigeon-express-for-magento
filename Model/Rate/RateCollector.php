@@ -81,8 +81,12 @@ class RateCollector
         $this->checkoutSession = $checkoutSession;
     }
 
-    public function getRatePrice(RateRequest $request, string $deliveryType, int $storeId): float
-    {
+    public function getRatePrice(
+        RateRequest $request,
+        string $deliveryType,
+        int $storeId,
+        bool $freeShipping = false
+    ): float {
         $pricingMode = $this->config->getDeliveryTypePricingMode($deliveryType, $storeId);
         if ($this->config->isLoggingEnabled($storeId)) {
             $this->logger->info('[PigeonExpress] RateCollector::getRatePrice', [
@@ -90,14 +94,23 @@ class RateCollector
                 'deliveryType' => $deliveryType,
                 'pricingMode' => $pricingMode,
                 'package_value' => $request->getPackageValueWithDiscount(),
+                'free_shipping' => $freeShipping,
             ]);
         }
         if ($pricingMode !== 'dynamic') {
-            return (float) $this->config->getDeliveryTypeFlatRate($deliveryType, $storeId);
+            return $freeShipping ? 0.0 : (float) $this->config->getDeliveryTypeFlatRate($deliveryType, $storeId);
         }
 
         try {
             $payload = $this->buildCalculatePayload($request, $deliveryType, $storeId);
+
+            // The payload is built even when the delivery is free, because
+            // building it is what rejects a parcel the carrier will not take.
+            // Only the price call is skipped, there being no price to ask for.
+            if ($freeShipping) {
+                return 0.0;
+            }
+
             $calc = $this->rateClient->calculate($payload, $storeId);
             if ($this->config->isLoggingEnabled($storeId)) {
                 $this->logger->info('[PigeonExpress] RateCollector::getRatePrice API result', [

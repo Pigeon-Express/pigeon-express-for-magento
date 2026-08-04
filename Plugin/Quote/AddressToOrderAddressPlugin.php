@@ -10,11 +10,13 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Plugin\Quote;
 
+use Magento\Quote\Model\Quote\Address as QuoteAddressModel;
 use Magento\Quote\Model\Quote\Address\ToOrderAddress;
 use Magento\Quote\Api\Data\AddressInterface as QuoteAddressInterface;
 use Magento\Sales\Api\Data\OrderAddressInterface;
 use Magento\Sales\Api\Data\OrderAddressExtensionInterfaceFactory;
 use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Api\FreeShippingInterface;
 
 class AddressToOrderAddressPlugin
 {
@@ -23,9 +25,17 @@ class AddressToOrderAddressPlugin
      */
     private $orderAddressExtensionFactory;
 
-    public function __construct(OrderAddressExtensionInterfaceFactory $orderAddressExtensionFactory)
-    {
+    /**
+     * @var FreeShippingInterface
+     */
+    private $freeShipping;
+
+    public function __construct(
+        OrderAddressExtensionInterfaceFactory $orderAddressExtensionFactory,
+        FreeShippingInterface $freeShipping
+    ) {
         $this->orderAddressExtensionFactory = $orderAddressExtensionFactory;
+        $this->freeShipping = $freeShipping;
     }
 
     /**
@@ -71,6 +81,17 @@ class AddressToOrderAddressPlugin
             }
         }
         $orderExt->setPigeonexpressDeliveryPrice($deliveryPrice);
+
+        // Why the customer was not charged, recorded now while the quote still
+        // says so. The shipment needs to know whether a zero was a giveaway, in
+        // which case the merchant is billed, or a store on receiver pays quoting
+        // zero on purpose and expecting the courier to collect at the door. The
+        // amount alone cannot tell those apart, and the config it depends on can
+        // change between the order and the waybill.
+        $orderExt->setPigeonexpressFreeShipping(
+            $quoteAddress instanceof QuoteAddressModel
+            && $this->freeShipping->wasAppliedToQuoteAddress($quoteAddress) ? 1 : 0
+        );
 
         return $result;
     }

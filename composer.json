@@ -1,7 +1,7 @@
 {
     "name": "pigeonexpress/module-shipping",
     "description": "Pigeon Express courier shipping integration for Magento 2",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "type": "magento2-module",
     "license": "OSL-3.0",
     "require": {
@@ -14,8 +14,7 @@
         "magento/module-sales": "*",
         "magento/module-store": "*",
         "magento/module-config": "*",
-        "magento/module-cron": "*",
-        "pigeonexpress/php-sdk": "^1.0"
+        "magento/module-cron": "*"
     },
     "autoload": {
         "psr-4": {
@@ -28,5 +27,8 @@
     "require-dev": {
         "phpunit/phpunit": "^9.6",
         "phpstan/phpstan": "^2.0"
+    },
+    "suggest": {
+        "pigeonexpress/php-sdk": "The Pigeon Express API client. A copy is bundled in lib/, so this is only needed if you prefer to manage it with Composer."
     }
 }

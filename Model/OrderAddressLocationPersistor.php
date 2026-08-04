@@ -36,6 +36,7 @@ class OrderAddressLocationPersistor
      * @param string|null $locationAddress
      * @param string|null $instructions
      * @param float|null $deliveryPrice
+     * @param bool $freeShipping Delivery was given away rather than merely priced at zero
      */
     public function save(
         int $addressId,
@@ -44,7 +45,8 @@ class OrderAddressLocationPersistor
         ?string $locationName,
         ?string $locationAddress,
         ?string $instructions,
-        ?float $deliveryPrice = null
+        ?float $deliveryPrice = null,
+        bool $freeShipping = false
     ): void {
         $conn = $this->resource->getConnection();
         $table = $this->resource->getTableName(self::TABLE);
@@ -57,6 +59,7 @@ class OrderAddressLocationPersistor
             'pigeonexpress_location_address' => $locationAddress ?? '',
             'pigeonexpress_instructions' => $instructions ?? '',
             'pigeonexpress_delivery_price' => $deliveryPrice !== null ? (string) $deliveryPrice : null,
+            'pigeonexpress_free_shipping' => $freeShipping ? 1 : 0,
         ];
 
         $conn->insertOnDuplicate($table, $data, array_keys($data));
@@ -66,7 +69,7 @@ class OrderAddressLocationPersistor
      * Load location data by order address id.
      *
      * @param int $addressId
-     * @return array{delivery_type: string, location_id: string, location_name: string, location_address: string, instructions: string, delivery_price: float|null}|null
+     * @return array{delivery_type: string, location_id: string, location_name: string, location_address: string, instructions: string, delivery_price: float|null, free_shipping: bool}|null
      */
     public function getByAddressId(int $addressId): ?array
     {
@@ -82,6 +85,7 @@ class OrderAddressLocationPersistor
                     'location_address' => 'pigeonexpress_location_address',
                     'instructions' => 'pigeonexpress_instructions',
                     'delivery_price' => 'pigeonexpress_delivery_price',
+                    'free_shipping' => 'pigeonexpress_free_shipping',
                 ])
                 ->where('address_id = ?', $addressId)
         );
@@ -98,6 +102,7 @@ class OrderAddressLocationPersistor
             'instructions' => (string) $row['instructions'],
             'delivery_price' => isset($row['delivery_price']) && $row['delivery_price'] !== null
                 ? (float) $row['delivery_price'] : null,
+            'free_shipping' => !empty($row['free_shipping']),
         ];
     }
 }

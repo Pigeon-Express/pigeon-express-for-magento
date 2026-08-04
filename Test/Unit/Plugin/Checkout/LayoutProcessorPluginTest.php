@@ -153,4 +153,52 @@ class LayoutProcessorPluginTest extends TestCase
             $this->assertArrayHasKey($name, $children);
         }
     }
+
+    public function testTheMethodRowIsInstalledEvenWithNoLogoConfigured(): void
+    {
+        // The row carries the word shown in place of a zero price as well as the
+        // logo, so tying it to a configured logo would have left stores without
+        // one showing 0.00 for a delivery they are giving away.
+        $this->config->method('isOverrideAddressFields')->willReturn(false);
+
+        $config = $this->shippingAddressConfig();
+
+        $this->assertSame(
+            'PigeonExpress_Shipping/shipping-address/shipping-method-item',
+            $config['shippingMethodItemTemplate'] ?? null
+        );
+    }
+
+    public function testTheFreeLabelIsResolvedServerSide(): void
+    {
+        // Passed as a finished string rather than translated in the browser, so
+        // it does not depend on js-translation.json having been rebuilt.
+        $this->config->method('isOverrideAddressFields')->willReturn(false);
+
+        $config = $this->shippingAddressConfig();
+
+        $this->assertArrayHasKey('pigeonexpressFreeLabel', $config);
+        $this->assertNotSame('', $config['pigeonexpressFreeLabel']);
+    }
+
+    public function testNoLogoKeysAreSetWhenNoLogoIsConfigured(): void
+    {
+        $this->config->method('isOverrideAddressFields')->willReturn(false);
+
+        $config = $this->shippingAddressConfig();
+
+        $this->assertArrayNotHasKey('pigeonexpressLogoUrl', $config);
+        $this->assertArrayNotHasKey('pigeonexpressLogoDark', $config);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function shippingAddressConfig(): array
+    {
+        $out = $this->plugin->afterProcess($this->createMock(LayoutProcessor::class), $this->layout());
+
+        return $out['components']['checkout']['children']['steps']['children']['shipping-step']
+            ['children']['shippingAddress']['config'] ?? [];
+    }
 }

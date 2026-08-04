@@ -75,6 +75,9 @@ class OrderAddressLoadPlugin
         if (array_key_exists('delivery_price', $data)) {
             $ext->setPigeonexpressDeliveryPrice($data['delivery_price']);
         }
+        if (array_key_exists('free_shipping', $data)) {
+            $ext->setPigeonexpressFreeShipping($data['free_shipping'] ? 1 : 0);
+        }
 
         return $result;
     }

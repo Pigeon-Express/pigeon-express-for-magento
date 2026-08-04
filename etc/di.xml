@@ -87,6 +87,8 @@
                 type="PigeonExpress\Shipping\Model\LocationSearch"/>
     <preference for="PigeonExpress\Shipping\Api\AdditionalServicesClientInterface"
                 type="PigeonExpress\Shipping\Model\Api\AdditionalServicesClient"/>
+    <preference for="PigeonExpress\Shipping\Api\FreeShippingInterface"
+                type="PigeonExpress\Shipping\Model\Rate\FreeShipping"/>
 <type name="Magento\Checkout\Model\ShippingInformationManagement">
         <plugin name="pigeonexpress_validate_shipping" sortOrder="5"
                 type="PigeonExpress\Shipping\Plugin\Checkout\ShippingInformationManagementValidationPlugin"/>
@@ -117,6 +119,11 @@
     <type name="Magento\Quote\Model\Quote\Address">
         <plugin name="pigeonexpress_quote_address_save" sortOrder="10"
                 type="PigeonExpress\Shipping\Plugin\Quote\QuoteAddressSavePlugin"/>
+        <!-- Magento re-sorts every rate by price, so the order the carrier
+             quotes in never survives. This puts our three back in the order the
+             merchant configured, and leaves every other carrier alone. -->
+        <plugin name="pigeonexpress_shipping_rate_sort" sortOrder="20"
+                type="PigeonExpress\Shipping\Plugin\Quote\ShippingRateSortPlugin"/>
     </type>
     <type name="Magento\Quote\Model\ResourceModel\Quote\Address">
         <plugin name="pigeonexpress_quote_address_load" sortOrder="10"

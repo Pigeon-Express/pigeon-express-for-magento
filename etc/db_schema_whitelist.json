@@ -91,7 +91,8 @@
             "pigeonexpress_location_name": true,
             "pigeonexpress_location_address": true,
             "pigeonexpress_instructions": true,
-            "pigeonexpress_delivery_price": true
+            "pigeonexpress_delivery_price": true,
+            "pigeonexpress_free_shipping": true
         },
         "constraint": {
             "PRIMARY": true,

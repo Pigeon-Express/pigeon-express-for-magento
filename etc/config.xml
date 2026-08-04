@@ -28,28 +28,47 @@
                 <service_declared_value>0</service_declared_value>
                 <service_return_receipt>0</service_return_receipt>
                 <service_return_documents>0</service_return_documents>
+                <!-- Sort orders are spaced by ten so a type can be moved between
+                     two others without renumbering the rest. They also decide the
+                     order the carrier quotes in, which is what the checkout falls
+                     back to when every option costs the same. -->
                 <!-- Delivery type: Address -->
                 <address_enabled>1</address_enabled>
                 <address_title>Address Delivery</address_title>
                 <address_note></address_note>
+                <address_sort_order>10</address_sort_order>
                 <address_pricing_mode>fixed</address_pricing_mode>
                 <address_flat_rate>0</address_flat_rate>
+                <address_free_shipping_enabled>0</address_free_shipping_enabled>
+                <address_free_shipping_threshold></address_free_shipping_threshold>
                 <address_review_and_test>no</address_review_and_test>
                 <!-- Delivery type: Office -->
                 <office_enabled>1</office_enabled>
                 <office_title>Office Delivery</office_title>
                 <office_note></office_note>
+                <office_sort_order>20</office_sort_order>
                 <office_pricing_mode>fixed</office_pricing_mode>
                 <office_flat_rate>0</office_flat_rate>
+                <office_free_shipping_enabled>0</office_free_shipping_enabled>
+                <office_free_shipping_threshold></office_free_shipping_threshold>
                 <office_review_and_test>no</office_review_and_test>
                 <!-- Delivery type: APS -->
                 <aps_enabled>1</aps_enabled>
                 <aps_title>APS (Parcel Locker)</aps_title>
                 <aps_note></aps_note>
+                <aps_sort_order>30</aps_sort_order>
                 <aps_pricing_mode>fixed</aps_pricing_mode>
                 <aps_flat_rate>0</aps_flat_rate>
+                <aps_free_shipping_enabled>0</aps_free_shipping_enabled>
+                <aps_free_shipping_threshold></aps_free_shipping_threshold>
+                <aps_review_and_test>no</aps_review_and_test>
                 <!-- Autocomplete: limit results from local DB (offices/APS) -->
                 <location_search_limit>20</location_search_limit>
+                <!-- Product names, because that is what the module has always sent
+                     and an upgrade must not silently change what is printed on a
+                     merchant's labels. Privacy is opt in. -->
+                <label_contents>product_names</label_contents>
+                <label_contents_text></label_contents_text>
                 <!-- Pickup location, also the origin used for rate calculation -->
                 <pickup_type>office</pickup_type>
                 <!-- The courier collects the shipping charge from the recipient.

@@ -125,6 +125,54 @@ php8.3 -d disable_functions= -d memory_limit=-1 bin/magento cron:run --group=pig
    the shipping price, follow the COD pattern: price twice, take the difference,
    store it through `AdditionalServiceRepository::recordFee()`.
 
+## Free shipping
+
+Two independent things make a delivery free, and either is enough:
+
+1. A **cart price rule** with Magento's Free Shipping action. It reaches the
+   carrier as `RateRequest::getFreeShipping()`. Magento only sets it once the
+   whole cart qualifies, so a rule covering part of a cart does nothing here: one
+   parcel cannot be half free.
+2. A **per delivery type threshold** in the carrier config. Compared against
+   `getPackageValueWithDiscount()`, which is base currency, after discounts, and
+   tax inclusive only where the store's prices already include tax. The same
+   figure DHL, UPS and FedEx compare. Inclusive, so a cart of exactly the
+   advertised amount qualifies.
+
+`Model/Rate/FreeShipping.php` is the only place either is evaluated during rate
+collection. Nothing downstream asks the question again, because the collectors
+that write the values it would have to read run after the rates and do not hold
+the same figures at the two moments.
+
+What a free delivery changes:
+
+| | Free | Not free |
+|---|---|---|
+| Rate | `0.00`, and no `calculate` call | quoted or flat |
+| Payload validation | still runs | runs |
+| COD fee | waived | charged |
+| `who_pays` fallback | `sender` | store setting |
+
+The payload is still built for a free type even though no price is asked for,
+because building it is what rejects a parcel the carrier will not take. Skipping
+it would offer a free locker delivery for something that does not fit in a
+locker. A type that throws is still hidden, free or not: not knowing whether the
+carrier serves a destination is a reason to withhold the option, not to give it
+away.
+
+The COD waiver reads `$total->getBaseShippingAmount() <= 0`, not the threshold.
+That covers a threshold, a cart rule and a deliberately zero flat rate without
+having to tell them apart, and it cannot drift from what the customer is actually
+being asked to pay.
+
+The `who_pays` override cannot use the same test. `who_pays=receiver` with zero
+rates is a supported setup, documented in `etc/config.xml`, where the courier
+collects everything at the door. Flipping those stores to sender pays would
+silently start billing the merchant for every waybill. So the reason a delivery
+cost nothing is recorded on the order address when the order is placed, in
+`pigeonexpress_order_address.pigeonexpress_free_shipping`, and read back at
+shipment time.
+
 ## Things that will reintroduce the bug
 
 - Any literal percentage, minimum or currency amount in PHP, XML, JS or a template.

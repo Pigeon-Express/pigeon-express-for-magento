@@ -288,7 +288,8 @@ define(['jquery', 'mage/translate'], function ($, $t) {
                 $message = $form.find('[data-role="pe-quote"]'),
                 $feeLabel = $form.find('[data-role="pe-fee-label"]'),
                 $newFeeRow = $form.find('[data-role="pe-new-fee-row"]'),
-                $newFee = $form.find('[data-role="pe-new-fee-value"]');
+                $newFeeSender = $form.find('[data-role="pe-new-fee-sender"]'),
+                $newFeeReceiver = $form.find('[data-role="pe-new-fee-receiver"]');
 
             $button.prop('disabled', true);
             $message.removeClass('_error').text($t(config.recalculating || 'Loading...'));
@@ -300,15 +301,24 @@ define(['jquery', 'mage/translate'], function ($, $t) {
                         return;
                     }
 
-                    // The fee already on screen is what the customer paid, so it
-                    // becomes the old one rather than being overwritten. Seeing
-                    // both is the whole point of asking.
-                    $feeLabel.text($t(config.oldFeeLabel || 'Old shipping fee'));
+                    // The fees already on screen are what the customer paid, so
+                    // they become the old ones rather than being overwritten.
+                    // Seeing both is the whole point of asking. There is a row
+                    // per side now, and each carries its own wording, so they
+                    // are relabelled one at a time rather than all to the same
+                    // string.
+                    $feeLabel.each(function () {
+                        var $label = $(this);
+
+                        $label.text($label.data('oldLabel') || $t(config.oldFeeLabel || 'Old shipping fee'));
+                    });
 
                     // Server rendered currency markup, not user input, so it goes
                     // in as HTML. Escaped, the price tag itself would be readable
-                    // on the page.
-                    $newFee.html(response.formatted);
+                    // on the page. Split by side like the stored rows, falling
+                    // back to the single figure if an older response arrives.
+                    $newFeeSender.html(response.sender_formatted || response.formatted);
+                    $newFeeReceiver.html(response.receiver_formatted || response.formatted);
                     $newFeeRow.prop('hidden', false);
                     $message.text('');
                 })

@@ -480,6 +480,40 @@ class AddressFormTest extends TestCase
         $this->assertSame('Витоша 15, бл. 5, вх. А, ет. 3, ап. 12', $address['additional_info']);
     }
 
+    // -- Who the carrier bills -----------------------------------------------
+
+    public function testTheStoreSettingDecidesWhenNothingElseDoes(): void
+    {
+        // The fixture configures receiver pays.
+        $this->assertSame(ConfigInterface::WHO_PAYS_RECEIVER, $this->form->whoPays([]));
+    }
+
+    public function testAFreeDeliveryIsBilledToTheMerchant(): void
+    {
+        // Billing the recipient here would have the courier collect at the door
+        // for something the shop already said cost nothing.
+        $this->assertSame(ConfigInterface::WHO_PAYS_SENDER, $this->form->whoPays([], null, true));
+    }
+
+    public function testAnAdminWhoPicksASideGetsItEvenOnAFreeDelivery(): void
+    {
+        // The shipment form has a real Who Pays select. A screen saying one thing
+        // while the carrier is told another is worse than the charge the override
+        // was trying to prevent.
+        $this->assertSame(
+            ConfigInterface::WHO_PAYS_RECEIVER,
+            $this->form->whoPays(['who_pays' => ConfigInterface::WHO_PAYS_RECEIVER], null, true)
+        );
+    }
+
+    public function testAnUnrecognisedSubmittedValueFallsThroughToTheFreeShippingRule(): void
+    {
+        $this->assertSame(
+            ConfigInterface::WHO_PAYS_SENDER,
+            $this->form->whoPays(['who_pays' => 'somebody_else'], null, true)
+        );
+    }
+
     // -----------------------------------------------------------------------
 
     /**

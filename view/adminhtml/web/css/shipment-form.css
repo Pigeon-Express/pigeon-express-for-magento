@@ -318,9 +318,18 @@
 
 /* The price the carrier has just quoted, set apart from the one on the order. */
 .pe-summary-row._quoted {
-    border-top: 1px solid #f0f0f0;
+    border-top: 2px solid #f0f0f0;
     margin-top: .3rem;
     padding-top: .6rem;
+}
+
+/* The rule divides the quoted prices from the stored ones, so it belongs above
+   the group and not between its rows. Written as an adjacent sibling rather than
+   :first-of-type, which would match the first row of the whole summary. */
+.pe-summary-row._quoted + .pe-summary-row._quoted {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 0;
 }
 
 .pe-summary-row._quoted dd {
@@ -440,4 +449,35 @@
 .pe-package-problem {
     margin-bottom: 1.2rem;
     max-width: 34rem;
+}
+
+/* Why Sender is preselected on a free delivery. The whole control is tinted
+   rather than just the note, so the reason and the thing it explains read as one
+   block. Green rather than the usual warning yellow: nothing is wrong, the admin
+   is being told why this field is not showing the store setting they configured.
+
+   Declared after .pe-type-field on purpose. That rule draws a grey divider along
+   the bottom of every field, which would otherwise cut across the green border. */
+.pigeonexpress-shipment-form .admin__field.pe-free-shipping {
+    background: #eef7ea;
+    border: 1px solid #79a74c;
+    padding: 4px 10px;
+}
+
+.pe-free-shipping-note {
+    font-size: 1.15rem;
+    line-height: 1.3;
+    margin-top: .8rem;
+}
+
+.pe-free-shipping-note strong {
+    display: block;
+    font-weight: 600;
+}
+
+/* Stands in for a figure the order does not carry, so it must not look like
+   one. Muted and italic: it is an instruction, not an amount. */
+.pe-fee-unknown {
+    color: #777;
+    font-style: italic;
 }

@@ -124,6 +124,40 @@ Three delivery types can be enabled independently: **Address**, **Office**, **AP
 
 - **Fixed pricing**: flat rate set in admin
 - **Dynamic pricing**: rate calculated via Pigeon Express API based on package dimensions, weight, and destination
+- **Free shipping threshold**: an order subtotal, after discounts, at or above
+  which that delivery type costs nothing. Configured per type, because each one
+  is priced separately. Off by default.
+- **Sort order**: the position of that type among the Pigeon Express options at
+  checkout. Lower shows first.
+
+Magento's own **Free Shipping** cart price rule is honoured too, whatever the
+thresholds are set to. Magento only reports a rule to the carrier when the whole
+cart qualifies, so a rule that frees part of a cart leaves the rate unchanged: a
+single parcel cannot be half free.
+
+When a delivery is free, the cash on delivery fee is waived with it, and the
+waybill is billed to the sender even where **Who Pays** is set to Receiver.
+Otherwise the courier would collect at the door for a delivery the shop said was
+free. An explicit Who Pays choice on the shipment screen still wins.
+
+### Label Contents
+
+Pigeon Express prints the parcel contents on the waybill, and by default that is
+the product names and quantities from the order. Everyone who handles the parcel
+can read it.
+
+**Label Contents** under General switches this to a single **Fixed Description**
+you choose, for example `Стоки`. The whole order becomes one line with no
+quantity, so the label reads `Съдържание: Стоки` rather than
+`Съдържание: 5 бр. - Push It Messenger Bag 1kg`.
+
+Nothing here moves money. The sum the carrier insures is sent separately as
+`declared_value`, taken from the order subtotal, and cash on delivery as
+`cod_amount`, so both are unaffected by what the label says.
+
+Defaults to product names, so upgrading does not change what your labels say.
+Leave the description empty and the label falls back to a generic word, never to
+the product name.
 
 ### Pickup Location
 
@@ -349,7 +383,7 @@ The shipment data (API request payload and response) is stored in `pigeonexpress
 | `pigeonexpress_aps` | Synced APS parcel lockers |
 | `pigeonexpress_city` | Synced city reference data (used for dynamic rate city lookup) |
 | `pigeonexpress_quote_address` | Selected PE delivery location per quote shipping address |
-| `pigeonexpress_order_address` | Selected PE delivery location + price per order shipping address |
+| `pigeonexpress_order_address` | Selected PE delivery location + price per order shipping address, and whether free shipping is why it cost nothing |
 | `pigeonexpress_shipment` | Shipment records: reference number, tracking number, API payload & response |
 | `pigeonexpress_additional_service` | Additional services catalogue synced from the API, plus the last fee the API charged for each |
 | `sales_order` (column) | `pigeonexpress_cod_fee`: COD fee amount, as charged by the API, stored with the order |

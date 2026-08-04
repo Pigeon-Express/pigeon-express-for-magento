@@ -110,14 +110,25 @@ class AddressForm
      * Falls back to the store setting rather than to a hardcoded side, so an
      * order sent without the form still bills whoever the merchant configured.
      *
+     * A delivery the customer was given free is the one exception: billing the
+     * recipient there would have the courier collect at the door for something
+     * the shop already said cost nothing. It changes the fallback only. An admin
+     * who picks a side on the shipment form still gets the side they picked,
+     * because a screen that says one thing while the carrier is told another is
+     * worse than the charge it was trying to prevent.
+     *
      * @param array<string, string> $fields
      */
-    public function whoPays(array $fields, ?int $storeId = null): string
+    public function whoPays(array $fields, ?int $storeId = null, bool $freeShipping = false): string
     {
         $value = (string) ($fields['who_pays'] ?? '');
 
         if ($value === ConfigInterface::WHO_PAYS_SENDER || $value === ConfigInterface::WHO_PAYS_RECEIVER) {
             return $value;
+        }
+
+        if ($freeShipping) {
+            return ConfigInterface::WHO_PAYS_SENDER;
         }
 
         return $this->config->getWhoPays($storeId);
@@ -247,13 +258,14 @@ class AddressForm
      * carrier has never heard of.
      *
      * @param array<string, string> $fields
+     * @param bool $freeShipping The customer was not charged for this delivery
      * @return array{fields: array<string, string>, issues: array<string, array{severity:string, message:string}>}
      */
-    public function validate(array $fields, int $storeId): array
+    public function validate(array $fields, int $storeId, bool $freeShipping = false): array
     {
         $fields = array_merge($this->blank(), $fields);
         $fields['delivery_type'] = $this->deliveryType($fields);
-        $fields['who_pays'] = $this->whoPays($fields, $storeId);
+        $fields['who_pays'] = $this->whoPays($fields, $storeId, $freeShipping);
         $issues = [];
 
         if ($fields['contact_name'] === '') {

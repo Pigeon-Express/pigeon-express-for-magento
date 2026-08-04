@@ -23,6 +23,16 @@ var config = {
             'Magento_Checkout/js/view/shipping': {
                 'PigeonExpress_Shipping/js/view/shipping-mixin': true
             },
+            // A zero rate of ours reads "Free" rather than 0.00, in the order
+            // summary and in the cart page estimator. The checkout method list
+            // is handled by our own row template instead, which the layout
+            // processor installs.
+            'Magento_Tax/js/view/checkout/summary/shipping': {
+                'PigeonExpress_Shipping/js/view/summary-shipping-mixin': true
+            },
+            'Magento_Checkout/js/view/cart/shipping-rates': {
+                'PigeonExpress_Shipping/js/view/cart/shipping-rates-mixin': true
+            },
         }
     }
 };

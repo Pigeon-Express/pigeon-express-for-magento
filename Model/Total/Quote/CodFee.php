@@ -39,6 +39,15 @@ class CodFee extends AbstractTotal
             return $this;
         }
 
+        // Nothing charged for carriage, nothing charged for collecting the cash.
+        // The shipping collector wrote the chosen rate's price here before this
+        // one ran, so this reads what the customer is actually being asked for,
+        // whether it fell to zero from a free shipping threshold, a cart price
+        // rule, or a flat rate the merchant deliberately set to nothing.
+        if ((float) $total->getBaseShippingAmount() <= 0.0) {
+            return $this;
+        }
+
         $storeId = (int) $quote->getStoreId();
         $codMethods = $this->config->getCodPaymentMethods($storeId);
         if (empty($codMethods)) {

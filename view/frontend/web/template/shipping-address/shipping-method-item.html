@@ -25,7 +25,16 @@
     </td>
     <!-- ko ifnot: (method.error_message) -->
     <td class="col col-price">
+        <!-- A delivery that costs nothing says so. A price of 0,00 reads as a
+             missing value or a bug, and this module hides a method it cannot
+             price rather than quoting zero, so a zero here is always deliberate.
+             Only our own rates: every other carrier keeps Magento's formatting. -->
+        <!-- ko if: method.carrier_code === 'pigeonexpress' && element.pigeonexpressIsFree(method) -->
+        <span class="price pigeonexpress-free" text="element.pigeonexpressFreeLabel"></span>
+        <!-- /ko -->
+        <!-- ko ifnot: method.carrier_code === 'pigeonexpress' && element.pigeonexpressIsFree(method) -->
         <each args="element.getRegion('price')" render=""></each>
+        <!-- /ko -->
     </td>
     <!-- /ko -->
     <td class="col col-method"

@@ -50,7 +50,8 @@ class OrderAddressSavePlugin
             $ext->getPigeonexpressLocationName(),
             $ext->getPigeonexpressLocationAddress(),
             $ext->getPigeonexpressInstructions(),
-            $ext->getPigeonexpressDeliveryPrice()
+            $ext->getPigeonexpressDeliveryPrice(),
+            (bool) $ext->getPigeonexpressFreeShipping()
         );
 
         return $result;

@@ -20,6 +20,7 @@ use Magento\Shipping\Model\Carrier\AbstractCarrier;
 use Magento\Shipping\Model\Carrier\CarrierInterface;
 use Magento\Shipping\Model\Rate\ResultFactory;
 use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Api\FreeShippingInterface;
 use PigeonExpress\Shipping\Exception\UnshippableException;
 use PigeonExpress\Shipping\Model\Rate\RateCollector;
 use Psr\Log\LoggerInterface;
@@ -60,6 +61,11 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
     private $rateCollector;
 
     /**
+     * @var FreeShippingInterface
+     */
+    private $freeShipping;
+
+    /**
      * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
      * @param ErrorFactory $rateErrorFactory
      * @param LoggerInterface $logger
@@ -67,6 +73,7 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
      * @param MethodFactory $rateMethodFactory
      * @param ConfigInterface $config
      * @param RateCollector $rateCollector
+     * @param FreeShippingInterface $freeShipping
      * @param array $data
      */
     public function __construct(
@@ -77,12 +84,14 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
         MethodFactory $rateMethodFactory,
         ConfigInterface $config,
         RateCollector $rateCollector,
+        FreeShippingInterface $freeShipping,
         array $data = []
     ) {
         $this->rateResultFactory = $rateResultFactory;
         $this->rateMethodFactory = $rateMethodFactory;
         $this->config = $config;
         $this->rateCollector = $rateCollector;
+        $this->freeShipping = $freeShipping;
         parent::__construct($scopeConfig, $rateErrorFactory, $logger, $data);
     }
 
@@ -134,9 +143,15 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
         $result = $this->rateResultFactory->create();
 
         foreach ($enabledTypes as $deliveryType) {
+            $isFree = false;
+
             try {
                 $title = $this->config->getDeliveryTypeTitle($deliveryType, $storeId);
-                $price = $this->getPriceForDeliveryType($request, $deliveryType, $storeId);
+                // Inside the try with everything else, so a delivery type that
+                // cannot answer the question drops out on its own rather than
+                // taking the whole checkout down with it.
+                $isFree = $this->freeShipping->appliesToRequest($request, $deliveryType, $storeId);
+                $price = $this->getPriceForDeliveryType($request, $deliveryType, $storeId, $isFree);
             } catch (\Throwable $e) {
                 // If dynamic pricing is selected but product dimensions are missing, or any other
                 // hard error that should make the method unavailable, skip this delivery type.
@@ -176,6 +191,7 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
                     'method' => $deliveryType,
                     'title' => $title,
                     'price' => $price,
+                    'free_shipping' => $isFree,
                 ]);
             }
         }
@@ -190,17 +206,26 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
     }
 
     /**
-     * Delivery price: fixed from config or 0 (placeholder for dynamic API in Stage 2).
+     * Delivery price: fixed from config, or quoted by the API.
      *
-     * Falls back to flat rate from admin if API is unavailable.
+     * Falls back to flat rate from admin if API is unavailable. A free delivery
+     * type still goes through here rather than short circuiting to zero, because
+     * the collector is also where a parcel is checked against what the carrier
+     * will actually take, and a locker delivery that cannot fit must not be
+     * offered at any price, free included.
      *
      * @param string $deliveryType address|office|aps
      * @param int $storeId
+     * @param bool $freeShipping
      * @return float
      */
-    private function getPriceForDeliveryType(RateRequest $request, string $deliveryType, int $storeId): float
-    {
-        return (float) $this->rateCollector->getRatePrice($request, $deliveryType, $storeId);
+    private function getPriceForDeliveryType(
+        RateRequest $request,
+        string $deliveryType,
+        int $storeId,
+        bool $freeShipping = false
+    ): float {
+        return (float) $this->rateCollector->getRatePrice($request, $deliveryType, $storeId, $freeShipping);
     }
 
     /**

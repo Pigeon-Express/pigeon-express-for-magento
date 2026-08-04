@@ -14,6 +14,7 @@ use Magento\Framework\App\Config\ScopeConfigInterface;
 use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Store\Model\ScopeInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Model\Config\Source\LabelContents;
 
 class ConfigProvider implements ConfigInterface
 {
@@ -191,6 +192,88 @@ class ConfigProvider implements ConfigInterface
     /**
      * @inheritdoc
      */
+    public function getLabelContentsMode(?int $storeId = null): string
+    {
+        $value = $this->scopeConfig->getValue(
+            self::XML_PATH_CARRIER . 'label_contents',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+
+        // Anything unrecognised means product names, which is what the module
+        // sent before this setting existed.
+        return $value === LabelContents::FIXED_TEXT
+            ? LabelContents::FIXED_TEXT
+            : LabelContents::PRODUCT_NAMES;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getLabelContentsText(?int $storeId = null): string
+    {
+        $value = trim((string) $this->scopeConfig->getValue(
+            self::XML_PATH_CARRIER . 'label_contents_text',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        ));
+
+        return $value !== '' ? $value : (string) __('Goods');
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function isFreeShippingThresholdEnabled(string $deliveryType, ?int $storeId = null): bool
+    {
+        $this->validateDeliveryType($deliveryType);
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_CARRIER . $deliveryType . '_free_shipping_enabled',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getFreeShippingThreshold(string $deliveryType, ?int $storeId = null): float
+    {
+        $this->validateDeliveryType($deliveryType);
+        $value = $this->scopeConfig->getValue(
+            self::XML_PATH_CARRIER . $deliveryType . '_free_shipping_threshold',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+
+        // A negative threshold would make every cart qualify, including an empty
+        // one, so it is read as no threshold rather than as free for everyone.
+        $threshold = $value !== null && $value !== '' ? (float) $value : 0.0;
+
+        return $threshold > 0.0 ? $threshold : 0.0;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getDeliveryTypeSortOrder(string $deliveryType, ?int $storeId = null): int
+    {
+        $this->validateDeliveryType($deliveryType);
+        $value = $this->scopeConfig->getValue(
+            self::XML_PATH_CARRIER . $deliveryType . '_sort_order',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+        return $value !== null && $value !== '' ? (int) $value : 0;
+    }
+
+    /**
+     * @inheritdoc
+     *
+     * Returned in the order the merchant configured. Ties keep the declaration
+     * order of $deliveryTypes, PHP sorts being stable, so two types left on the
+     * same number do not swap places between requests.
+     */
     public function getEnabledDeliveryTypes(?int $storeId = null): array
     {
         $enabled = [];
@@ -199,6 +282,15 @@ class ConfigProvider implements ConfigInterface
                 $enabled[] = $type;
             }
         }
+
+        usort(
+            $enabled,
+            function (string $a, string $b) use ($storeId): int {
+                return $this->getDeliveryTypeSortOrder($a, $storeId)
+                    <=> $this->getDeliveryTypeSortOrder($b, $storeId);
+            }
+        );
+
         return $enabled;
     }
 

@@ -23,7 +23,10 @@
         <attribute code="pigeonexpress_instructions" type="string"/>
         <attribute code="pigeonexpress_delivery_price" type="double"/>
     </extension_attributes>
-    <!-- Order shipping address: persisted when order is placed -->
+    <!-- Order shipping address: persisted when order is placed.
+         pigeonexpress_free_shipping records why the delivery cost nothing, which
+         a zero amount on its own cannot say, and decides who the carrier bills
+         for the waybill. -->
     <extension_attributes for="Magento\Sales\Api\Data\OrderAddressInterface">
         <attribute code="pigeonexpress_delivery_type" type="string"/>
         <attribute code="pigeonexpress_location_id" type="string"/>
@@ -31,5 +34,6 @@
         <attribute code="pigeonexpress_location_address" type="string"/>
         <attribute code="pigeonexpress_instructions" type="string"/>
         <attribute code="pigeonexpress_delivery_price" type="double"/>
+        <attribute code="pigeonexpress_free_shipping" type="int"/>
     </extension_attributes>
 </config>

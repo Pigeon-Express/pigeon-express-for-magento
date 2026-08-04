@@ -113,6 +113,18 @@ Also still missing, and worth doing before those:
   the guesswork at source instead of correcting it afterwards. This is the
   natural companion to the native shipments work below, and the two would share
   the same lookups.
+- **Free shipping is all or nothing per delivery type.** Magento's cart price
+  rules can free part of a cart, and can name a specific method to free, but
+  neither reaches a carrier that ships one parcel: Magento only reports the rule
+  once the whole cart qualifies. Nothing to fix, but worth writing down before
+  somebody reports it as a bug. Targeting one delivery type from a rule would
+  mean reading `getFreeShippingMethod()` off the items the way Flatrate and
+  Tablerate do.
+- **The threshold has no tax switch.** It compares
+  `getPackageValueWithDiscount()`, which follows the store's
+  `price_includes_tax` setting, matching DHL, UPS and FedEx. Magento's own Free
+  Shipping carrier offers an explicit "Include Tax to Amount" toggle instead.
+  Worth adding only if a merchant actually asks.
 - **Two services are mapped but unavailable.** `requires_special_packaging` and
   `sms_notification_receiver` are not in the account catalogue, so they are
   skipped and logged, and the admin panel now says so. Either ask Pigeon Express

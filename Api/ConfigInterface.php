@@ -102,6 +102,59 @@ interface ConfigInterface
     public function getDeliveryTypeFlatRate(string $deliveryType, ?int $storeId = null): float;
 
     /**
+     * What the waybill says the parcel contains: product names or one fixed wording.
+     *
+     * @param int|null $storeId
+     * @return string One of PigeonExpress\Shipping\Model\Config\Source\LabelContents
+     */
+    public function getLabelContentsMode(?int $storeId = null): string;
+
+    /**
+     * The wording printed in place of product names.
+     *
+     * Never empty. An unset field falls back to a generic word rather than to
+     * the product name, because falling back to the name would quietly undo the
+     * only thing this setting exists to do.
+     *
+     * @param int|null $storeId
+     * @return string
+     */
+    public function getLabelContentsText(?int $storeId = null): string;
+
+    /**
+     * Whether a delivery type becomes free once the cart reaches a threshold.
+     *
+     * Independent of Magento's own free shipping cart price rules, which apply
+     * whatever this returns.
+     *
+     * @param string $deliveryType
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isFreeShippingThresholdEnabled(string $deliveryType, ?int $storeId = null): bool;
+
+    /**
+     * Order subtotal at or above which a delivery type costs nothing.
+     *
+     * Zero means no threshold, which is also what an unconfigured or cleared
+     * field reads as, so callers do not have to tell the two apart.
+     *
+     * @param string $deliveryType
+     * @param int|null $storeId
+     * @return float
+     */
+    public function getFreeShippingThreshold(string $deliveryType, ?int $storeId = null): float;
+
+    /**
+     * Position of a delivery type among the carrier's options at checkout.
+     *
+     * @param string $deliveryType
+     * @param int|null $storeId
+     * @return int
+     */
+    public function getDeliveryTypeSortOrder(string $deliveryType, ?int $storeId = null): int;
+
+    /**
      * Get list of enabled delivery type codes.
      *
      * @param int|null $storeId

@@ -21,6 +21,8 @@ use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\Controller\Result\Json;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Sales\Api\OrderRepositoryInterface;
+use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Api\FreeShippingInterface;
 use PigeonExpress\Shipping\Api\ShipmentSenderInterface;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
 use Psr\Log\LoggerInterface;
@@ -44,19 +46,24 @@ class Recalculate extends Action implements HttpPostActionInterface
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var FreeShippingInterface */
+    private $freeShipping;
+
     public function __construct(
         Context $context,
         JsonFactory $resultJsonFactory,
         OrderRepositoryInterface $orderRepository,
         ShipmentSenderInterface $shipmentSender,
         AddressForm $addressForm,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        FreeShippingInterface $freeShipping
     ) {
         $this->resultJsonFactory = $resultJsonFactory;
         $this->orderRepository = $orderRepository;
         $this->shipmentSender = $shipmentSender;
         $this->addressForm = $addressForm;
         $this->logger = $logger;
+        $this->freeShipping = $freeShipping;
         parent::__construct($context);
     }
 
@@ -79,7 +86,11 @@ class Recalculate extends Action implements HttpPostActionInterface
 
         $submitted = $this->getRequest()->getParam('pe');
         $fields = $this->addressForm->fromRequest(is_array($submitted) ? $submitted : []);
-        $checked = $this->addressForm->validate($fields, (int) $order->getStoreId());
+        $checked = $this->addressForm->validate(
+            $fields,
+            (int) $order->getStoreId(),
+            $this->freeShipping->wasAppliedToOrder($order)
+        );
 
         // A price for an address the carrier cannot resolve would be a guess, so
         // the admin is told what to fix instead of being given a number.
@@ -99,9 +110,22 @@ class Recalculate extends Action implements HttpPostActionInterface
             ]);
         }
 
+        // Split by the side the form currently bills. The carrier charges one or
+        // the other, never both, so the side that is not billed comes back as
+        // zero rather than being left out, matching the stored rows above it.
+        $whoPays = (string) ($checked['fields']['who_pays'] ?? '');
+        $price = (float) $quote['price'];
+
         return $result->setData([
-            'price'     => $quote['price'],
-            'formatted' => $order->formatPrice($quote['price']),
+            'price'              => $quote['price'],
+            'formatted'          => $order->formatPrice($price),
+            'who_pays'           => $whoPays,
+            'sender_formatted'   => $order->formatPrice(
+                $whoPays === ConfigInterface::WHO_PAYS_SENDER ? $price : 0.0
+            ),
+            'receiver_formatted' => $order->formatPrice(
+                $whoPays === ConfigInterface::WHO_PAYS_RECEIVER ? $price : 0.0
+            ),
         ]);
     }
 }
