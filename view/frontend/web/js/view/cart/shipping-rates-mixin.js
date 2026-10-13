@@ -2,9 +2,9 @@
  * Pigeon Express: point the cart page estimator at our row and answer whether a
  * rate of ours is free.
  *
- * The predicate is the same one the checkout row uses, kept here rather than
- * shared through a module of its own because it is four lines and the two
- * components have no other reason to know about each other.
+ * The predicate matches the one written inline in the checkout row template.
+ * Here it can be a method, because this mixin installs the template too, so
+ * the two can never arrive without each other.
  */
 define([], function () {
     'use strict';

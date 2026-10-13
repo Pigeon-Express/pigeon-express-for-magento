@@ -5,19 +5,6 @@
  * Content Security Policy and the presentation is overridable by a theme.
  */
 
-.pe-searchable-select {
-    position: relative;
-}
-
-.pe-searchable-select-input {
-    width: 100%;
-    margin-bottom: 4px;
-    padding: 4px 8px;
-    box-sizing: border-box;
-    border: 1px solid #adadad;
-    border-radius: 1px;
-}
-
 /* Catalogue of services the account actually offers. */
 .pe-service-availability {
     margin: 0;
@@ -60,4 +47,305 @@
 
 .pe-service-availability__empty {
     color: #e02b27;
+}
+
+/* -- Pickup address: city and street pickers -----------------------------
+   Drawn entirely in CSS, with no icon images, so nothing here needs an
+   exception in the admin Content Security Policy. */
+
+.pe-picker__box {
+    position: relative;
+}
+
+.pe-picker .admin__control-text.pe-picker__input {
+    padding-left: 3.4rem;
+    padding-right: 3.4rem;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.pe-picker .admin__control-text.pe-picker__input:focus {
+    border-color: #007bdb;
+    box-shadow: 0 0 0 3px rgba(0, 123, 219, .15);
+}
+
+.pe-picker._open .admin__control-text.pe-picker__input {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+/* Magnifying glass: a ring and a handle. */
+.pe-picker__icon {
+    height: 1.2rem;
+    left: 1.2rem;
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-60%);
+    width: 1.2rem;
+    z-index: 2;
+}
+
+.pe-picker__icon::before {
+    border: 2px solid #8a8a8a;
+    border-radius: 50%;
+    box-sizing: border-box;
+    content: '';
+    height: 1.1rem;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 1.1rem;
+}
+
+.pe-picker__icon::after {
+    background: #8a8a8a;
+    border-radius: 1px;
+    content: '';
+    height: .2rem;
+    left: .85rem;
+    position: absolute;
+    top: 1.05rem;
+    transform: rotate(45deg);
+    width: .6rem;
+}
+
+.pe-picker__box:focus-within .pe-picker__icon::before {
+    border-color: #007bdb;
+}
+
+.pe-picker__box:focus-within .pe-picker__icon::after {
+    background: #007bdb;
+}
+
+/* A chosen place reads as settled: a check in place of the glass. */
+.pe-picker._linked .pe-picker__icon::before {
+    border: 0;
+    border-bottom: 2px solid #3f8f1f;
+    border-radius: 0;
+    border-right: 2px solid #3f8f1f;
+    height: 1.1rem;
+    left: .35rem;
+    top: -.1rem;
+    transform: rotate(45deg);
+    width: .55rem;
+}
+
+.pe-picker._linked .pe-picker__icon::after {
+    display: none;
+}
+
+/* Clear button and spinner share the right-hand slot. */
+.pe-picker__clear {
+    background: none;
+    border: 0;
+    border-radius: 50%;
+    box-shadow: none;
+    color: #8a8a8a;
+    cursor: pointer;
+    display: none;
+    font-size: 1.8rem;
+    height: 2.4rem;
+    line-height: 2.4rem;
+    margin: 0;
+    padding: 0;
+    position: absolute;
+    right: .6rem;
+    text-align: center;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2.4rem;
+    z-index: 2;
+}
+
+.pe-picker__clear:hover,
+.pe-picker__clear:focus {
+    background: #f0f0f0;
+    box-shadow: none;
+    color: #303030;
+}
+
+.pe-picker._filled .pe-picker__clear {
+    display: block;
+}
+
+.pe-picker._busy .pe-picker__clear,
+.pe-picker._disabled .pe-picker__clear {
+    display: none;
+}
+
+.pe-picker__spinner {
+    animation: pe-picker-spin .7s linear infinite;
+    border: 2px solid #d6d6d6;
+    border-radius: 50%;
+    border-top-color: #007bdb;
+    box-sizing: border-box;
+    display: none;
+    height: 1.6rem;
+    margin-top: -.8rem;
+    position: absolute;
+    right: 1.2rem;
+    top: 50%;
+    width: 1.6rem;
+    z-index: 2;
+}
+
+.pe-picker._busy .pe-picker__spinner {
+    display: block;
+}
+
+@keyframes pe-picker-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* The list. */
+.pe-picker__list {
+    background: #fff;
+    border: 1px solid #007bdb;
+    border-radius: 0 0 4px 4px;
+    border-top: 0;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .12);
+    box-sizing: border-box;
+    display: none;
+    left: 0;
+    list-style: none;
+    margin: 0;
+    max-height: 32rem;
+    overflow-y: auto;
+    padding: .4rem 0;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 600;
+}
+
+.pe-picker__list._open {
+    display: block;
+}
+
+.pe-picker__item {
+    align-items: baseline;
+    border-left: 3px solid transparent;
+    cursor: pointer;
+    display: flex;
+    gap: 1.2rem;
+    justify-content: space-between;
+    margin: 0;
+    padding: .8rem 1.2rem .8rem 1.1rem;
+}
+
+.pe-picker__item._active {
+    background: #eef6fd;
+    border-left-color: #007bdb;
+}
+
+.pe-picker__name {
+    color: #303030;
+    font-weight: 600;
+}
+
+.pe-picker__name mark {
+    background: #fff3b0;
+    border-radius: 2px;
+    color: inherit;
+    padding: 0;
+}
+
+.pe-picker__meta {
+    color: #6f6f6f;
+    flex-shrink: 0;
+    font-size: 1.2rem;
+    white-space: nowrap;
+}
+
+/* Office rows: name over address, since the address is what tells two
+   offices of the same name apart. */
+.pe-picker__item--stacked {
+    display: block;
+}
+
+.pe-picker__item--stacked .pe-picker__name,
+.pe-picker__item--stacked .pe-picker__meta {
+    display: block;
+    white-space: normal;
+}
+
+.pe-picker__item--stacked .pe-picker__meta {
+    margin-top: .2rem;
+}
+
+.pe-picker__meta mark {
+    background: #fff3b0;
+    border-radius: 2px;
+    color: inherit;
+    padding: 0;
+}
+
+.pe-picker__item._selected .pe-picker__name::after {
+    color: #3f8f1f;
+    content: '\2713';
+    font-weight: 700;
+    margin-left: .6rem;
+}
+
+/* The office select is still the saved field, just not the one shown. */
+.pe-picker .pe-picker__native {
+    display: none !important;
+}
+
+.pe-picker__note {
+    color: #6f6f6f;
+    font-style: italic;
+    margin: 0;
+    padding: 1rem 1.4rem;
+}
+
+.pe-picker__note._warn {
+    color: #a35c00;
+    font-style: normal;
+}
+
+/* Linked or not, as a small badge under the field. */
+.pe-picker__status:empty {
+    display: none;
+}
+
+.pe-picker__status {
+    border-radius: 1rem;
+    display: inline-block;
+    font-size: 1.15rem;
+    line-height: 1.6;
+    margin-top: .6rem;
+    padding: .1rem 1rem;
+}
+
+.pe-picker__status._linked {
+    background: #e5f3dd;
+    color: #2d6b14;
+}
+
+.pe-picker__status._warn {
+    background: #fdf0d5;
+    color: #8a4f00;
+}
+
+.pe-picker._disabled .pe-picker__status {
+    opacity: .6;
+}
+
+/* The postal code, once the city has set it. */
+.admin__control-text.pe-readonly,
+.admin__control-text.pe-readonly:focus {
+    background-color: #f4f4f4;
+    border-color: #d6d6d6;
+    box-shadow: none;
+    color: #555;
+    cursor: default;
+}
+
+/* City ID and Street ID: saved, inherited and dependent like any field, but
+   written only by the pickers. The row also carries the hidden attribute. */
+tr.pe-hidden-row {
+    display: none !important;
 }

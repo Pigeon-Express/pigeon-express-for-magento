@@ -7,9 +7,13 @@
  * else here is unchanged from Magento_Checkout, so keep it that way: the only
  * addition is the img in col-carrier, and it renders for one carrier only.
  *
- * The two values it reads are plain config on the shipping component, set from
- * PHP in LayoutProcessorPlugin. Nothing here calls a method, so this row does not
- * depend on any JavaScript of ours having loaded.
+ * The values it reads are plain config on the shipping component, set from PHP
+ * in LayoutProcessorPlugin. Nothing here calls a method of ours, so this row
+ * does not depend on any JavaScript of ours having loaded. Keep it that way:
+ * the row is installed server side, but a mixin is not guaranteed to reach the
+ * component that renders it. A one step checkout that swaps in its own shipping
+ * view skips mixins declared for Magento's, and a row calling one then fails to
+ * render at all.
  */
 -->
 <tr class="row"
@@ -29,10 +33,13 @@
              missing value or a bug, and this module hides a method it cannot
              price rather than quoting zero, so a zero here is always deliberate.
              Only our own rates: every other carrier keeps Magento's formatting. -->
-        <!-- ko if: method.carrier_code === 'pigeonexpress' && element.pigeonexpressIsFree(method) -->
+        <!-- Free means zero both with and without tax, since which figure the row
+             would show depends on the tax display setting. Read loosely: the
+             amounts arrive as strings over JSON. -->
+        <!-- ko if: method.carrier_code === 'pigeonexpress' && Number(method.price_incl_tax !== undefined ? method.price_incl_tax : method.amount) === 0 && Number(method.price_excl_tax !== undefined ? method.price_excl_tax : method.amount) === 0 -->
         <span class="price pigeonexpress-free" text="element.pigeonexpressFreeLabel"></span>
         <!-- /ko -->
-        <!-- ko ifnot: method.carrier_code === 'pigeonexpress' && element.pigeonexpressIsFree(method) -->
+        <!-- ko ifnot: method.carrier_code === 'pigeonexpress' && Number(method.price_incl_tax !== undefined ? method.price_incl_tax : method.amount) === 0 && Number(method.price_excl_tax !== undefined ? method.price_excl_tax : method.amount) === 0 -->
         <each args="element.getRegion('price')" render=""></each>
         <!-- /ko -->
     </td>

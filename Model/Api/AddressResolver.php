@@ -83,7 +83,7 @@ class AddressResolver
      * Bulgaria has several villages sharing a name, so the postal code is part
      * of the label. Picking the wrong Абланица sends the parcel 200 km away.
      *
-     * @return array<int, array{id:int, name:string, postcode:string, label:string}>
+     * @return array<int, array{id:int, name:string, postcode:string, label:string, district:string, region_id:mixed}>
      */
     public function searchCities(string $query, int $limit = 20): array
     {
@@ -117,6 +117,7 @@ class AddressResolver
                 'name'     => (string) $row['name'],
                 'postcode' => (string) ($row['postal_code'] ?? ''),
                 'label'    => $this->cityLabel((string) $row['name'], (string) ($row['postal_code'] ?? '')),
+                'district' => (string) ($row['district'] ?? ''),
                 // Magento will not take a Bulgarian address without a region,
                 // and the district this settlement sits in is the only one going.
                 'region_id' => $this->regionResolver->resolve(

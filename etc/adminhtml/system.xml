@@ -468,49 +468,45 @@
                     <field id="pickup_office_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="133" translate="label" type="select">
                         <config_path>carriers/pigeonexpress/pickup_office_id</config_path>
                         <label>Office</label>
-                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\SearchableSelect</frontend_model>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\OfficePicker</frontend_model>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupOffice</source_model>
-                        <comment><![CDATA[Drop your parcels off at the Pigeon Express office you choose here. It is also the origin used to calculate shipping rates.]]></comment>
+                        <comment><![CDATA[Search by office name, town or street. You take your parcels to this office yourself, and it is also the origin used to calculate shipping rates.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="pickup_type">office</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_city_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="134" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_city_id</config_path>
-                        <label>City ID</label>
-                        <comment>PE city ID. Filled by autocomplete or enter manually.</comment>
-                        <depends>
-                            <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="pickup_type">address</field>
-                        </depends>
-                    </field>
-                    <field id="pickup_address_city_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="135" translate="label" type="text">
+                    <field id="pickup_address_city_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="134" translate="label comment" type="text">
                         <config_path>carriers/pigeonexpress/pickup_address_city_label</config_path>
-                        <label>City (display)</label>
+                        <label>City</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\PickupAddressPicker</frontend_model>
+                        <comment>Start typing and choose the city from the Pigeon Express list. The postal code is filled in from it.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_street_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_street_id</config_path>
-                        <label>Street ID</label>
-                        <comment>PE street ID for selected city. Optional if using address line as additional_info.</comment>
+                    <field id="pickup_address_postal_code" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="135" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_postal_code</config_path>
+                        <label>Postal Code</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ReadonlyField</frontend_model>
+                        <comment>Filled in from the city. Only open for typing when Pigeon Express holds no postal code for it.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_street_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="137" translate="label" type="text">
+                    <field id="pickup_address_street_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label comment" type="text">
                         <config_path>carriers/pigeonexpress/pickup_address_street_label</config_path>
-                        <label>Street (display)</label>
+                        <label>Street</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\PickupAddressPicker</frontend_model>
+                        <comment>Choose the city first, then start typing and choose the street. If it is not on the list, type it; it is sent as written.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_street_number" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="138" translate="label" type="text">
+                    <field id="pickup_address_street_number" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="137" translate="label" type="text">
                         <config_path>carriers/pigeonexpress/pickup_address_street_number</config_path>
                         <label>Street Number</label>
                         <depends>
@@ -518,9 +514,19 @@
                             <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_postal_code" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="139" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_postal_code</config_path>
-                        <label>Postal Code</label>
+                    <field id="pickup_address_city_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="138" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_city_id</config_path>
+                        <label>City ID</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\HiddenField</frontend_model>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">address</field>
+                        </depends>
+                    </field>
+                    <field id="pickup_address_street_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="139" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_street_id</config_path>
+                        <label>Street ID</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\HiddenField</frontend_model>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="pickup_type">address</field>

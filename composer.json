@@ -1,7 +1,7 @@
 {
     "name": "pigeonexpress/module-shipping",
     "description": "Pigeon Express courier shipping integration for Magento 2",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "type": "magento2-module",
     "license": "OSL-3.0",
     "require": {

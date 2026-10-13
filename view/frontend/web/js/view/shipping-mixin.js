@@ -68,27 +68,6 @@ define([
                 }
 
                 return this._super() && ours;
-            },
-
-            /**
-             * Whether a rate of ours costs the customer nothing.
-             *
-             * Both figures are checked because which one the row would have
-             * displayed depends on the store's tax display setting, and a rate
-             * that is free is free either way. Read loosely: these arrive as
-             * strings over JSON.
-             */
-            pigeonexpressIsFree: function (method) {
-                if (!method) {
-                    return false;
-                }
-
-                var inclTax = method.price_incl_tax,
-                    exclTax = method.price_excl_tax,
-                    amount = method.amount;
-
-                return Number(inclTax !== undefined ? inclTax : amount) === 0 &&
-                    Number(exclTax !== undefined ? exclTax : amount) === 0;
             }
         });
     };

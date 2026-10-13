@@ -207,8 +207,12 @@ class ShipmentClient implements ShipmentClientInterface
             $request->setPickupOfficeId((int) $payload['pickup_office_id']);
         }
 
-        if (!empty($payload['sender_address']) && is_array($payload['sender_address'])) {
-            $request->setSenderAddress($payload['sender_address']);
+        // The pickup address is built once for both endpoints. Calculate names it
+        // pickup_address, but create only reads sender_address, so without this
+        // an address pickup reached the carrier with no origin at all.
+        $senderAddress = $payload['sender_address'] ?? $payload['pickup_address'] ?? null;
+        if (!empty($senderAddress) && is_array($senderAddress)) {
+            $request->setSenderAddress($senderAddress);
         }
 
         if (isset($payload['delivery_office_id'])) {
