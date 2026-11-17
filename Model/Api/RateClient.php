@@ -35,7 +35,7 @@ class RateClient implements RateClientInterface
     private const CACHE_PREFIX = 'pigeonexpress_rate_';
 
     /** Own tag so rates can be invalidated without flushing everything. */
-    private const CACHE_TAG = 'PIGEONEXPRESS_RATE';
+    public const CACHE_TAG = 'PIGEONEXPRESS_RATE';
 
     /**
      * How long a quoted price may be reused, in seconds.

@@ -4,7 +4,7 @@ info:
   description: |
     API for Bulgarian courier service Pigeon Express.
 
-    _Last updated: 2026-07-07_
+    _Last updated: 2026-08-21_
 
     ## Errors
     All errors share a common JSON envelope: `{"success": false, "message": "..."}`.
@@ -1591,6 +1591,8 @@ paths:
         - `a4` — the standard label embedded into an A4 page, optimized for printing on a regular office printer. The downloaded filename gets an `-a4.pdf` suffix.
 
         The `Content-Type` depends on the format: `application/pdf` for `default`/`pdf150`/`a4`, `text/plain` for `zpl300`.
+
+        Use `?hide_content_on_label=1` to print the label without the shipment content line.
       operationId: getShipmentLabel
       parameters:
         - name: referenceNumber
@@ -1625,6 +1627,18 @@ paths:
               - zpl300
               - a4
             default: default
+        - name: hide_content_on_label
+          in: query
+          required: false
+          description: |
+            **NEW** Print the label without the shipment content. The whole "Съдържание" line is dropped, caption included, for every label format.
+
+            The value is stored on the shipment rather than applied to this response only, so later reprints — including prints from a Pigeon Express office — keep the content hidden until the opposite value is sent.
+
+            Omit the parameter to keep whatever was set when the shipment was created. An empty value (`?hide_content_on_label=`) is treated as omitted.
+          schema:
+            type: boolean
+            default: false
       x-codeSamples:
         - lang: Shell
           label: cURL
@@ -2023,7 +2037,11 @@ paths:
         - Pickup times must be within office working hours
         - `requested_pickup_time_to` is required when `requested_pickup_time_type` is `interval`
         - `contact_name`, `contact_phone` and `contact_email` default to the customer profile when omitted
-        - Do not include the street number in `pickup_address` when `pickup_street_number` is provided
+        - Identify the pickup street with `pickup_street_id` (from GET /v1/cities/{cityId}/streets) together with `pickup_street_number`
+        - `pickup_street_id` is required unless `pickup_additional_info` is provided; when the address is described in `pickup_additional_info` it is optional (but still recommended)
+        - Pass `shipment_references` to attach already registered shipments, so the courier can scan
+          them at pickup. Two or more references create a groupage. If any reference is rejected the
+          request is not created and a 422 lists the problem per reference number.
       operationId: createCourierRequest
       requestBody:
         required: true
@@ -2033,7 +2051,6 @@ paths:
               type: object
               required:
                 - pickup_city_id
-                - pickup_address
                 - requested_pickup_date
                 - requested_pickup_time_type
                 - requested_pickup_time_from
@@ -2042,11 +2059,16 @@ paths:
                   type: integer
                   description: Required. ID of the pickup city (see GET /v1/cities).
                   example: 1
-                pickup_address:
-                  type: string
-                  maxLength: 255
-                  description: Required. Street name for the pickup. Do not include the street number here when `pickup_street_number` is provided.
-                  example: "ул. Витоша"
+                pickup_street_id:
+                  type: integer
+                  description: |
+                    Street id from GET /v1/cities/{cityId}/streets. Must belong to
+                    `pickup_city_id` or the request is rejected with 422. Identifies the
+                    pickup street; combine with `pickup_street_number` for the full address.
+                    Required unless `pickup_additional_info` is provided — when the address
+                    is described in `pickup_additional_info` this becomes optional (but is
+                    still recommended for accurate dispatching).
+                  example: 433950
                 pickup_street_number:
                   type: string
                   maxLength: 20
@@ -2074,7 +2096,10 @@ paths:
                   description: Apartment number.
                 pickup_additional_info:
                   type: string
-                  description: Free-text additional information to help the courier locate the address.
+                  description: |
+                    Free-text additional information to help the courier locate the address.
+                    When provided it makes `pickup_street_id` optional (the address can be
+                    described here instead of picking a street).
                 requested_pickup_date:
                   type: string
                   format: date
@@ -2113,10 +2138,25 @@ paths:
                   type: string
                   maxLength: 255
                   description: Company name for the pickup, if the request is on behalf of a company.
+                shipment_references:
+                  type: array
+                  maxItems: 100
+                  description: |
+                    Reference numbers of already registered shipments the courier should collect.
+                    The number of entries decides the request type: omitted or one entry creates a
+                    `single` request, two or more create a `groupage` that is attached to the request.
+                    Each shipment must be sent by the authenticated customer, still be in the
+                    registered status, and not already belong to an active courier request.
+                  items:
+                    type: string
+                    maxLength: 50
+                  example: ["457911010807", "457911010603", "457911010519"]
                 request_type:
                   type: string
-                  enum: [single]
-                  description: Type of courier request. Currently only `single` is supported.
+                  enum: [single, groupage]
+                  description: |
+                    Type of courier request. Informational only — the effective type is derived from
+                    the number of entries in `shipment_references`.
                 package_type:
                   type: string
                   enum: [documents, standard, large, pallet, money_transfer]
@@ -2154,7 +2194,7 @@ paths:
               -H "Content-Type: application/json" \
               -d '{
                 "pickup_city_id": 1,
-                "pickup_address": "ул. Витоша",
+                "pickup_street_id": 433950,
                 "pickup_street_number": "15",
                 "requested_pickup_date": "2026-07-13",
                 "requested_pickup_time_type": "interval",
@@ -2994,6 +3034,12 @@ components:
             - zpl300
           default: default
           example: "zpl300"
+        hide_content_on_label:
+          type: boolean
+          nullable: true
+          description: "**NEW** Print the label without the shipment content. The whole \"Съдържание\" line is dropped, caption included, for every label format (`default`, `pdf150`, `zpl300`). The value is stored on the shipment, so it also applies when the label is fetched again later."
+          default: false
+          example: true
         inventory_items:
           type: array
           description: List of items in the shipment (required)

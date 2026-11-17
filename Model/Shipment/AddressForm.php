@@ -63,7 +63,19 @@ class AddressForm
         'floor',
         'apartment',
         'note',
+        'cod_amount',
+        'weight',
+        'length',
+        'width',
+        'height',
+        'parcels',
     ];
+
+    /**
+     * The parcel figures the admin may correct. Left empty they are worked out
+     * from the order, exactly as they would be without the form.
+     */
+    public const PARCEL_FIELDS = ['weight', 'length', 'width', 'height', 'parcels'];
 
     /** Fields that only make sense when the parcel goes to a street address. */
     private const ADDRESS_ONLY_FIELDS = [
@@ -110,9 +122,10 @@ class AddressForm
      * Falls back to the store setting rather than to a hardcoded side, so an
      * order sent without the form still bills whoever the merchant configured.
      *
-     * A delivery the customer was given free is the one exception: billing the
-     * recipient there would have the courier collect at the door for something
-     * the shop already said cost nothing. It changes the fallback only. An admin
+     * A delivery the customer was given free, or an order already paid online,
+     * is the exception: billing the recipient there would have the courier
+     * collect at the door for something the customer has already settled with
+     * the shop. It changes the fallback only. An admin
      * who picks a side on the shipment form still gets the side they picked,
      * because a screen that says one thing while the carrier is told another is
      * worse than the charge it was trying to prevent.
@@ -258,7 +271,8 @@ class AddressForm
      * carrier has never heard of.
      *
      * @param array<string, string> $fields
-     * @param bool $freeShipping The customer was not charged for this delivery
+     * @param bool $freeShipping The customer has nothing left to pay for this delivery:
+     *                           it was free, or the order was paid online
      * @return array{fields: array<string, string>, issues: array<string, array{severity:string, message:string}>}
      */
     public function validate(array $fields, int $storeId, bool $freeShipping = false): array
@@ -267,6 +281,8 @@ class AddressForm
         $fields['delivery_type'] = $this->deliveryType($fields);
         $fields['who_pays'] = $this->whoPays($fields, $storeId, $freeShipping);
         $issues = [];
+
+        $this->checkParcel($fields, $issues);
 
         if ($fields['contact_name'] === '') {
             $issues['contact_name'] = $this->issue(
@@ -321,6 +337,96 @@ class AddressForm
         }
 
         return ['fields' => $fields, 'issues' => $issues];
+    }
+
+    /**
+     * The admin's own parcel figures, or null when the form leaves them to us.
+     *
+     * All or nothing: a weight without a size, or the other way round, cannot
+     * describe a parcel, so a partly filled form is treated as not filled.
+     *
+     * @param array<string, string> $fields Checked form values
+     * @return array{weight:float, length:float, width:float, height:float, parcels:int}|null
+     */
+    public function parcel(array $fields): ?array
+    {
+        foreach (self::PARCEL_FIELDS as $field) {
+            if ($this->number((string) ($fields[$field] ?? '')) === null) {
+                return null;
+            }
+        }
+
+        return [
+            'weight'  => (float) $this->number($fields['weight']),
+            'length'  => (float) $this->number($fields['length']),
+            'width'   => (float) $this->number($fields['width']),
+            'height'  => (float) $this->number($fields['height']),
+            'parcels' => (int) $this->number($fields['parcels']),
+        ];
+    }
+
+    /**
+     * The cash on delivery amount the admin typed, or null to work it out.
+     *
+     * @param array<string, string> $fields Checked form values
+     */
+    public function codAmount(array $fields): ?float
+    {
+        $value = $this->number((string) ($fields['cod_amount'] ?? ''));
+
+        return $value === null ? null : round($value, 2);
+    }
+
+    /**
+     * Check the parcel figures and write them back in one notation.
+     *
+     * Commas are accepted, because that is how a Bulgarian keyboard types a
+     * decimal. Empty is fine: it means "as worked out from the order".
+     *
+     * @param array<string, string> $fields
+     * @param array<string, array{severity:string, message:string}> $issues
+     */
+    private function checkParcel(array &$fields, array &$issues): void
+    {
+        foreach (array_merge(['cod_amount'], self::PARCEL_FIELDS) as $field) {
+            $raw = trim((string) ($fields[$field] ?? ''));
+            if ($raw === '') {
+                $fields[$field] = '';
+                continue;
+            }
+
+            $value = $this->number($raw);
+            $positive = $field !== 'cod_amount';
+            if ($value === null || $value < 0 || ($positive && $value <= 0)) {
+                $issues[$field] = $this->issue(
+                    self::SEVERITY_ERROR,
+                    $positive
+                        ? (string) __('Please enter a number greater than zero.')
+                        : (string) __('Please enter an amount, or 0 for no cash on delivery.')
+                );
+                continue;
+            }
+
+            if ($field === 'parcels' && floor($value) !== $value) {
+                $issues[$field] = $this->issue(
+                    self::SEVERITY_ERROR,
+                    (string) __('The number of parcels must be a whole number.')
+                );
+                continue;
+            }
+
+            $fields[$field] = $field === 'parcels' ? (string) (int) $value : (string) $value;
+        }
+    }
+
+    /**
+     * A decimal typed with either a point or a comma, or null if it is not one.
+     */
+    private function number(string $raw): ?float
+    {
+        $raw = str_replace([' ', ','], ['', '.'], trim($raw));
+
+        return $raw !== '' && is_numeric($raw) ? (float) $raw : null;
     }
 
     /**

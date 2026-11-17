@@ -29,6 +29,8 @@ class CodFeeResolver
 {
     private const CACHE_PREFIX = 'pigeonexpress_cod_fee_';
 
+    public const CACHE_TAG = 'PIGEONEXPRESS_COD_FEE';
+
     /** Short lived: the fee only has to survive from rate collection to totals. */
     private const CACHE_LIFETIME = 900;
 
@@ -73,7 +75,7 @@ class CodFeeResolver
         $this->runtimeCache[$key] = $fee;
 
         try {
-            $this->cache->save((string) $fee, $key, [], self::CACHE_LIFETIME);
+            $this->cache->save((string) $fee, $key, [self::CACHE_TAG], self::CACHE_LIFETIME);
         } catch (\Throwable $e) {
             $this->logger->warning('[PigeonExpress] Failed to cache COD fee: ' . $e->getMessage());
         }
@@ -135,6 +137,40 @@ class CodFeeResolver
         );
 
         return 0.0;
+    }
+
+    /**
+     * The amount the COD fee is worked out on at checkout: the goods after any
+     * promo code or cart rule, without shipping. That is what the courier
+     * collects when the recipient pays for the delivery, so the fee quoted is
+     * the fee the waybill is charged.
+     *
+     * While totals are being collected the stored address figure is the one
+     * from the previous pass, so the caller hands in the current one. Without
+     * it, as when the quote is loaded without collecting, the stored figure is
+     * read. Either way shipping discounts are left out: the discount collector
+     * records the figure before they are applied.
+     *
+     * @param \Magento\Quote\Model\Quote $quote
+     * @param float|null $current Goods after discounts in this collection pass
+     */
+    public function basisFor($quote, ?float $current = null): float
+    {
+        if ($current !== null) {
+            return max(0.0, round($current, 2));
+        }
+
+        $address = $quote->getShippingAddress();
+        $amount = $address ? $address->getData('base_subtotal_with_discount') : null;
+
+        if ($amount === null && $address) {
+            $amount = (float) $address->getBaseSubtotal() + (float) $address->getBaseDiscountAmount();
+        }
+        if ($amount === null) {
+            $amount = (float) $quote->getBaseSubtotalWithDiscount();
+        }
+
+        return max(0.0, round((float) $amount, 2));
     }
 
     /**

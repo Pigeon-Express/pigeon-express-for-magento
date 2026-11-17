@@ -61,6 +61,9 @@ class LocationSync implements LocationSyncInterface
     /** @var AdditionalServiceRepository */
     private $additionalServiceRepository;
 
+    /** @var Environment */
+    private $environment;
+
     public function __construct(
         LocationsClientInterface $locationsClient,
         OfficeFactory $officeFactory,
@@ -72,7 +75,8 @@ class LocationSync implements LocationSyncInterface
         ConfigInterface $config,
         LoggerInterface $logger,
         AdditionalServicesClientInterface $additionalServicesClient,
-        AdditionalServiceRepository $additionalServiceRepository
+        AdditionalServiceRepository $additionalServiceRepository,
+        Environment $environment
     ) {
         $this->locationsClient = $locationsClient;
         $this->officeFactory = $officeFactory;
@@ -85,6 +89,7 @@ class LocationSync implements LocationSyncInterface
         $this->logger = $logger;
         $this->additionalServicesClient = $additionalServicesClient;
         $this->additionalServiceRepository = $additionalServiceRepository;
+        $this->environment = $environment;
     }
 
     /**
@@ -113,11 +118,13 @@ class LocationSync implements LocationSyncInterface
         $apiList = $this->locationsClient->fetchCities();
 
         // Dedup by api_id (API may return duplicates).
+        $environment = $this->environment->current();
         $rows = [];
         foreach ($apiList as $row) {
             $apiId = (int) $row['id'];
             $rows[$apiId] = [
                 'api_id'      => $apiId,
+                'environment' => $environment,
                 'name'        => (string) ($row['name'] ?? ''),
                 'name_en'     => isset($row['name_en']) ? (string) $row['name_en'] : null,
                 'postal_code' => isset($row['postal_code']) ? (string) $row['postal_code'] : null,
@@ -310,6 +317,7 @@ class LocationSync implements LocationSyncInterface
     private function applyApiData($model, array $row): void
     {
         $model->setApiId((int) $row['id']);
+        $model->setData('environment', $this->environment->current());
         $model->setName((string) ($row['name'] ?? ''));
         $model->setAddress((string) ($row['address'] ?? ''));
         $model->setCityId(isset($row['city_id']) ? (int) $row['city_id'] : null);

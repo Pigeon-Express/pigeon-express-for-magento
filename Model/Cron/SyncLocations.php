@@ -13,6 +13,7 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model\Cron;
 
+use Magento\Store\Model\StoreManagerInterface;
 use Psr\Log\LoggerInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\LocationSyncInterface;
@@ -29,14 +30,19 @@ class SyncLocations
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var StoreManagerInterface */
+    private $storeManager;
+
     public function __construct(
         LocationSyncInterface $locationSync,
         ConfigInterface $config,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        StoreManagerInterface $storeManager
     ) {
         $this->locationSync = $locationSync;
         $this->config = $config;
         $this->logger = $logger;
+        $this->storeManager = $storeManager;
     }
 
     /**
@@ -46,8 +52,8 @@ class SyncLocations
     {
         $this->logger->info('[PigeonExpress Cron] pigeonexpress_sync_locations execute() started');
 
-        if (!$this->config->isActive()) {
-            $this->logger->info('[PigeonExpress Cron] Skipped: carrier is disabled');
+        if (!$this->isActiveAnywhere()) {
+            $this->logger->info('[PigeonExpress Cron] Skipped: carrier is disabled in every store');
             return;
         }
         if ($this->config->getApiKey() === '') {
@@ -71,5 +77,24 @@ class SyncLocations
         } catch (\Throwable $e) {
             $this->logger->error('[PigeonExpress Cron] Sync error: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * The carrier can be switched on for a single website or store view, and
+     * the offices are shared by all of them, so any one is enough.
+     */
+    private function isActiveAnywhere(): bool
+    {
+        if ($this->config->isActive(0)) {
+            return true;
+        }
+
+        foreach ($this->storeManager->getStores() as $store) {
+            if ($this->config->isActive((int) $store->getId())) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

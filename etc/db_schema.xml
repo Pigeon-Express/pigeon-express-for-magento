@@ -5,6 +5,7 @@
     <table name="pigeonexpress_office" resource="default" engine="innodb" comment="Pigeon Express Offices">
         <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
         <column xsi:type="int" name="api_id" unsigned="true" nullable="false" comment="API Office ID"/>
+        <column xsi:type="varchar" name="environment" length="4" nullable="false" default="live" comment="Pigeon Express environment the row came from: live or test"/>
         <column xsi:type="varchar" name="name" length="255" nullable="false" comment="Office Name"/>
         <column xsi:type="text" name="address" nullable="false" comment="Office Address"/>
         <column xsi:type="int" name="city_id" unsigned="true" nullable="true" comment="City ID from API"/>
@@ -19,8 +20,9 @@
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="entity_id"/>
         </constraint>
-        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_OFFICE_API_ID">
+        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_OFFICE_API_ID_ENVIRONMENT">
             <column name="api_id"/>
+            <column name="environment"/>
         </constraint>
         <index referenceId="PIGEONEXPRESS_OFFICE_NAME" indexType="btree">
             <column name="name"/>
@@ -36,6 +38,7 @@
     <table name="pigeonexpress_aps" resource="default" engine="innodb" comment="Pigeon Express APS (Lockers)">
         <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
         <column xsi:type="int" name="api_id" unsigned="true" nullable="false" comment="API APS ID"/>
+        <column xsi:type="varchar" name="environment" length="4" nullable="false" default="live" comment="Pigeon Express environment the row came from: live or test"/>
         <column xsi:type="varchar" name="name" length="255" nullable="false" comment="APS Name"/>
         <column xsi:type="text" name="address" nullable="false" comment="APS Address"/>
         <column xsi:type="int" name="city_id" unsigned="true" nullable="true" comment="City ID from API"/>
@@ -50,8 +53,9 @@
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="entity_id"/>
         </constraint>
-        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_APS_API_ID">
+        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_APS_API_ID_ENVIRONMENT">
             <column name="api_id"/>
+            <column name="environment"/>
         </constraint>
         <index referenceId="PIGEONEXPRESS_APS_NAME" indexType="btree">
             <column name="name"/>
@@ -67,6 +71,7 @@
     <table name="pigeonexpress_city" resource="default" engine="innodb" comment="Pigeon Express Cities">
         <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
         <column xsi:type="int" name="api_id" unsigned="true" nullable="false" comment="City ID from API"/>
+        <column xsi:type="varchar" name="environment" length="4" nullable="false" default="live" comment="Pigeon Express environment the row came from: live or test"/>
         <column xsi:type="varchar" name="name" length="255" nullable="false" default="" comment="City Name (Bulgarian)"/>
         <column xsi:type="varchar" name="name_en" length="255" nullable="true" comment="City Name (English)"/>
         <column xsi:type="varchar" name="postal_code" length="20" nullable="true" comment="Postal Code"/>
@@ -75,8 +80,9 @@
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="entity_id"/>
         </constraint>
-        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_CITY_API_ID">
+        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_CITY_API_ID_ENVIRONMENT">
             <column name="api_id"/>
+            <column name="environment"/>
         </constraint>
         <index referenceId="PIGEONEXPRESS_CITY_NAME" indexType="btree">
             <column name="name"/>
@@ -162,6 +168,7 @@
         <column xsi:type="decimal" name="delivery_price" precision="12" scale="4" nullable="true" comment="Delivery Price"/>
         <column xsi:type="text" name="payload" nullable="true" comment="JSON of request sent to API"/>
         <column xsi:type="text" name="response" nullable="true" comment="JSON of API response"/>
+        <column xsi:type="text" name="form_fields" nullable="true" comment="JSON of the admin shipment form as sent, restored after a cancel"/>
         <column xsi:type="timestamp" name="sent_at" on_update="false" nullable="true" default="CURRENT_TIMESTAMP" comment="Sent At"/>
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">

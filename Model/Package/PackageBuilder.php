@@ -88,7 +88,9 @@ class PackageBuilder
         // An order carries its own weight, recorded when it was placed. Reading
         // the catalogue instead would let a product edited months later change
         // what a past shipment says it weighs.
-        $weight = $recordedWeight !== null && $recordedWeight > 0.0
+        // Unless the store says product weights are not to be trusted at all,
+        // in which case the recorded figure is just as untrustworthy.
+        $weight = $recordedWeight !== null && $recordedWeight > 0.0 && !$this->isFixedParcel($storeId)
             ? $recordedWeight
             : $this->resolveWeight($lines, $storeId, $fallbackWeight);
 
@@ -98,6 +100,48 @@ class PackageBuilder
             $this->countPieces($lines),
             $this->maxWeightFor($deliveryType, $storeId)
         );
+    }
+
+    /**
+     * Packages exactly as the admin described them on the shipment form.
+     *
+     * The weight is the whole shipment's, shared evenly between the parcels,
+     * which all take the one size given. The carrier's limits still apply: a
+     * typed figure is a correction, not a way round what the courier accepts.
+     *
+     * @param array{length:float, width:float, height:float} $dimensions
+     * @return array<int, array{weight:float, length:float, width:float, height:float}>
+     * @throws UnshippableException
+     */
+    public function manual(
+        float $totalWeight,
+        array $dimensions,
+        int $parcels,
+        string $deliveryType,
+        int $storeId
+    ): array {
+        $parcels = max(1, $parcels);
+        if ($parcels > self::MAX_PACKAGES_PER_SHIPMENT) {
+            throw new UnshippableException(__(
+                'One Pigeon Express waybill carries at most %1 parcels.',
+                self::MAX_PACKAGES_PER_SHIPMENT
+            ));
+        }
+
+        $cap = $this->maxWeightFor($deliveryType, $storeId);
+        $each = $this->normalizeWeight($totalWeight / $parcels);
+        if ($each > $cap) {
+            throw new UnshippableException(__(
+                'Each parcel would weigh %1 kg. Pigeon Express carries at most %2 kg per parcel, '
+                . 'so increase the number of parcels.',
+                round($each, 2),
+                $cap
+            ));
+        }
+
+        $box = $this->normalizeDimensions($dimensions, $deliveryType);
+
+        return array_fill(0, $parcels, $box + ['weight' => round($each, 3)]);
     }
 
     /**
@@ -209,7 +253,8 @@ class PackageBuilder
     }
 
     /**
-     * Sum dimensions across lines, falling back to configured defaults per line.
+     * Sum dimensions across lines, falling back to configured defaults per line,
+     * or once for the whole shipment when the store applies defaults that way.
      *
      * One addition per line, not per unit. This matches what rating has always
      * done, so changing it would move quoted prices.
@@ -234,7 +279,7 @@ class PackageBuilder
         ];
         $hasDefaults = $this->hasConfiguredDefaults($storeId);
 
-        if (!$lengthAttr || !$widthAttr || !$heightAttr) {
+        if (!$lengthAttr || !$widthAttr || !$heightAttr || ($hasDefaults && $this->isFixedParcel($storeId))) {
             return $this->requireDefaults($defaults, $hasDefaults, $deliveryType);
         }
 
@@ -246,6 +291,9 @@ class PackageBuilder
             $products = $this->loadProducts($lines, [$lengthAttr, $widthAttr, $heightAttr], $storeId);
 
             $total = ['length' => 0.0, 'width' => 0.0, 'height' => 0.0];
+            $perShipment = $this->config->getParcelDefaultsMode($storeId)
+                !== ConfigInterface::PARCEL_DEFAULTS_PER_ITEM;
+            $defaultsAdded = false;
 
             foreach ($lines as $line) {
                 $product = $products[$line['product_id']] ?? null;
@@ -263,6 +311,13 @@ class PackageBuilder
                         __('Product dimensions (length/width/height) are not configured for this store.')
                     );
                 }
+
+                // Once per shipment: every product without a size shares the
+                // one default box rather than each adding another.
+                if ($perShipment && $defaultsAdded) {
+                    continue;
+                }
+                $defaultsAdded = true;
 
                 $total['length'] += $defaults['length'];
                 $total['width']  += $defaults['width'];
@@ -285,6 +340,11 @@ class PackageBuilder
      * Total weight across lines, per unit, falling back to the configured
      * default weight and then to the caller supplied figure.
      *
+     * Lines with no weight of their own take the default either per item or,
+     * when the store says so, once for the whole shipment. A shop that never
+     * weighs its products sets the default to the weight of a typical parcel,
+     * and two such products are still one parcel, not two.
+     *
      * @param array<int, array{product_id:int, qty:float}> $lines
      */
     public function resolveWeight(array $lines, int $storeId, ?float $fallbackWeight = null): float
@@ -292,46 +352,40 @@ class PackageBuilder
         $fallback = $fallbackWeight !== null ? (float) $fallbackWeight : 0.0;
         $weightAttr = $this->config->getWeightAttributeCode($storeId);
         $defaultWeight = $this->config->getDefaultWeight($storeId);
+        $perShipment = $this->config->getParcelDefaultsMode($storeId)
+            !== ConfigInterface::PARCEL_DEFAULTS_PER_ITEM;
+
+        if ($this->isFixedParcel($storeId)) {
+            return $defaultWeight;
+        }
 
         if (empty($lines)) {
             return $fallback;
         }
 
-        if (!$weightAttr) {
-            if ($defaultWeight > 0) {
-                $total = 0.0;
-                foreach ($lines as $line) {
-                    $total += $defaultWeight * $line['qty'];
-                }
-                if ($total > 0) {
-                    return $total;
-                }
-            }
-            return $fallback;
-        }
-
         try {
-            $products = $this->loadProducts($lines, [$weightAttr], $storeId);
+            $products = $weightAttr ? $this->loadProducts($lines, [$weightAttr], $storeId) : [];
 
             $total = 0.0;
+            $missing = false;
             foreach ($lines as $line) {
                 $product = $products[$line['product_id']] ?? null;
-                if ($product === null) {
-                    if ($defaultWeight > 0) {
-                        $total += $defaultWeight * $line['qty'];
-                        continue;
-                    }
-                    return $fallback;
-                }
-                $w = $product->getData($weightAttr);
+                $w = $product !== null ? $product->getData($weightAttr) : null;
                 if ($w === null || $w === '' || (float) $w <= 0) {
-                    if ($defaultWeight > 0) {
-                        $total += $defaultWeight * $line['qty'];
-                        continue;
+                    if ($defaultWeight <= 0) {
+                        return $fallback;
                     }
-                    return $fallback;
+                    $missing = true;
+                    if (!$perShipment) {
+                        $total += $defaultWeight * $line['qty'];
+                    }
+                    continue;
                 }
                 $total += (float) $w * $line['qty'];
+            }
+
+            if ($missing && $perShipment) {
+                $total += $defaultWeight;
             }
 
             return $total > 0 ? $total : $fallback;
@@ -485,6 +539,18 @@ class PackageBuilder
             'width'  => $this->normalizeDimension($dimensions['width'], $limits['width']),
             'height' => $this->normalizeDimension($dimensions['height'], $limits['height']),
         ];
+    }
+
+    /**
+     * Whether every shipment is simply the default parcel, whatever is in it.
+     *
+     * Only when there is a default weight to use; without one this setting
+     * would describe a weightless parcel.
+     */
+    private function isFixedParcel(int $storeId): bool
+    {
+        return $this->config->getParcelDefaultsMode($storeId) === ConfigInterface::PARCEL_DEFAULTS_FIXED
+            && $this->config->getDefaultWeight($storeId) > 0;
     }
 
     private function hasConfiguredDefaults(int $storeId): bool

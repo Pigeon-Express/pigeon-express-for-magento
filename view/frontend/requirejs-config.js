@@ -33,6 +33,10 @@ var config = {
             'Magento_Checkout/js/view/cart/shipping-rates': {
                 'PigeonExpress_Shipping/js/view/cart/shipping-rates-mixin': true
             },
+            // A COD payment method's title shows the fee, when Show COD Fee is on.
+            'Magento_Checkout/js/view/payment/default': {
+                'PigeonExpress_Shipping/js/view/payment/default-mixin': true
+            },
         }
     }
 };

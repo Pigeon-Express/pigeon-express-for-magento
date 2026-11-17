@@ -60,14 +60,18 @@ class ConfigProvider implements ConfigInterface
     }
 
     /**
+     * The account and its environment are global. The location tables hold one
+     * dataset per environment, so a store on its own key or test mode would
+     * check out against offices from the wrong one. $storeId is accepted and
+     * ignored, so callers need not know.
+     *
      * @inheritdoc
      */
     public function getApiKey(?int $storeId = null): string
     {
         $value = $this->scopeConfig->getValue(
             self::XML_PATH_CARRIER . 'api_key',
-            ScopeInterface::SCOPE_STORE,
-            $storeId
+            ScopeConfigInterface::SCOPE_TYPE_DEFAULT
         );
         if ($value === null || $value === '') {
             return '';
@@ -82,8 +86,7 @@ class ConfigProvider implements ConfigInterface
     {
         $value = $this->scopeConfig->getValue(
             self::XML_PATH_CARRIER . 'api_secret',
-            ScopeInterface::SCOPE_STORE,
-            $storeId
+            ScopeConfigInterface::SCOPE_TYPE_DEFAULT
         );
         if ($value !== null && $value !== '') {
             return $this->decrypt((string) $value);
@@ -111,14 +114,15 @@ class ConfigProvider implements ConfigInterface
     }
 
     /**
+     * Global, see getApiKey().
+     *
      * @inheritdoc
      */
     public function isTestMode(?int $storeId = null): bool
     {
         return $this->scopeConfig->isSetFlag(
             self::XML_PATH_CARRIER . 'test_mode',
-            ScopeInterface::SCOPE_STORE,
-            $storeId
+            ScopeConfigInterface::SCOPE_TYPE_DEFAULT
         );
     }
 
@@ -187,6 +191,22 @@ class ConfigProvider implements ConfigInterface
             $storeId
         );
         return $value !== null && $value !== '' ? (float) $value : 0.0;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function isCodFeeCharged(string $deliveryType, ?int $storeId = null): bool
+    {
+        if ($this->getDeliveryTypePricingMode($deliveryType, $storeId) === 'dynamic') {
+            return true;
+        }
+
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_CARRIER . $deliveryType . '_flat_rate_cod_fee',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
     }
 
     /**
@@ -366,6 +386,22 @@ class ConfigProvider implements ConfigInterface
     public function getDefaultHeight(?int $storeId = null): float
     {
         return $this->getPositiveFloat('default_height', $storeId);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getParcelDefaultsMode(?int $storeId = null): string
+    {
+        $value = (string) $this->scopeConfig->getValue(
+            self::XML_PATH_CARRIER . 'parcel_defaults_mode',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
+
+        return in_array($value, [self::PARCEL_DEFAULTS_PER_ITEM, self::PARCEL_DEFAULTS_FIXED], true)
+            ? $value
+            : self::PARCEL_DEFAULTS_PER_SHIPMENT;
     }
 
     /**
@@ -579,6 +615,18 @@ class ConfigProvider implements ConfigInterface
             return [];
         }
         return explode(',', (string) $value);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function isShowCodFee(?int $storeId = null): bool
+    {
+        return $this->scopeConfig->isSetFlag(
+            self::XML_PATH_CARRIER . 'show_cod_fee',
+            ScopeInterface::SCOPE_STORE,
+            $storeId
+        );
     }
 
     /**

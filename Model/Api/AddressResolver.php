@@ -21,6 +21,7 @@ use PigeonExpress\PigeonExpress;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Model\Directory\RegionResolver;
+use PigeonExpress\Shipping\Model\Environment;
 use PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory as CityCollectionFactory;
 use Psr\Log\LoggerInterface;
 
@@ -37,7 +38,7 @@ class AddressResolver
     private const CACHE_PREFIX = 'pigeonexpress_streets_';
 
     /** Own tag so street lists can be dropped without flushing everything. */
-    private const CACHE_TAG = 'PIGEONEXPRESS_STREETS';
+    public const CACHE_TAG = 'PIGEONEXPRESS_STREETS';
 
     /**
      * Streets are renamed about as often as a city is founded, and the same
@@ -61,18 +62,23 @@ class AddressResolver
     /** @var RegionResolver */
     private $regionResolver;
 
+    /** @var Environment */
+    private $environment;
+
     public function __construct(
         ConfigInterface $config,
         LoggerInterface $logger,
         CityCollectionFactory $cityCollectionFactory,
         CacheInterface $cache,
-        RegionResolver $regionResolver
+        RegionResolver $regionResolver,
+        Environment $environment
     ) {
         $this->config = $config;
         $this->logger = $logger;
         $this->cityCollectionFactory = $cityCollectionFactory;
         $this->cache = $cache;
         $this->regionResolver = $regionResolver;
+        $this->environment = $environment;
     }
 
     // -- Cities --------------------------------------------------------------
@@ -96,11 +102,12 @@ class AddressResolver
         $like = $this->escapeLike($query) . '%';
 
         $connection = $this->cityConnection();
-        $select = $connection->select()
-            ->from($this->cityTable(), ['api_id', 'name', 'name_en', 'postal_code', 'district', 'district_en'])
-            ->where('name LIKE ?', $like)
-            ->orWhere('name_en LIKE ?', $like)
-            ->orWhere('postal_code LIKE ?', $like)
+        $select = $this->citySelect(['api_id', 'name', 'name_en', 'postal_code', 'district', 'district_en'])
+            ->where(
+                $connection->quoteInto('name LIKE ?', $like)
+                . ' OR ' . $connection->quoteInto('name_en LIKE ?', $like)
+                . ' OR ' . $connection->quoteInto('postal_code LIKE ?', $like)
+            )
             // Most orders go to a handful of large cities, and alphabetical order
             // buries every one of them: "Соф" offers Софийци before София, "Плов"
             // offers Пловка before Пловдив. Bulgarian district capitals are the
@@ -142,8 +149,7 @@ class AddressResolver
         }
 
         $connection = $this->cityConnection();
-        $select = $connection->select()
-            ->from($this->cityTable(), ['api_id', 'name', 'postal_code'])
+        $select = $this->citySelect(['api_id', 'name', 'postal_code'])
             ->where('api_id = ?', $apiId)
             ->limit(1);
 
@@ -192,11 +198,9 @@ class AddressResolver
         }
 
         $connection = $this->cityConnection();
-        $table = $this->cityTable();
 
         foreach (['name', 'name_en'] as $column) {
-            $select = $connection->select()
-                ->from($table, ['api_id'])
+            $select = $this->citySelect(['api_id'])
                 ->where('LOWER(' . $column . ') = LOWER(?)', $name)
                 ->limit(1);
             $apiId = $connection->fetchOne($select);
@@ -211,8 +215,7 @@ class AddressResolver
     private function matchCityByPostcode(string $postcode): ?int
     {
         $connection = $this->cityConnection();
-        $select = $connection->select()
-            ->from($this->cityTable(), ['api_id'])
+        $select = $this->citySelect(['api_id'])
             ->where('postal_code = ?', $postcode)
             ->limit(1);
 
@@ -333,7 +336,8 @@ class AddressResolver
      */
     private function loadStreets(int $cityId, string $query, int $storeId): array
     {
-        $cacheKey = self::CACHE_PREFIX . $cityId . '_' . md5(mb_strtolower($query));
+        $cacheKey = self::CACHE_PREFIX . $this->environment->current() . '_' . $cityId
+            . '_' . md5(mb_strtolower($query));
 
         $cached = $this->cache->load($cacheKey);
         if (is_string($cached) && $cached !== '') {
@@ -597,6 +601,19 @@ class AddressResolver
     private function cityTable(): string
     {
         return $this->cityCollectionFactory->create()->getResource()->getMainTable();
+    }
+
+    /**
+     * Cities of the environment the store is on. The table holds live and test
+     * side by side, and their ids overlap.
+     *
+     * @param string[] $columns
+     */
+    private function citySelect(array $columns): \Magento\Framework\DB\Select
+    {
+        return $this->cityConnection()->select()
+            ->from($this->cityTable(), $columns)
+            ->where('environment = ?', $this->environment->current());
     }
 
     private function escapeLike(string $value): string

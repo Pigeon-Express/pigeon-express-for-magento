@@ -157,7 +157,11 @@ class ShipmentSender implements ShipmentSenderInterface
                 (string) ($locationData['location_name'] ?? '')
             );
 
-        $checked = $this->addressForm->validate($fields, $storeId, !empty($locationData['free_shipping']));
+        $checked = $this->addressForm->validate(
+            $fields,
+            $storeId,
+            !empty($locationData['free_shipping']) || !$this->isCashOnDelivery($order)
+        );
         if ($this->addressForm->hasErrors($checked['issues'])) {
             throw new LocalizedException(__($this->addressForm->firstError($checked['issues'])));
         }
@@ -172,14 +176,16 @@ class ShipmentSender implements ShipmentSenderInterface
         // Built only now: a locker takes a smaller, lighter parcel than a door
         // does, so the limits depend on where the admin has just decided to send
         // it rather than on what was chosen at checkout.
-        $packages = $this->buildPackages($order, $storeId, $deliveryType);
+        $packages = $this->buildPackages($order, $storeId, $deliveryType, $fields);
 
         $receiverName = $fields['contact_name'] !== '' ? $fields['contact_name'] : 'Customer';
         $receiverPhone = $fields['contact_phone'];
         $instructions = $fields['note'];
 
-        // COD detection via configured payment methods.
-        $codAmount = $this->detectCodAmount($order);
+        // What the courier collects: the admin's figure when they gave one,
+        // otherwise what the customer was shown at checkout.
+        $codAmount = $this->addressForm->codAmount($fields)
+            ?? $this->detectCodAmount($order, $fields['who_pays']);
 
         // Build pickup from config.
         $pickupType = $this->config->getPickupType($storeId);
@@ -248,6 +254,9 @@ class ShipmentSender implements ShipmentSenderInterface
         $shipment->setDeliveryPrice(isset($result['delivery_price']) ? (float) $result['delivery_price'] : null);
         $shipment->setPayload(json_encode($payload));
         $shipment->setResponse(json_encode($result));
+        // Kept so that, should this waybill be cancelled, the form for the next
+        // one opens with what was sent rather than with the order's defaults.
+        $shipment->setFormFields(json_encode($fields));
         $this->shipmentResource->save($shipment);
 
         if ($this->config->isLoggingEnabled($storeId)) {
@@ -288,27 +297,30 @@ class ShipmentSender implements ShipmentSenderInterface
 
         $pickupType = $this->config->getPickupType($storeId);
 
+        $whoPays = $this->addressForm->whoPays(
+            $fields,
+            $storeId,
+            $this->freeShipping->wasAppliedToOrder($order) || !$this->isCashOnDelivery($order)
+        );
+
         $payload = [
             'pickup_type'   => $pickupType,
             'delivery_type' => $apiDeliveryType,
             'service_type'  => 'standard',
-            'who_pays'      => $this->addressForm->whoPays(
-                $fields,
-                $storeId,
-                $this->freeShipping->wasAppliedToOrder($order)
-            ),
-            'packages'      => $this->buildPackages($order, $storeId, $deliveryType),
+            'who_pays'      => $whoPays,
+            'packages'      => $this->buildPackages($order, $storeId, $deliveryType, $fields),
         ];
 
-        // COD is excluded on purpose. Its fee is charged to the customer through
-        // the order total, not to the merchant through the shipping price, so
-        // including it here would quote a figure nobody is asked to pay.
+        // COD is included, exactly as send() includes it. The payment method of a
+        // placed order cannot change, so the waybill Create makes will carry the
+        // COD amount and be charged its fee; a quote without it would understate
+        // what a change of delivery agreed on the phone really costs.
         $serviceCodes = $this->serviceCodesBuilder->build(
             $deliveryType,
             $apiDeliveryType,
             $storeId,
-            0.0,
-            false,
+            $this->addressForm->codAmount($fields) ?? $this->detectCodAmount($order, $whoPays),
+            true,
             $this->detectGoodsValue($order)
         );
         if (!empty($serviceCodes)) {
@@ -368,22 +380,55 @@ class ShipmentSender implements ShipmentSenderInterface
     /**
      * @inheritDoc
      */
-    public function codAmountFor(OrderInterface $order): float
+    public function codAmountFor(OrderInterface $order, string $whoPays = ''): float
     {
-        return $this->detectCodAmount($order);
+        return $this->detectCodAmount($order, $whoPays);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function isCashOnDelivery(OrderInterface $order): bool
+    {
+        try {
+            $codMethods = $this->config->getCodPaymentMethods((int) $order->getStoreId());
+            if (empty($codMethods) || !$order->getPayment()) {
+                return false;
+            }
+
+            return in_array((string) $order->getPayment()->getMethod(), $codMethods, true);
+        } catch (\Throwable $e) {
+            // Payment not available; treat as non-COD.
+            return false;
+        }
     }
 
     /**
      * Build the packages array for the shipment, using the same geometry rules
      * as rating so the waybill matches what the customer was quoted.
      *
+     * The admin's own figures from the shipment form win when they gave them.
+     *
+     * @param array<string, string> $fields Checked shipment form values
      * @return array<int, array{weight:float, length:float, width:float, height:float}>
      */
     private function buildPackages(
         OrderInterface $order,
         int $storeId,
-        string $deliveryType = ConfigInterface::DELIVERY_TYPE_ADDRESS
+        string $deliveryType = ConfigInterface::DELIVERY_TYPE_ADDRESS,
+        array $fields = []
     ): array {
+        $parcel = $this->addressForm->parcel($fields);
+        if ($parcel !== null) {
+            return $this->packageBuilder->manual(
+                $parcel['weight'],
+                ['length' => $parcel['length'], 'width' => $parcel['width'], 'height' => $parcel['height']],
+                $parcel['parcels'],
+                $deliveryType,
+                $storeId
+            );
+        }
+
         // The order's own weight, recorded when it was placed, is what shipped.
         // The catalogue is not: a product edited since would silently rewrite
         // the weight on a waybill for an order that left months ago.
@@ -479,25 +524,36 @@ class ShipmentSender implements ShipmentSenderInterface
     }
 
     /**
-     * Detect COD amount from payment method using configured COD methods list.
-     * Returns order subtotal (products only, no shipping, no COD fee).
+     * What the courier collects on a cash on delivery order, 0 otherwise.
+     *
+     * The order total the customer saw at checkout, so discounts and coupons
+     * are honoured. When the recipient pays the carrier for the delivery, the
+     * courier charges that on top by itself, so the shipping the shop charged
+     * (which already includes the COD fee) comes off; otherwise the customer
+     * would pay for the delivery twice.
      */
-    private function detectCodAmount(OrderInterface $order): float
+    private function detectCodAmount(OrderInterface $order, string $whoPays = ''): float
     {
-        try {
-            $storeId = (int) $order->getStoreId();
-            $codMethods = $this->config->getCodPaymentMethods($storeId);
-            if (empty($codMethods)) {
-                return 0.0;
-            }
-            $method = (string) $order->getPayment()->getMethod();
-            if (in_array($method, $codMethods, true)) {
-                return max(0.0, round((float) $order->getSubtotal(), 2));
-            }
-        } catch (\Throwable $e) {
-            // Payment not available; treat as non-COD.
+        if (!$this->isCashOnDelivery($order)) {
+            return 0.0;
         }
-        return 0.0;
+
+        if ($whoPays === '') {
+            $whoPays = $this->addressForm->whoPays(
+                [],
+                (int) $order->getStoreId(),
+                $this->freeShipping->wasAppliedToOrder($order)
+            );
+        }
+
+        $amount = (float) $order->getGrandTotal();
+        if ($whoPays === ConfigInterface::WHO_PAYS_RECEIVER) {
+            // Net of any discount on the shipping itself, which grand total
+            // has already taken off.
+            $amount -= (float) $order->getShippingInclTax() - abs((float) $order->getShippingDiscountAmount());
+        }
+
+        return max(0.0, round($amount, 2));
     }
 
     /**

@@ -123,7 +123,7 @@ class RateCollector
 
             // While we are already talking to the API, find out what it charges
             // for COD on this cart so the total collector does not have to guess.
-            $this->resolveCodFee($payload, $calc, $storeId);
+            $this->resolveCodFee($request, $deliveryType, $payload, $calc, $storeId);
 
             return (float) ($calc['total_price'] ?? 0.0);
         } catch (UnshippableException $e) {
@@ -494,25 +494,18 @@ class RateCollector
                 }
             }
 
-            $connection = $this->cityCollectionFactory->create()->getResource()->getConnection();
-            $table = $this->cityCollectionFactory->create()->getResource()->getMainTable();
-
-            $select = $connection->select()
-                ->from($table, ['api_id'])
-                ->where('LOWER(name) = LOWER(?)', $cityName)
-                ->limit(1);
-            $apiId = $connection->fetchOne($select);
-            if ($apiId !== false && $apiId !== null) {
-                return (int) $apiId;
-            }
-
-            $select = $connection->select()
-                ->from($table, ['api_id'])
-                ->where('LOWER(name_en) = LOWER(?)', $cityName)
-                ->limit(1);
-            $apiId = $connection->fetchOne($select);
-            if ($apiId !== false && $apiId !== null) {
-                return (int) $apiId;
+            // The collection's select holds only the current environment's cities.
+            foreach (['name', 'name_en'] as $column) {
+                $collection = $this->cityCollectionFactory->create();
+                $select = $collection->getSelect()
+                    ->reset(\Magento\Framework\DB\Select::COLUMNS)
+                    ->columns(['api_id'])
+                    ->where('LOWER(main_table.' . $column . ') = LOWER(?)', $cityName)
+                    ->limit(1);
+                $apiId = $collection->getConnection()->fetchOne($select);
+                if ($apiId !== false && $apiId !== null) {
+                    return (int) $apiId;
+                }
             }
         } catch (\Throwable $e) {
             // ignore
@@ -528,12 +521,19 @@ class RateCollector
      * calculate endpoint reports between an identical shipment with and without
      * a cod_amount. Nothing is computed locally.
      *
-     * @param array<string,mixed> $basePayload The COD free payload already priced
-     * @param array<string,mixed> $baseCalc    The API response for that payload
+     * @param RateRequest         $request      The request being priced, carrying the quote
+     * @param string              $deliveryType The delivery type just priced
+     * @param array<string,mixed> $basePayload  The COD free payload already priced
+     * @param array<string,mixed> $baseCalc     The API response for that payload
      */
-    private function resolveCodFee(array $basePayload, array $baseCalc, int $storeId): void
-    {
-        $codAmount = $this->getCodAmountForCalculation($storeId);
+    private function resolveCodFee(
+        RateRequest $request,
+        string $deliveryType,
+        array $basePayload,
+        array $baseCalc,
+        int $storeId
+    ): void {
+        $codAmount = $this->getCodAmountForCalculation($request, $deliveryType, $storeId);
         if ($codAmount <= 0.0) {
             return;
         }
@@ -568,30 +568,73 @@ class RateCollector
 
     /**
      * Get COD amount (quote subtotal) when the selected payment method is a configured COD method.
-     * Returns 0.0 if no COD payment method is selected or checkout session is unavailable.
+     * Returns 0.0 if no COD payment method is selected or no quote is available.
+     *
+     * With Show COD Fee on, the amount is also returned for a cart not paying by
+     * COD, so the fee can be shown before the customer picks it. That costs an
+     * extra API call, so it is made only for the delivery type already chosen.
+     *
+     * The quote is taken from the rate request's items first. That is the very
+     * instance whose totals are being collected, so it carries a payment method
+     * set in this same request. The checkout session holds a separate instance
+     * loaded before set-payment-information wrote the new method, so reading
+     * the method from there misses the customer's selection and the COD fee is
+     * never asked for.
      */
-    private function getCodAmountForCalculation(int $storeId): float
+    private function getCodAmountForCalculation(RateRequest $request, string $deliveryType, int $storeId): float
     {
-        if ($this->checkoutSession === null) {
-            return 0.0;
-        }
         try {
-            $quote = $this->checkoutSession->getQuote();
+            $quote = $this->getQuoteFromRequest($request);
+            if ($quote === null && $this->checkoutSession !== null) {
+                $quote = $this->checkoutSession->getQuote();
+            }
             if (!$quote) {
                 return 0.0;
             }
-            $paymentMethod = $quote->getPayment() ? $quote->getPayment()->getMethod() : null;
-            if (!$paymentMethod) {
-                return 0.0;
-            }
             $codMethods = $this->config->getCodPaymentMethods($storeId);
-            if (!in_array($paymentMethod, $codMethods, true)) {
+            if (empty($codMethods)) {
                 return 0.0;
             }
-            return round((float) $quote->getSubtotal(), 2);
+            $paymentMethod = $quote->getPayment() ? $quote->getPayment()->getMethod() : null;
+            // Shipping is priced after the discount collector has run, so the
+            // address already carries this pass's discount.
+            $address = $quote->getShippingAddress();
+            $current = $address
+                ? (float) $address->getBaseSubtotal() + (float) $address->getBaseDiscountAmount()
+                : null;
+            if ($paymentMethod && in_array($paymentMethod, $codMethods, true)) {
+                return $this->codFeeResolver->basisFor($quote, $current);
+            }
+            if (!$this->config->isShowCodFee($storeId)) {
+                return 0.0;
+            }
+            $chosen = $address ? (string) $address->getShippingMethod() : '';
+            if ($chosen !== ConfigInterface::CARRIER_CODE . '_' . $deliveryType) {
+                return 0.0;
+            }
+            return $this->codFeeResolver->basisFor($quote, $current);
         } catch (\Throwable $e) {
             return 0.0;
         }
+    }
+
+    /**
+     * The quote the rate request was built from, read off its items.
+     *
+     * @return \Magento\Quote\Model\Quote|null
+     */
+    private function getQuoteFromRequest(RateRequest $request)
+    {
+        $items = $request->getAllItems();
+        if (!is_array($items)) {
+            return null;
+        }
+        foreach ($items as $item) {
+            if (is_object($item) && method_exists($item, 'getQuote') && $item->getQuote()) {
+                return $item->getQuote();
+            }
+        }
+        return null;
     }
 
     /**

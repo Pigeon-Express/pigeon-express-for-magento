@@ -129,23 +129,23 @@
                 <group id="api_setup" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="20" translate="label comment">
                     <label>API Setup</label>
                     <comment>Credentials and connection to Pigeon Express.</comment>
-                    <field id="api_key" showInDefault="1" showInStore="0" showInWebsite="1" sortOrder="20" translate="label" type="obscure">
+                    <field id="api_key" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="20" translate="label comment" type="obscure">
                         <config_path>carriers/pigeonexpress/api_key</config_path>
                         <label>API Key</label>
                         <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
-                        <comment>Pigeon Express API key (X-API-Key).</comment>
+                        <comment>Pigeon Express API key (X-API-Key). One account for every store.</comment>
                     </field>
-                    <field id="api_secret" showInDefault="1" showInStore="0" showInWebsite="1" sortOrder="21" translate="label" type="obscure">
+                    <field id="api_secret" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="21" translate="label" type="obscure">
                         <config_path>carriers/pigeonexpress/api_secret</config_path>
                         <label>API Secret</label>
                         <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
                         <comment>Pigeon Express API secret (X-API-Secret). If empty, API Key is used for both.</comment>
                     </field>
-                    <field id="test_mode" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="25" translate="label" type="select">
+                    <field id="test_mode" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="25" translate="label comment" type="select">
                         <config_path>carriers/pigeonexpress/test_mode</config_path>
                         <label>Test Mode</label>
                         <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                        <comment>Use test/sandbox environment when enabled.</comment>
+                        <comment>Use the Pigeon Express test environment. Applies to every store. Offices, lockers and cities are kept separately for test and live, and switching schedules a sync.</comment>
                     </field>
                     <field id="enable_logging" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="30" translate="label" type="select">
                         <config_path>carriers/pigeonexpress/enable_logging</config_path>
@@ -162,6 +162,13 @@
                         <label>COD Payment Methods</label>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\PaymentMethods</source_model>
                         <comment>Payment methods that trigger a cash on delivery fee. The fee is set by Pigeon Express and read from the API for every quote.</comment>
+                        <depends><field id="carriers/pigeonexpress/active">1</field></depends>
+                    </field>
+                    <field id="show_cod_fee" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="61" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/show_cod_fee</config_path>
+                        <label>Show COD Fee</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>Show the cash on delivery fee next to each COD payment method at checkout, for example "Cash on delivery (+ 0.40 €)". Asks the API for the fee before the customer chooses, which adds one rate request per shipping recalculation.</comment>
                         <depends><field id="carriers/pigeonexpress/active">1</field></depends>
                     </field>
                     <field id="service_return_at_my_expense" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="64" translate="label" type="select">
@@ -259,6 +266,16 @@
                             <field id="address_pricing_mode">fixed</field>
                         </depends>
                     </field>
+                    <field id="address_flat_rate_cod_fee" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="104.5" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/address_flat_rate_cod_fee</config_path>
+                        <label>Add COD Fee to Flat Rate</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>Yes: a cash on delivery order pays the Pigeon Express COD fee on top of the flat rate, and it is shown next to the payment method. No: the flat rate is all the customer pays and you cover the COD fee.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="address_pricing_mode">fixed</field>
+                        </depends>
+                    </field>
                     <field id="address_free_shipping_enabled" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="105" translate="label comment" type="select">
                         <config_path>carriers/pigeonexpress/address_free_shipping_enabled</config_path>
                         <label>Enable Free Shipping Threshold</label>
@@ -341,6 +358,16 @@
                             <field id="office_pricing_mode">fixed</field>
                         </depends>
                     </field>
+                    <field id="office_flat_rate_cod_fee" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="114.5" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/office_flat_rate_cod_fee</config_path>
+                        <label>Add COD Fee to Flat Rate</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>Yes: a cash on delivery order pays the Pigeon Express COD fee on top of the flat rate, and it is shown next to the payment method. No: the flat rate is all the customer pays and you cover the COD fee.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="office_pricing_mode">fixed</field>
+                        </depends>
+                    </field>
                     <field id="office_free_shipping_enabled" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="115" translate="label comment" type="select">
                         <config_path>carriers/pigeonexpress/office_free_shipping_enabled</config_path>
                         <label>Enable Free Shipping Threshold</label>
@@ -418,6 +445,16 @@
                         <label>Flat Rate Price</label>
                         <validate>validate-zero-or-greater validate-number</validate>
                         <backend_model>PigeonExpress\Shipping\Model\Config\Backend\FlatRate</backend_model>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="aps_pricing_mode">fixed</field>
+                        </depends>
+                    </field>
+                    <field id="aps_flat_rate_cod_fee" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="124.5" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/aps_flat_rate_cod_fee</config_path>
+                        <label>Add COD Fee to Flat Rate</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>Yes: a cash on delivery order pays the Pigeon Express COD fee on top of the flat rate, and it is shown next to the payment method. No: the flat rate is all the customer pays and you cover the COD fee.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="aps_pricing_mode">fixed</field>
@@ -604,8 +641,17 @@
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
+                    <field id="parcel_defaults_mode" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="147" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/parcel_defaults_mode</config_path>
+                        <label>How to Apply the Defaults</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\ParcelDefaultsMode</source_model>
+                        <comment><![CDATA[<b>Once per shipment</b>: products without a weight or size share one default parcel; products that have values are added on top.<br/><b>Always one default parcel</b>: product weights and sizes are ignored and every shipment is sent as the default weight and size above. Use this when product weights are only placeholders.<br/><b>For every item</b>: the defaults are added for each unit, so three items weigh three times the default.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
                 </group>
-                <group id="location_sync" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="90" translate="label comment">
+                <group id="location_sync" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="90" translate="label comment">
                     <label>Location Sync</label>
                     <comment>Offices, lockers, cities and the service catalogue are refreshed nightly.</comment>
                     <field id="sync_button" sortOrder="150" type="button"

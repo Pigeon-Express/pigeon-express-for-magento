@@ -52,6 +52,13 @@ interface ShipmentSenderInterface
 
     /**
      * How much the courier is to collect on delivery, zero when not a cash order.
+     *
+     * @param string $whoPays Who the carrier bills; empty for the order's default
      */
-    public function codAmountFor(OrderInterface $order): float;
+    public function codAmountFor(OrderInterface $order, string $whoPays = ''): float;
+
+    /**
+     * Whether the order is paid in cash to the courier rather than online.
+     */
+    public function isCashOnDelivery(OrderInterface $order): bool;
 }

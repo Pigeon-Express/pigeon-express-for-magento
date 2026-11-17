@@ -21,6 +21,7 @@
                 <test_mode>1</test_mode>
                 <enable_logging>0</enable_logging>
                 <cod_payment_methods></cod_payment_methods>
+                <show_cod_fee>0</show_cod_fee>
                 <!-- Additional Services -->
                 <service_special_packaging>0</service_special_packaging>
                 <service_return_at_my_expense>0</service_return_at_my_expense>
@@ -92,6 +93,13 @@
                 <default_length>0</default_length>
                 <default_width>0</default_width>
                 <default_height>0</default_height>
+                <!-- Defaults count once per shipment, not once per item. -->
+                <parcel_defaults_mode>per_shipment</parcel_defaults_mode>
+                <!-- With a flat rate, add the COD fee on top for a cash order. On by
+                     default, which is how it has always worked. -->
+                <address_flat_rate_cod_fee>1</address_flat_rate_cod_fee>
+                <office_flat_rate_cod_fee>1</office_flat_rate_cod_fee>
+                <aps_flat_rate_cod_fee>1</aps_flat_rate_cod_fee>
             </pigeonexpress>
         </carriers>
     </default>

@@ -393,6 +393,7 @@ class PackageBuilderTest extends TestCase
 
     public function testDefaultWeightCoversProductsWithoutOne(): void
     {
+        $this->config->method('getParcelDefaultsMode')->willReturn(ConfigInterface::PARCEL_DEFAULTS_PER_ITEM);
         $this->config->method('getWeightAttributeCode')->willReturn('weight');
         $this->config->method('getDefaultWeight')->willReturn(0.5);
         $this->expectProducts([
@@ -409,6 +410,41 @@ class PackageBuilderTest extends TestCase
         );
 
         $this->assertSame(3.5, $weight, '2.0 plus three units of the 0.5 default');
+    }
+
+    public function testDefaultWeightIsAddedOncePerShipment(): void
+    {
+        $this->config->method('getParcelDefaultsMode')->willReturn(ConfigInterface::PARCEL_DEFAULTS_PER_SHIPMENT);
+        $this->config->method('getWeightAttributeCode')->willReturn('weight');
+        $this->config->method('getDefaultWeight')->willReturn(0.5);
+        $this->expectProducts([
+            1 => ['weight' => 2.0],
+            2 => ['weight' => 0],
+            3 => ['weight' => 0],
+        ]);
+
+        $weight = $this->builder->resolveWeight(
+            [
+                ['product_id' => 1, 'qty' => 1.0],
+                ['product_id' => 2, 'qty' => 3.0],
+                ['product_id' => 3, 'qty' => 1.0],
+            ],
+            1
+        );
+
+        $this->assertSame(2.5, $weight, '2.0 plus one 0.5 default for all the unweighed items');
+    }
+
+    public function testFixedModeIgnoresProductWeights(): void
+    {
+        $this->config->method('getParcelDefaultsMode')->willReturn(ConfigInterface::PARCEL_DEFAULTS_FIXED);
+        $this->config->method('getWeightAttributeCode')->willReturn('weight');
+        $this->config->method('getDefaultWeight')->willReturn(1.5);
+        $this->collectionFactory->expects($this->never())->method('create');
+
+        $weight = $this->builder->resolveWeight([['product_id' => 1, 'qty' => 4.0]], 1);
+
+        $this->assertSame(1.5, $weight);
     }
 
     public function testCallerFallbackWeightIsUsedWhenNothingCanBeDerived(): void

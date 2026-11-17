@@ -80,6 +80,19 @@ class Shipment extends AbstractModel
         return $this->setData('payload', $payload);
     }
 
+    /**
+     * The shipment form exactly as the admin sent it, as JSON.
+     */
+    public function getFormFields(): ?string
+    {
+        return $this->getData('form_fields');
+    }
+
+    public function setFormFields(?string $formFields): self
+    {
+        return $this->setData('form_fields', $formFields);
+    }
+
     public function getResponse(): ?string
     {
         return $this->getData('response');

@@ -39,6 +39,10 @@ class CodFee extends AbstractTotal
             return $this;
         }
 
+        if (!$this->isChargedFor((string) $shippingMethod, (int) $quote->getStoreId())) {
+            return $this;
+        }
+
         // Nothing charged for carriage, nothing charged for collecting the cash.
         // The shipping collector wrote the chosen rate's price here before this
         // one ran, so this reads what the customer is actually being asked for,
@@ -65,7 +69,11 @@ class CodFee extends AbstractTotal
         }
 
         // The fee comes from the API, never from a rate stored in this module.
-        $codAmount = round((float) $quote->getSubtotal(), 2);
+        // On the goods after discounts, as the courier will collect them.
+        $codAmount = $this->codFeeResolver->basisFor(
+            $quote,
+            $total->getBaseSubtotalWithDiscount() !== null ? (float) $total->getBaseSubtotalWithDiscount() : null
+        );
         $fee = $this->codFeeResolver->resolve($storeId, $codAmount);
 
         if ($fee <= 0.0) {
@@ -123,19 +131,65 @@ class CodFee extends AbstractTotal
     }
 
     /**
-     * No total segment is published.
+     * No total segment is published unless Show COD Fee is on.
      *
      * The fee is merged into the shipping amount rather than shown as its own
-     * checkout row, so nothing consumes a segment. Publishing one anyway risks
-     * a third party theme rendering an unexpected total line, and a separate row
-     * would additionally need handling in invoices and credit memos, which the
-     * API gives no way to control independently.
+     * checkout row. A separate row would need handling in invoices and credit
+     * memos, which the API gives no way to control independently.
      *
-     * The amount is still recorded on the address, and from there on the order,
-     * so it remains visible to the merchant and reportable.
+     * With Show COD Fee on, the segment carries the fee the cart would pay so
+     * the payment step can print it beside each COD method. It is not a row of
+     * the order summary: Magento renders only the segments its layout names, so
+     * this one is read by our payment title mixin and drawn nowhere else. It is
+     * kept off by default because a third party theme that renders every
+     * segment would show it as a line of its own.
+     *
+     * The fee is read back from the resolver's cache, which the rate collector
+     * filled from the API, rather than from the collected total. The totals
+     * request the payment step makes after a payment method is chosen loads the
+     * quote without collecting, so nothing computed in collect() reaches it.
      */
     public function fetch(Quote $quote, Total $total): array
     {
-        return [];
+        $storeId = (int) $quote->getStoreId();
+        if (!$this->config->isShowCodFee($storeId) || empty($this->config->getCodPaymentMethods($storeId))) {
+            return [];
+        }
+
+        // Same conditions as collect(): our carrier, and a delivery that is
+        // actually charged, the fee being waived with free shipping.
+        $shippingMethod = (string) $total->getData('shipping_method');
+        if (strpos($shippingMethod, ConfigInterface::CARRIER_CODE . '_') !== 0
+            || (float) $total->getData('base_shipping_amount') <= 0.0
+            || !$this->isChargedFor($shippingMethod, $storeId)
+        ) {
+            return [];
+        }
+
+        $fee = $this->codFeeResolver->resolve($storeId, $this->codFeeResolver->basisFor($quote));
+        if ($fee <= 0.0) {
+            return [];
+        }
+
+        return [
+            'code' => self::CODE,
+            'title' => __('Cash on Delivery Fee'),
+            'value' => $fee,
+        ];
+    }
+
+    /**
+     * Whether this delivery type passes the COD fee on to the customer. A flat
+     * rate the merchant set up as all inclusive does not.
+     */
+    private function isChargedFor(string $shippingMethod, int $storeId): bool
+    {
+        $deliveryType = substr($shippingMethod, strlen(ConfigInterface::CARRIER_CODE . '_'));
+
+        try {
+            return $this->config->isCodFeeCharged($deliveryType, $storeId);
+        } catch (\Throwable $e) {
+            return true;
+        }
     }
 }

@@ -99,7 +99,7 @@ class Send extends Action implements HttpPostActionInterface
         $checked = $this->addressForm->validate(
             $fields,
             (int) $order->getStoreId(),
-            $this->freeShipping->wasAppliedToOrder($order)
+            $this->freeShipping->wasAppliedToOrder($order) || !$this->shipmentSender->isCashOnDelivery($order)
         );
 
         if ($this->addressForm->hasErrors($checked['issues'])) {

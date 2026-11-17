@@ -857,7 +857,7 @@ class Info extends Template
         }
 
         try {
-            $amount = $this->shipmentSender->codAmountFor($order);
+            $amount = $this->shipmentSender->codAmountFor($order, $this->getFieldValue('who_pays'));
         } catch (\Throwable $e) {
             return '';
         }
@@ -974,7 +974,9 @@ class Info extends Template
         try {
             $location = $this->locationPersistor->getByAddressId((int) $shippingAddress->getId()) ?? [];
 
-            $fields = $this->addressForm->fromOrder(
+            // After a cancel, start from what the last waybill was sent with:
+            // whatever the admin corrected then is still true now.
+            $fields = $this->lastSentForm() ?? $this->addressForm->fromOrder(
                 $shippingAddress,
                 $this->getInstructions(),
                 (string) ($this->getDeliveryType() ?? ConfigInterface::DELIVERY_TYPE_ADDRESS),
@@ -985,8 +987,10 @@ class Info extends Template
             $this->form = $this->addressForm->validate(
                 $fields,
                 (int) $order->getStoreId(),
-                !empty($location['free_shipping'])
+                !empty($location['free_shipping']) || $this->isPrepaid()
             );
+
+            $this->fillParcel();
         } catch (\Throwable $e) {
             $this->form['issues']['address'] = [
                 'severity' => AddressForm::SEVERITY_ERROR,
@@ -995,6 +999,105 @@ class Info extends Template
         }
 
         return $this->form;
+    }
+
+    /**
+     * Start the parcel fields from what would be sent without them.
+     *
+     * The admin then sees, and can correct, the very figures the waybill would
+     * otherwise carry. Left as they are, they produce the same shipment.
+     */
+    private function fillParcel(): void
+    {
+        $fields = &$this->form['fields'];
+
+        if (($fields['cod_amount'] ?? '') === '') {
+            $fields['cod_amount'] = $this->formatAmount($this->getCodAmountFor($fields['who_pays'] ?? ''));
+        }
+
+        // Figures restored from an earlier waybill stay as they were sent.
+        if ($this->addressForm->parcel($fields) !== null) {
+            return;
+        }
+
+        $packages = $this->getPackages();
+        if (empty($packages)) {
+            return;
+        }
+
+        $weight = 0.0;
+        foreach ($packages as $package) {
+            $weight += (float) $package['weight'];
+        }
+
+        $fields['weight'] = $this->trimNumber($weight);
+        $fields['length'] = $this->trimNumber((float) $packages[0]['length']);
+        $fields['width'] = $this->trimNumber((float) $packages[0]['width']);
+        $fields['height'] = $this->trimNumber((float) $packages[0]['height']);
+        $fields['parcels'] = (string) count($packages);
+    }
+
+    /**
+     * The form the most recent waybill for this order was sent with, if any.
+     *
+     * Only cancelled waybills reach here, the form being hidden while one is
+     * live. Ids are dropped by fromRequest() if they are not plain numbers, so
+     * a stored form is held to the same standard as a submitted one.
+     *
+     * @return array<string, string>|null
+     */
+    private function lastSentForm(): ?array
+    {
+        foreach ($this->getShipmentHistory() as $shipment) {
+            $stored = json_decode((string) $shipment->getFormFields(), true);
+            if (is_array($stored)) {
+                return $this->addressForm->fromRequest($stored);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * What the courier would collect if the given side pays for the delivery.
+     */
+    public function getCodAmountFor(string $whoPays): float
+    {
+        $order = $this->getOrder();
+        if (!$order || !$order->getId()) {
+            return 0.0;
+        }
+
+        try {
+            return $this->shipmentSender->codAmountFor($order, $whoPays);
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
+    /**
+     * An amount as typed into a form field: two decimals, a point, no currency.
+     */
+    public function formatAmount(float $amount): string
+    {
+        return number_format($amount, 2, '.', '');
+    }
+
+    /**
+     * Whether the customer paid online, so there is nothing left to collect.
+     *
+     * Such an order is sent with the shop paying the carrier: the delivery was
+     * part of what the customer already paid, and billing the recipient would
+     * have the courier ask them for it again.
+     */
+    public function isPrepaid(): bool
+    {
+        $order = $this->getOrder();
+        if (!$order || !$order->getId()) {
+            return false;
+        }
+
+        return !$this->shipmentSender->isCashOnDelivery($order);
     }
 
     /**

@@ -115,15 +115,18 @@ class LocationToApiIdResolver
         // The location sync leaves city and postcode empty on offices and
         // lockers, but always fills city_id, so the readable city comes from the
         // city table. Join rather than trusting whatever checkout posted.
-        $select = $connection->select()
-            ->from(['l' => $resource->getMainTable()], ['entity_id', 'api_id', 'name', 'address'])
+        // Built on the collection's select, which already holds only the
+        // current environment's rows.
+        $select = $collection->getSelect()
+            ->reset(\Magento\Framework\DB\Select::COLUMNS)
+            ->columns(['entity_id', 'api_id', 'name', 'address'])
             ->joinLeft(
                 ['c' => $cityTable],
-                'c.api_id = l.city_id',
+                'c.api_id = main_table.city_id AND c.environment = main_table.environment',
                 ['city_name' => 'name', 'city_postal_code' => 'postal_code']
             )
-            ->where('l.entity_id = ?', $id)
-            ->where('l.is_active = ?', 1)
+            ->where('main_table.entity_id = ?', $id)
+            ->where('main_table.is_active = ?', 1)
             ->limit(1);
 
         $row = $connection->fetchRow($select);

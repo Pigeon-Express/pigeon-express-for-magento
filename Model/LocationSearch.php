@@ -14,6 +14,7 @@ use Magento\Store\Model\StoreManagerInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\LocationSearchInterface;
 use PigeonExpress\Shipping\Model\Directory\RegionResolver;
+use PigeonExpress\Shipping\Model\Environment;
 use PigeonExpress\Shipping\Model\ResourceModel\Office\CollectionFactory as OfficeCollectionFactory;
 use PigeonExpress\Shipping\Model\ResourceModel\Aps\CollectionFactory as ApsCollectionFactory;
 
@@ -49,13 +50,19 @@ class LocationSearch implements LocationSearchInterface
      */
     private $regionResolver;
 
+    /**
+     * @var Environment
+     */
+    private $environment;
+
     public function __construct(
         OfficeCollectionFactory $officeCollectionFactory,
         ApsCollectionFactory $apsCollectionFactory,
         ConfigInterface $config,
         StoreManagerInterface $storeManager,
         ResourceConnection $resource,
-        RegionResolver $regionResolver
+        RegionResolver $regionResolver,
+        Environment $environment
     ) {
         $this->officeCollectionFactory = $officeCollectionFactory;
         $this->apsCollectionFactory = $apsCollectionFactory;
@@ -63,6 +70,7 @@ class LocationSearch implements LocationSearchInterface
         $this->storeManager = $storeManager;
         $this->resource = $resource;
         $this->regionResolver = $regionResolver;
+        $this->environment = $environment;
     }
 
     /**
@@ -89,7 +97,7 @@ class LocationSearch implements LocationSearchInterface
         $cityTable = $this->resource->getTableName('pigeonexpress_city');
         $collection->getSelect()->joinLeft(
             ['pe_city' => $cityTable],
-            'pe_city.api_id = main_table.city_id',
+            'pe_city.api_id = main_table.city_id AND pe_city.environment = main_table.environment',
             [
                 'city_resolved' => 'COALESCE(main_table.city, pe_city.name)',
                 'postcode_resolved' => 'COALESCE(main_table.postcode, pe_city.postal_code)',
@@ -263,7 +271,12 @@ class LocationSearch implements LocationSearchInterface
                 ['c' => $this->resource->getTableName('pigeonexpress_city')],
                 ['api_id', 'name', 'postal_code', 'district', 'district_en']
             )
-            ->join(['l' => $locationTable], 'l.city_id = c.api_id AND l.is_active = 1', ['count' => 'COUNT(l.entity_id)'])
+            ->join(
+                ['l' => $locationTable],
+                'l.city_id = c.api_id AND l.environment = c.environment AND l.is_active = 1',
+                ['count' => 'COUNT(l.entity_id)']
+            )
+            ->where('c.environment = ?', $this->environment->current())
             ->where('c.name LIKE ? OR c.name_en LIKE ? OR c.postal_code LIKE ?', $like)
             ->group(['c.api_id', 'c.name', 'c.postal_code', 'c.district', 'c.district_en'])
             // Same ordering the admin city picker uses: district capitals are the

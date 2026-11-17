@@ -89,7 +89,7 @@ class Recalculate extends Action implements HttpPostActionInterface
         $checked = $this->addressForm->validate(
             $fields,
             (int) $order->getStoreId(),
-            $this->freeShipping->wasAppliedToOrder($order)
+            $this->freeShipping->wasAppliedToOrder($order) || !$this->shipmentSender->isCashOnDelivery($order)
         );
 
         // A price for an address the carrier cannot resolve would be a guess, so

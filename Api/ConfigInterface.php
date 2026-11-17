@@ -25,6 +25,15 @@ interface ConfigInterface
     /** The courier collects the shipping charge from the recipient on delivery. */
     public const WHO_PAYS_RECEIVER = 'receiver';
 
+    /** Product values, with the default weight and size added for every item that has none. */
+    public const PARCEL_DEFAULTS_PER_ITEM = 'per_item';
+
+    /** Product values, with one default weight and size for all the items that have none. */
+    public const PARCEL_DEFAULTS_PER_SHIPMENT = 'per_shipment';
+
+    /** Product values ignored: every shipment is one default parcel. */
+    public const PARCEL_DEFAULTS_FIXED = 'fixed';
+
     /**
      * Check if carrier is enabled.
      *
@@ -100,6 +109,17 @@ interface ConfigInterface
      * @return float
      */
     public function getDeliveryTypeFlatRate(string $deliveryType, ?int $storeId = null): float;
+
+    /**
+     * Whether the customer is charged the COD fee on top of shipping for a
+     * delivery type. Always with dynamic pricing; with a flat rate only when
+     * the merchant says so, the flat rate often being meant as all inclusive.
+     *
+     * @param string $deliveryType
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isCodFeeCharged(string $deliveryType, ?int $storeId = null): bool;
 
     /**
      * What the waybill says the parcel contains: product names or one fixed wording.
@@ -239,6 +259,16 @@ interface ConfigInterface
     public function getDefaultHeight(?int $storeId = null): float;
 
     /**
+     * How the default weight and size are applied: one of the PARCEL_DEFAULTS_*
+     * constants. Adding a full default box for every unit makes a two bottle
+     * order a 2 kg, 40 x 40 x 40 cm parcel, which is rarely what was meant.
+     *
+     * @param int|null $storeId
+     * @return string
+     */
+    public function getParcelDefaultsMode(?int $storeId = null): string;
+
+    /**
      * Pickup location type: 'office' or 'address'.
      *
      * @param int|null $storeId
@@ -353,6 +383,14 @@ interface ConfigInterface
      * @return string[]
      */
     public function getCodPaymentMethods(?int $storeId = null): array;
+
+    /**
+     * Whether the COD fee is shown next to COD payment methods at checkout.
+     *
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isShowCodFee(?int $storeId = null): bool;
 
     /**
      * Whether the declared value (insurance) service is switched on.

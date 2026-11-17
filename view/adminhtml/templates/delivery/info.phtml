@@ -247,7 +247,8 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                     </div>
                 </div>
 
-                <div class="admin__field pe-span-6 pe-type-field<?= $block->isFreeShipping() ? ' pe-free-shipping' : '' ?>">
+                <?php $peSenderPays = $block->isFreeShipping() || $block->isPrepaid(); ?>
+                <div class="admin__field pe-span-6 pe-type-field<?= $peSenderPays ? ' pe-free-shipping' : '' ?>">
                     <span class="pe-label-row">
                         <label class="admin__field-label" for="pe_who_pays">
                             <span><?= $escaper->escapeHtml(__('Who Pays the Shipping')) ?></span>
@@ -276,6 +277,18 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                             <?= $escaper->escapeHtml(__(
                                 'Your customer completed the order with Free shipping. Changing this to '
                                 . 'Receiver would add an extra cost to the delivery.'
+                            )) ?>
+                        </div>
+                        <?php elseif ($block->isPrepaid()) : ?>
+                        <?php /* Paid online: the delivery was part of what the customer
+                                already paid, so billing them again at the door is wrong. */ ?>
+                        <div class="pe-free-shipping-note">
+                            <strong><?= $escaper->escapeHtml(__('This order is already paid')) ?></strong>
+                            <?= $escaper->escapeHtml(__(
+                                'Your customer paid online, shipping included, so the waybill shows nothing to '
+                                . 'collect. Pigeon Express invoices you for the delivery, which the customer\'s '
+                                . 'payment already covers. Changing this to Receiver would have the courier '
+                                . 'collect the delivery charge a second time.'
                             )) ?>
                         </div>
                         <?php endif; ?>
@@ -397,6 +410,57 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                         'Optional, and printed on the waybill. Door codes, landmarks, or when to call.'
                     ),
                 ]) ?>
+
+                <div class="pe-span-12 pe-section-title"><?= $escaper->escapeHtml(__('Parcel and payment')) ?></div>
+
+                <?= /* @noEscape */ $peField('cod_amount', (string) __('Cash on delivery value'), 4, [
+                    'tooltip'    => (string) __(
+                        'What the courier collects from the recipient for the goods. Filled in with the order '
+                        . 'total the customer saw at checkout, without the shipping when the recipient pays the '
+                        . 'courier for it. 0 means nothing is collected.'
+                    ),
+                    'attributes' => [
+                        'data-role'         => 'pe-cod-amount',
+                        'data-cod-sender'   => $block->formatAmount(
+                            $block->getCodAmountFor(\PigeonExpress\Shipping\Api\ConfigInterface::WHO_PAYS_SENDER)
+                        ),
+                        'data-cod-receiver' => $block->formatAmount(
+                            $block->getCodAmountFor(\PigeonExpress\Shipping\Api\ConfigInterface::WHO_PAYS_RECEIVER)
+                        ),
+                        'inputmode'         => 'decimal',
+                    ],
+                ]) ?>
+                <?= /* @noEscape */ $peField('weight', (string) __('Total weight (kg)'), 4, [
+                    'tooltip'    => (string) __(
+                        'The whole shipment. With more than one parcel it is shared evenly between them.'
+                    ),
+                    'attributes' => ['inputmode' => 'decimal'],
+                ]) ?>
+                <?= /* @noEscape */ $peField('parcels', (string) __('Number of parcels'), 4, [
+                    'attributes' => ['inputmode' => 'numeric'],
+                ]) ?>
+
+                <div class="admin__field pe-span-12">
+                    <span class="pe-label-row">
+                        <label class="admin__field-label">
+                            <span><?= $escaper->escapeHtml(__('Size of each parcel (cm)')) ?></span>
+                        </label>
+                    </span>
+                    <div class="admin__field-control">
+                        <div class="pe-subfields">
+                            <?= /* @noEscape */ $peSubField('length', (string) __('Length')) ?>
+                            <?= /* @noEscape */ $peSubField('width', (string) __('Width')) ?>
+                            <?= /* @noEscape */ $peSubField('height', (string) __('Height')) ?>
+                        </div>
+                        <?php foreach (['length', 'width', 'height'] as $peDimension) : ?>
+                            <?php if ($block->getFieldMessage($peDimension) !== '') : ?>
+                            <div class="admin__field-error pe-message">
+                                <?= $escaper->escapeHtml($block->getFieldMessage($peDimension)) ?>
+                            </div>
+                            <?php break; endif; ?>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
             </div>
 
             <div class="pe-form-actions">
@@ -423,35 +487,6 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                 <?php endif; ?>
 
                 <dl class="pe-summary">
-                    <?php if ($block->getPackageWeight() !== '') : ?>
-                    <div class="pe-summary-row">
-                        <dt><?= $escaper->escapeHtml(__('Package weight')) ?></dt>
-                        <dd><?= $escaper->escapeHtml($block->getPackageWeight()) ?></dd>
-                    </div>
-                    <?php endif; ?>
-
-                    <?php if ($block->getPackageDimensions() !== '') : ?>
-                    <div class="pe-summary-row">
-                        <dt><?= $escaper->escapeHtml(__('Package dimensions')) ?></dt>
-                        <dd><?= $escaper->escapeHtml($block->getPackageDimensions()) ?></dd>
-                    </div>
-                    <?php endif; ?>
-
-                    <?php if ($block->getPackagePieces() > 0) : ?>
-                    <div class="pe-summary-row">
-                        <dt><?= $escaper->escapeHtml(__('Package pieces')) ?></dt>
-                        <dd><?= (int) $block->getPackagePieces() ?></dd>
-                    </div>
-                    <?php endif; ?>
-
-                    <?php if ($block->getFormattedCodAmount() !== '') : ?>
-                    <div class="pe-summary-row">
-                        <dt><?= $escaper->escapeHtml(__('Cash on delivery value')) ?></dt>
-                        <dd><?= /* @noEscape: formatPrice() returns trusted Magento HTML */
-                            $block->getFormattedCodAmount() ?></dd>
-                    </div>
-                    <?php endif; ?>
-
                     <?php if ($block->getFormattedDeliveryPrice() !== '') : ?>
                     <?php /* Split by side. Pigeon Express bills one or the other, never
                             both, so the side that is not billed reads zero rather than

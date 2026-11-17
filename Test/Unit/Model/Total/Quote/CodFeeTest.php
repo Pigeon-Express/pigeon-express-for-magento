@@ -37,13 +37,33 @@ class CodFeeTest extends TestCase
     /** @var CodFee */
     private $collector;
 
+    /** @var bool What isCodFeeCharged() answers */
+    private $codFeeCharged = true;
+
     protected function setUp(): void
     {
         $this->objectManager = new ObjectManager($this);
         $this->config = $this->createMock(ConfigInterface::class);
         $this->resolver = $this->createMock(CodFeeResolver::class);
 
+        // Dynamic pricing, or a flat rate set to add the fee: the default.
+        $this->config->method('isCodFeeCharged')->willReturnCallback(function (): bool {
+            return $this->codFeeCharged;
+        });
+
         $this->collector = new CodFee($this->config, $this->resolver);
+    }
+
+    public function testNoFeeWhenTheFlatRateIncludesIt(): void
+    {
+        $this->codFeeCharged = false;
+        $this->config->method('getCodPaymentMethods')->willReturn(['cashondelivery']);
+        $this->resolver->expects($this->never())->method('resolve');
+
+        [$total, $address] = $this->collect('pigeonexpress_office', 'cashondelivery');
+
+        $this->assertSame(self::BASE_SHIPPING, (float) $total->getShippingAmount());
+        $this->assertSame(0.0, (float) $address->getData(CodFee::CODE));
     }
 
     public function testFeeIsAppliedForAPigeonExpressRateWithACodPaymentMethod(): void

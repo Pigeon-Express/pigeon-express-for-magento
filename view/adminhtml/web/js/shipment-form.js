@@ -74,6 +74,29 @@ define(['jquery', 'mage/translate'], function ($, $t) {
             }
         );
 
+        // The cash on delivery value depends on who pays the carrier: when the
+        // recipient does, the courier collects the delivery charge itself, so
+        // it is left out of the amount. Follows the choice until the admin
+        // types an amount of their own.
+        $form.find('[data-role="pe-cod-amount"]').each(function () {
+            var $cod = $(this),
+                edited = false;
+
+            $cod.on('input', function () {
+                edited = true;
+            });
+
+            $form.find('#pe_who_pays').on('change', function () {
+                var amount = $(this).val() === 'receiver'
+                    ? $cod.attr('data-cod-receiver')
+                    : $cod.attr('data-cod-sender');
+
+                if (!edited && amount !== undefined) {
+                    $cod.val(amount);
+                }
+            });
+        });
+
         if ($type.length) {
             applyDeliveryType();
 

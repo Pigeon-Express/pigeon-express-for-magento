@@ -5,6 +5,34 @@ All notable changes to this module are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- API key, secret and test mode are global settings.
+- Offices, lockers and cities are kept separately for test and live.
+- The waybill COD amount is the order total the customer saw, discounts
+  included, less the shipping charge when the receiver pays the courier.
+- Orders paid online default to Sender pays with no COD.
+- The checkout COD fee is calculated on the goods total after discounts.
+- Products without a weight or size share one default parcel per shipment by
+  default. See How to Apply the Defaults.
+
+### Added
+
+- Show COD Fee: shows the COD fee next to COD payment methods at checkout.
+- How to Apply the Defaults: once per shipment, always one default parcel, or
+  for every item.
+- Add COD Fee to Flat Rate, per delivery type, for the Fixed pricing mode.
+- Parcel and payment section on the admin shipment form: COD value, total
+  weight, number of parcels and parcel size. Edits are kept after a cancel.
+
+### Fixed
+
+- Location sync runs when the carrier is enabled in any store.
+- Choosing a COD payment method did not add the COD fee.
+- Recalculate on the admin shipment form left out COD.
+
 ## [1.2.1] - 2026-10-13
 
 ### Fixed

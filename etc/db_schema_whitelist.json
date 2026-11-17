@@ -13,7 +13,8 @@
             "longitude": true,
             "is_active": true,
             "created_at": true,
-            "updated_at": true
+            "updated_at": true,
+            "environment": true
         },
         "index": {
             "PIGEONEXPRESS_OFFICE_NAME": true,
@@ -22,7 +23,8 @@
         },
         "constraint": {
             "PRIMARY": true,
-            "PIGEONEXPRESS_OFFICE_API_ID": true
+            "PIGEONEXPRESS_OFFICE_API_ID": true,
+            "PIGEONEXPRESS_OFFICE_API_ID_ENVIRONMENT": true
         }
     },
     "pigeonexpress_aps": {
@@ -39,7 +41,8 @@
             "longitude": true,
             "is_active": true,
             "created_at": true,
-            "updated_at": true
+            "updated_at": true,
+            "environment": true
         },
         "index": {
             "PIGEONEXPRESS_APS_NAME": true,
@@ -48,7 +51,8 @@
         },
         "constraint": {
             "PRIMARY": true,
-            "PIGEONEXPRESS_APS_API_ID": true
+            "PIGEONEXPRESS_APS_API_ID": true,
+            "PIGEONEXPRESS_APS_API_ID_ENVIRONMENT": true
         }
     },
     "pigeonexpress_city": {
@@ -59,7 +63,8 @@
             "name_en": true,
             "postal_code": true,
             "district": true,
-            "district_en": true
+            "district_en": true,
+            "environment": true
         },
         "index": {
             "PIGEONEXPRESS_CITY_NAME": true,
@@ -67,7 +72,8 @@
         },
         "constraint": {
             "PRIMARY": true,
-            "PIGEONEXPRESS_CITY_API_ID": true
+            "PIGEONEXPRESS_CITY_API_ID": true,
+            "PIGEONEXPRESS_CITY_API_ID_ENVIRONMENT": true
         }
     },
     "pigeonexpress_quote_address": {
@@ -114,6 +120,7 @@
             "delivery_price": true,
             "payload": true,
             "response": true,
+            "form_fields": true,
             "sent_at": true,
             "updated_at": true
         },

@@ -19,18 +19,19 @@ use PigeonExpress\Shipping\Model\Shipment\AddressForm;
 use PigeonExpress\Shipping\Model\ShipmentSender;
 
 /**
- * The Recalculate button asks what the carriage costs. It must not quote a
- * figure that includes cash on delivery: that fee is charged to the customer
- * through the order total, so adding it here would show the merchant a number
- * nobody is being asked to pay, and it is exactly the double counting this
- * module was fixed to remove.
+ * The Recalculate button quotes what the waybill Create makes will cost. A
+ * placed order's payment method cannot change, so cash on delivery is included
+ * exactly as send() includes it.
  */
 class ShipmentSenderPriceTest extends TestCase
 {
     /** @var array<string, mixed> Payload the sender handed to the rate client */
     private $payload = [];
 
-    public function testCashOnDeliveryIsLeftOutOfTheQuote(): void
+    /** @var float|null COD value typed on the shipment form */
+    private $formCod;
+
+    public function testCashOnDeliveryIsIncludedInTheQuote(): void
     {
         $codIncluded = null;
 
@@ -39,7 +40,20 @@ class ShipmentSenderPriceTest extends TestCase
             return [];
         });
 
-        $this->assertFalse($codIncluded, 'the quote is what carriage costs, not what the customer pays');
+        $this->assertTrue($codIncluded, 'the quote must match the waybill Create makes');
+    }
+
+    public function testTheCodValueOnTheFormIsQuoted(): void
+    {
+        $this->formCod = 42.5;
+        $codAmount = null;
+
+        $this->price(['delivery_type' => 'address'], function (...$args) use (&$codAmount) {
+            $codAmount = $args[3];
+            return [];
+        });
+
+        $this->assertSame(42.5, $codAmount);
     }
 
     public function testTheQuoteIsForTheDeliveryTypeOnTheForm(): void
@@ -126,6 +140,9 @@ class ShipmentSenderPriceTest extends TestCase
             }
         );
         $form->method('toApiAddress')->willReturn(['city_id' => 1, 'additional_info' => 'Address']);
+        $form->method('codAmount')->willReturnCallback(function (): ?float {
+            return $this->formCod;
+        });
 
         $sender = (new ObjectManager($this))->getObject(ShipmentSender::class, [
             'config'                  => $config,
