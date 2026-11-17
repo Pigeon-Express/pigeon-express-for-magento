@@ -103,13 +103,18 @@ applies to the whole carrier.
 
 | Section | Contains |
 |---------|----------|
-| General | Carrier title and name, error message, country restrictions |
-| API Setup | API Key, API Secret, Test Mode, Enable Logging |
-| Pickup Location | Where your parcels enter the Pigeon Express network |
-| Additional Services | Which payment methods trigger a cash on delivery fee, and the optional services your account includes |
-| Address / Office / APS Delivery | Enable, title, pricing mode and flat rate per delivery type |
-| Product Weight and Dimensions | Attribute mapping and fallback values |
-| Location Sync | Manual sync trigger |
+| API and environment | Test mode, and the API key and secret for each environment |
+| General | Carrier title and name, error message, country restrictions, hide contents on the label |
+| Send From | Where your parcels enter the Pigeon Express network: office, address, saved address or parcel locker (with an office for parcels that do not fit) |
+| Courier request | Defaults for courier requests: time window, same-day cut-off, contact. Shown only when the courier collects from you |
+| Checkout and cash on delivery | Which payment methods are cash on delivery, the COD fee at checkout, who pays |
+| Additional Services | The optional services your account includes: inspection, return receipts, declared value |
+| Address / Office / Parcel Locker Delivery | Enable, title, pricing mode, flat rate, fallback price, free shipping threshold, working hours |
+| Returns | Return at your expense, where returned shipments go, return shipments from the order |
+| Labels | Label contents and format, create shipments automatically |
+| Shipment status and tracking | Status checks, what happens to the order when delivered or returned, Magento shipment |
+| Parcel weight and dimensions | Attribute mapping, defaults, fragile packages, package description |
+| Sync and diagnostics | Manual sync trigger, logging |
 
 Only additional services included in your Pigeon Express account are shown. A
 service your account does not have is hidden rather than offered as a switch that
@@ -152,7 +157,8 @@ quantity, so the label reads `Съдържание: Стоки` rather than
 `Съдържание: 5 бр. - Push It Messenger Bag 1kg`.
 
 Nothing here moves money. The sum the carrier insures is sent separately as
-`declared_value`, taken from the order subtotal, and cash on delivery as
+`declared_value` (the order total less delivery, kept between 1 and 5,000
+EUR unless an amount is typed on the order), and cash on delivery as
 `cod_amount`, so both are unaffected by what the label says.
 
 Defaults to product names, so upgrading does not change what your labels say.
@@ -373,6 +379,52 @@ label reads correctly.
 
 The shipment data (API request payload and response) is stored in `pigeonexpress_shipment` for audit purposes.
 
+### After the shipment is created
+
+- **Status**: the order screen shows the carrier's status, with Refresh. The
+  status of every open shipment is also checked twice a day. Under **Shipment
+  status and tracking**, "When the shipment is delivered" can complete the
+  order (shipped in Magento if it is not yet, and invoiced offline when it is
+  cash on delivery; other unpaid orders get a note to invoice by hand), and
+  "When the shipment comes back" can put the order on hold or cancel it (an
+  order with an invoice only gets a note).
+- **Magento shipment and tracking**: a Magento shipment with the tracking number
+  is created with the waybill, so customers get the tracking link in My Account
+  and in emails.
+- **Edit**: until the courier collects it, the receiver, address, packages,
+  cash on delivery and services can be changed without cancelling. Print the
+  label again after a change.
+- **Charges**: what Pigeon Express charges for the shipment and who pays it.
+- **Cancel**: until the courier collects it.
+
+### Orders grid
+
+**Sales > Orders** has a **Pigeon Express** column with the waybill and its
+status, and "Courier requested" while a courier request for it is open. Its
+filter shows orders delivered, in delivery, returned or refused, waiting for
+the courier, or with no shipment. Mass actions create shipments, refresh their
+status, download labels as one ZIP and request a courier.
+
+### Automatic creation
+
+With **Create shipments automatically** (Labels) on, a shipment is created when
+an order becomes Processing. A shipment is never sent to a street that was
+guessed: when the address does not match the carrier's lists, the order gets a
+comment and the shipment waits for you.
+
+### Return shipments
+
+The order screen has a **Return shipment** section: the customer sends the
+parcel back from an address, an office or a parcel locker, to an office or to
+you. Switch it off under Returns.
+
+### Courier requests
+
+When the courier collects from your address, **Request a courier** on the order
+screen and the orders grid mass action book a pickup. Requests are listed under
+**Sales > Operations > Pigeon Express courier requests**, where they can be
+refreshed or cancelled.
+
 ---
 
 ## Database Tables
@@ -384,6 +436,10 @@ The shipment data (API request payload and response) is stored in `pigeonexpress
 | `pigeonexpress_city` | Synced city reference data (used for dynamic rate city lookup) |
 | `pigeonexpress_quote_address` | Selected PE delivery location per quote shipping address |
 | `pigeonexpress_order_address` | Selected PE delivery location + price per order shipping address, and whether free shipping is why it cost nothing |
-| `pigeonexpress_shipment` | Shipment records: reference number, tracking number, API payload & response |
+| `pigeonexpress_shipment` | Shipment records: reference number, tracking number, API payload & response, last status and charges |
+| `pigeonexpress_auto_create` | Orders waiting for automatic shipment creation, and how each run ended |
+| `pigeonexpress_return_shipment` | Return shipments created from orders |
+| `pigeonexpress_courier_request` | Courier requests made from this shop (the API cannot list them) |
+| `pigeonexpress_courier_request_shipment` | The shipments in each courier request |
 | `pigeonexpress_additional_service` | Additional services catalogue synced from the API, plus the last fee the API charged for each |
 | `sales_order` (column) | `pigeonexpress_cod_fee`: COD fee amount, as charged by the API, stored with the order |

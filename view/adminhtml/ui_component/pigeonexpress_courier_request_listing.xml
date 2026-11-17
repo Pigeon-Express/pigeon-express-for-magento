@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sales > Pigeon Express courier requests: the requests made from this shop in
+  the environment it is in now. The API has no list, so this is the shop's own.
+-->
+<listing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+    <argument name="data" xsi:type="array">
+        <item name="js_config" xsi:type="array">
+            <item name="provider" xsi:type="string">pigeonexpress_courier_request_listing.pigeonexpress_courier_request_listing_data_source</item>
+        </item>
+    </argument>
+    <settings>
+        <buttons>
+            <button name="add">
+                <url path="*/*/new"/>
+                <class>primary</class>
+                <label translate="true">New request</label>
+                <aclResource>PigeonExpress_Shipping::courier_request_create</aclResource>
+            </button>
+        </buttons>
+        <spinner>pigeonexpress_courier_request_columns</spinner>
+        <deps>
+            <dep>pigeonexpress_courier_request_listing.pigeonexpress_courier_request_listing_data_source</dep>
+        </deps>
+    </settings>
+    <dataSource name="pigeonexpress_courier_request_listing_data_source" component="Magento_Ui/js/grid/provider">
+        <settings>
+            <storageConfig>
+                <param name="indexField" xsi:type="string">entity_id</param>
+            </storageConfig>
+            <updateUrl path="mui/index/render"/>
+        </settings>
+        <aclResource>PigeonExpress_Shipping::courier_requests</aclResource>
+        <dataProvider class="Magento\Framework\View\Element\UiComponent\DataProvider\DataProvider"
+                      name="pigeonexpress_courier_request_listing_data_source">
+            <settings>
+                <requestFieldName>id</requestFieldName>
+                <primaryFieldName>entity_id</primaryFieldName>
+            </settings>
+        </dataProvider>
+    </dataSource>
+    <listingToolbar name="listing_top">
+        <settings>
+            <sticky>true</sticky>
+        </settings>
+        <bookmark name="bookmarks"/>
+        <columnsControls name="columns_controls"/>
+        <filters name="listing_filters"/>
+        <paging name="listing_paging"/>
+    </listingToolbar>
+    <columns name="pigeonexpress_courier_request_columns">
+        <column name="created_at" class="Magento\Ui\Component\Listing\Columns\Date" component="Magento_Ui/js/grid/columns/date" sortOrder="10">
+            <settings>
+                <filter>dateRange</filter>
+                <dataType>date</dataType>
+                <label translate="true">Requested on</label>
+                <sorting>desc</sorting>
+            </settings>
+        </column>
+        <column name="request_number" sortOrder="20">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Request</label>
+            </settings>
+        </column>
+        <column name="shipments" class="PigeonExpress\Shipping\Ui\Component\Listing\Column\CourierRequestColumns" sortOrder="30">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="kind" xsi:type="string">shipments</item>
+                </item>
+            </argument>
+            <settings>
+                <bodyTmpl>ui/grid/cells/html</bodyTmpl>
+                <sortable>false</sortable>
+                <label translate="true">Shipments in the request</label>
+            </settings>
+        </column>
+        <column name="pickup" class="PigeonExpress\Shipping\Ui\Component\Listing\Column\CourierRequestColumns" sortOrder="40">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="kind" xsi:type="string">pickup</item>
+                </item>
+            </argument>
+            <settings>
+                <bodyTmpl>ui/grid/cells/html</bodyTmpl>
+                <sortable>false</sortable>
+                <label translate="true">Pickup</label>
+            </settings>
+        </column>
+        <column name="address" sortOrder="50">
+            <settings>
+                <label translate="true">Address</label>
+                <sortable>false</sortable>
+            </settings>
+        </column>
+        <column name="status" class="PigeonExpress\Shipping\Ui\Component\Listing\Column\CourierRequestColumns" sortOrder="60">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="kind" xsi:type="string">status</item>
+                </item>
+            </argument>
+            <settings>
+                <bodyTmpl>ui/grid/cells/html</bodyTmpl>
+                <sortable>false</sortable>
+                <label translate="true">Status</label>
+            </settings>
+        </column>
+        <actionsColumn name="actions" class="PigeonExpress\Shipping\Ui\Component\Listing\Column\CourierRequestColumns" sortOrder="70">
+            <argument name="data" xsi:type="array">
+                <item name="config" xsi:type="array">
+                    <item name="kind" xsi:type="string">actions</item>
+                </item>
+            </argument>
+            <settings>
+                <indexField>entity_id</indexField>
+                <label translate="true">Actions</label>
+            </settings>
+        </actionsColumn>
+    </columns>
+</listing>

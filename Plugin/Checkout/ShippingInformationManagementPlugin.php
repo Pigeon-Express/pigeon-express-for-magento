@@ -96,6 +96,11 @@ class ShippingInformationManagementPlugin
         $addrExt->setPigeonexpressLocationName($ext->getPigeonexpressLocationName());
         $addrExt->setPigeonexpressLocationAddress($ext->getPigeonexpressLocationAddress());
         $addrExt->setPigeonexpressInstructions($ext->getPigeonexpressInstructions());
+        // The city and street the customer picked from the carrier's lists, so
+        // the shipment does not have to guess a street by its name (Sofia has
+        // two called ВИТОША). Empty when nothing was picked.
+        $addrExt->setPigeonexpressCityId($this->id($ext->getPigeonexpressCityId()));
+        $addrExt->setPigeonexpressStreetId($this->id($ext->getPigeonexpressStreetId()));
 
         if ($address->getId()) {
             $this->locationPersistor->save(
@@ -104,7 +109,9 @@ class ShippingInformationManagementPlugin
                 $addrExt->getPigeonexpressLocationId(),
                 $addrExt->getPigeonexpressLocationName(),
                 $addrExt->getPigeonexpressLocationAddress(),
-                $addrExt->getPigeonexpressInstructions()
+                $addrExt->getPigeonexpressInstructions(),
+                (string) $addrExt->getPigeonexpressCityId(),
+                (string) $addrExt->getPigeonexpressStreetId()
             );
             $this->logger->info('[PE SaveAddressInfo] Persisted to PE quote table', [
                 'cart_id' => $cartId,
@@ -120,5 +127,17 @@ class ShippingInformationManagementPlugin
         ]);
 
         return $result;
+    }
+
+    /**
+     * An id from the checkout payload: digits only, else empty.
+     *
+     * @param mixed $value
+     */
+    private function id($value): string
+    {
+        $value = trim((string) $value);
+
+        return ctype_digit($value) && (int) $value > 0 ? $value : '';
     }
 }

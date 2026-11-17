@@ -20,6 +20,7 @@ namespace PigeonExpress\Shipping\Model\Service;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Model\AdditionalService;
 use PigeonExpress\Shipping\Model\AdditionalServiceRepository;
+use PigeonExpress\Shipping\Model\Config\Source\ReturnReceiptMode;
 use PigeonExpress\Shipping\Model\Config\Source\ReviewAndTest;
 use Psr\Log\LoggerInterface;
 
@@ -66,11 +67,22 @@ class ServiceCodesBuilder
     private const BOOLEAN_SERVICE_MAP = [
         'pos_payment'          => 'cod_card_fee',
         'special_packaging'    => 'requires_special_packaging',
-        'return_at_my_expense' => 'paper_return_receipt',
         'requires_signature'   => 'ID_verification_and_document_signature',
-        'return_receipt'       => 'return_receipt',
         'return_documents'     => 'service_return_documents',
     ];
+
+    /**
+     * Shipment form keys that replace the settings for one shipment. A key
+     * that is absent leaves the setting in charge.
+     */
+    /** Lowest and highest declared value Pigeon Express accepts, in euro. */
+    public const DECLARED_VALUE_MIN = 1.0;
+    public const DECLARED_VALUE_MAX = 5000.0;
+
+    public const OVERRIDE_DECLARED_VALUE = 'declared_value';
+    public const OVERRIDE_DECLARED_VALUE_AMOUNT = 'declared_value_amount';
+    public const OVERRIDE_REVIEW = 'review';
+    public const OVERRIDE_RETURN_RECEIPT = 'return_receipt';
 
     /**
      * Which services each delivery channel can actually perform.
@@ -153,6 +165,8 @@ class ServiceCodesBuilder
      * @param float $codAmount Zero when the order is not cash on delivery
      * @param bool $includeCod Rating leaves COD out so the fee is charged once
      * @param float $goodsValue Value of the goods, used when insurance is on
+     * @param array<string, mixed> $overrides Shipment form values (OVERRIDE_* keys) that
+     *                                        replace the settings for this shipment
      * @return array<string, mixed>
      */
     public function build(
@@ -161,7 +175,8 @@ class ServiceCodesBuilder
         int $storeId,
         float $codAmount = 0.0,
         bool $includeCod = true,
-        float $goodsValue = 0.0
+        float $goodsValue = 0.0,
+        array $overrides = []
     ): array {
         $codes = [];
 
@@ -171,7 +186,17 @@ class ServiceCodesBuilder
             }
         }
 
-        $reviewCode = $this->resolveReviewCode($deliveryType, $storeId);
+        // Both receipts may be wanted: each is its own service.
+        $receiptMode = isset($overrides[self::OVERRIDE_RETURN_RECEIPT])
+            ? (string) $overrides[self::OVERRIDE_RETURN_RECEIPT]
+            : $this->config->getReturnReceiptMode($storeId);
+        foreach (ReturnReceiptMode::codesFor($receiptMode) as $receiptCode) {
+            $codes[$receiptCode] = true;
+        }
+
+        $reviewCode = array_key_exists(self::OVERRIDE_REVIEW, $overrides)
+            ? $this->reviewCodeFor((string) $overrides[self::OVERRIDE_REVIEW])
+            : $this->resolveReviewCode($deliveryType, $storeId);
         if ($reviewCode !== null) {
             $codes[$reviewCode] = true;
         }
@@ -184,12 +209,19 @@ class ServiceCodesBuilder
         // Insurance covers the contents, so the sum insured is the goods value.
         // Sending a fixed figure unrelated to what is in the parcel would either
         // under insure the customer or overpay the carrier.
-        if ($this->config->isDeclaredValueEnabled($storeId)) {
-            if ($goodsValue > 0.0) {
-                $codes[self::CODE_DECLARED_VALUE] = round($goodsValue, 2);
-            } else {
-                $this->log($storeId, 'insurance is enabled but the goods value is zero', self::CODE_DECLARED_VALUE);
-            }
+        $declared = array_key_exists(self::OVERRIDE_DECLARED_VALUE, $overrides)
+            ? (bool) $overrides[self::OVERRIDE_DECLARED_VALUE]
+            : $this->config->isDeclaredValueEnabled($storeId);
+        // An amount typed on the shipment form, or the goods value when none was.
+        // A typed amount was checked on the form and is sent as typed. The
+        // goods value is brought within the carrier's limits, as WooCommerce
+        // does: a 6,200 EUR order is insured for the maximum rather than
+        // refused, and free goods for the minimum.
+        $typedAmount = $overrides[self::OVERRIDE_DECLARED_VALUE_AMOUNT] ?? null;
+        if ($declared) {
+            $codes[self::CODE_DECLARED_VALUE] = is_numeric($typedAmount) && (float) $typedAmount > 0.0
+                ? round((float) $typedAmount, 2)
+                : self::declaredValueDefault($goodsValue);
         }
 
         if ($includeCod && $codAmount > 0.0) {
@@ -201,6 +233,30 @@ class ServiceCodesBuilder
         $codes = $this->resolveExclusiveGroups($codes, $storeId);
 
         return $this->castValues($codes, $storeId);
+    }
+
+    /**
+     * What the declared value insures when nobody typed an amount: the goods
+     * value within DECLARED_VALUE_MIN..DECLARED_VALUE_MAX.
+     */
+    public static function declaredValueDefault(float $goodsValue): float
+    {
+        return round(min(max($goodsValue, self::DECLARED_VALUE_MIN), self::DECLARED_VALUE_MAX), 2);
+    }
+
+    /**
+     * The service code of an inspection choice as the shipment form names it.
+     */
+    private function reviewCodeFor(string $review): ?string
+    {
+        if ($review === ConfigInterface::REVIEW_VIEW) {
+            return self::CODE_REVIEW;
+        }
+        if ($review === ConfigInterface::REVIEW_VIEW_TEST) {
+            return self::CODE_TEST;
+        }
+
+        return null;
     }
 
     /**

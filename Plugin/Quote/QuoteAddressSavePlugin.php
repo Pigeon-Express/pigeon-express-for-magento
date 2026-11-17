@@ -63,7 +63,9 @@ class QuoteAddressSavePlugin
             $ext->getPigeonexpressLocationId(),
             $ext->getPigeonexpressLocationName(),
             $ext->getPigeonexpressLocationAddress(),
-            $ext->getPigeonexpressInstructions()
+            $ext->getPigeonexpressInstructions(),
+            $ext->getPigeonexpressCityId(),
+            $ext->getPigeonexpressStreetId()
         );
 
         return $result;

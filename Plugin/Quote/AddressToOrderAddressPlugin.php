@@ -69,6 +69,8 @@ class AddressToOrderAddressPlugin
         $orderExt->setPigeonexpressLocationName($quoteExt->getPigeonexpressLocationName());
         $orderExt->setPigeonexpressLocationAddress($quoteExt->getPigeonexpressLocationAddress());
         $orderExt->setPigeonexpressInstructions($quoteExt->getPigeonexpressInstructions());
+        $orderExt->setPigeonexpressCityId($quoteExt->getPigeonexpressCityId());
+        $orderExt->setPigeonexpressStreetId($quoteExt->getPigeonexpressStreetId());
 
         $deliveryPrice = $quoteExt->getPigeonexpressDeliveryPrice();
         if ($deliveryPrice === null) {

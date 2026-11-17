@@ -27,8 +27,6 @@ use Psr\Log\LoggerInterface;
 
 class AddressResolver
 {
-    private const DEMO_BASE_URL = 'https://api-demo.pigeonexpress.com';
-
     /** Street lookup runs while an admin is typing, so keep it snappy. */
     private const TIMEOUT = 20;
 
@@ -65,13 +63,17 @@ class AddressResolver
     /** @var Environment */
     private $environment;
 
+    /** @var ClientFactory */
+    private $clientFactory;
+
     public function __construct(
         ConfigInterface $config,
         LoggerInterface $logger,
         CityCollectionFactory $cityCollectionFactory,
         CacheInterface $cache,
         RegionResolver $regionResolver,
-        Environment $environment
+        Environment $environment,
+        ClientFactory $clientFactory
     ) {
         $this->config = $config;
         $this->logger = $logger;
@@ -79,6 +81,7 @@ class AddressResolver
         $this->cache = $cache;
         $this->regionResolver = $regionResolver;
         $this->environment = $environment;
+        $this->clientFactory = $clientFactory;
     }
 
     // -- Cities --------------------------------------------------------------
@@ -628,21 +631,6 @@ class AddressResolver
      */
     private function client(int $storeId): PigeonExpress
     {
-        $apiKey = $this->config->getApiKey($storeId);
-        if ($apiKey === '') {
-            throw new ApiException(__('Pigeon Express API key is not configured.'));
-        }
-
-        $apiSecret = $this->config->getApiSecret($storeId);
-        if ($apiSecret === '') {
-            $apiSecret = $apiKey;
-        }
-
-        $options = ['timeout' => self::TIMEOUT];
-        if ($this->config->isTestMode($storeId)) {
-            $options['base_url'] = self::DEMO_BASE_URL;
-        }
-
-        return new PigeonExpress($apiKey, $apiSecret, $options);
+        return $this->clientFactory->create(self::TIMEOUT);
     }
 }

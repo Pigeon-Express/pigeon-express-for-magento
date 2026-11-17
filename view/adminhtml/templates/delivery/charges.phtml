@@ -1,0 +1,59 @@
+<?php
+/**
+ * The "Pigeon Express charges" box. Not shown before the first read.
+ *
+ * @var \PigeonExpress\Shipping\Block\Adminhtml\Order\Charges $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$peCharges = $block->getDisplay();
+?>
+<?php if ($peCharges !== null) : ?>
+<div class="pe-charges" data-role="pe-charges">
+    <h4 class="pe-charges-title"><?= $escaper->escapeHtml(__('Pigeon Express charges')) ?></h4>
+    <dl class="pe-summary pe-charges-list">
+        <div class="pe-summary-row">
+            <dt><?= $escaper->escapeHtml(__('Charged')) ?></dt>
+            <dd><strong><?= $peCharges['total'] !== '' ? $escaper->escapeHtml($peCharges['total']) : '-' ?></strong>
+                <?php if ($peCharges['payer'] !== '') : ?>
+                <span class="pe-charges-aside">(<?= $escaper->escapeHtml($peCharges['payer']) ?>)</span>
+                <?php endif; ?>
+            </dd>
+        </div>
+    </dl>
+    <?php if (!empty($peCharges['fees'])) : ?>
+    <details class="pe-charges-breakdown">
+        <summary><?= $escaper->escapeHtml(__('Fee breakdown')) ?></summary>
+        <dl class="pe-summary">
+            <?php foreach ($peCharges['fees'] as $peFee) : ?>
+            <div class="pe-summary-row">
+                <dt><?= $escaper->escapeHtml($peFee['label']) ?></dt>
+                <dd><?= $escaper->escapeHtml($peFee['amount']) ?></dd>
+            </div>
+            <?php endforeach; ?>
+        </dl>
+    </details>
+    <?php endif; ?>
+    <dl class="pe-summary pe-charges-list">
+        <div class="pe-summary-row">
+            <dt><?= $escaper->escapeHtml(__('Cash on delivery')) ?></dt>
+            <dd><?php if ($peCharges['cod_amount'] !== '') : ?>
+                <?= $escaper->escapeHtml($peCharges['cod_amount']) ?>
+                <?php if ($peCharges['cod_status'] !== '') : ?>
+                <span class="pe-charges-aside">(<?= $escaper->escapeHtml($peCharges['cod_status']) ?>)</span>
+                <?php endif; ?>
+            <?php else : ?>
+                <span class="pe-charges-aside"><?= $escaper->escapeHtml(__('No cash on delivery')) ?></span>
+            <?php endif; ?></dd>
+        </div>
+        <?php foreach ($peCharges['related'] as $peLink) : ?>
+        <div class="pe-summary-row">
+            <dt><?= $escaper->escapeHtml($peLink['label']) ?></dt>
+            <dd><code><?= $escaper->escapeHtml($peLink['reference']) ?></code></dd>
+        </div>
+        <?php endforeach; ?>
+    </dl>
+    <?php if ($peCharges['updated'] !== '') : ?>
+    <p class="pe-hint"><?= $escaper->escapeHtml(__('Read from Pigeon Express: %1', $peCharges['updated'])) ?></p>
+    <?php endif; ?>
+</div>
+<?php endif; ?>

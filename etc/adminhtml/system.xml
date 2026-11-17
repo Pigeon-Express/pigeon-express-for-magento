@@ -1,7 +1,8 @@
 <?xml version="1.0"?>
 <!--
  * Pigeon Express Shipping - Admin configuration.
- * Store-view scoped where appropriate; prepared for rate quote, waybills, tracking.
+ * Grouped as the WooCommerce plugin's sections are. Every field keeps its
+ * config_path, so moving a field between groups moves no data.
 -->
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
@@ -16,8 +17,60 @@
                     <comment>Enable or disable the Pigeon Express shipping carrier.</comment>
                 </field>
 
-                <group id="general" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="10" translate="label comment">
-                    <label>General</label>
+                <group id="api_setup" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="10" translate="label comment">
+                    <label>API and environment</label>
+                    <comment>Credentials and connection to Pigeon Express.</comment>
+                    <field id="test_mode" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="10" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/test_mode</config_path>
+                        <label>Test Mode</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>Use the Pigeon Express test environment. Applies to every store. Each environment has its own keys; the keys of the chosen one are used. Offices, lockers and cities are kept separately for test and live, and switching schedules a sync.</comment>
+                    </field>
+                    <field id="api_key_test" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="20" translate="label comment" type="obscure">
+                        <config_path>carriers/pigeonexpress/api_key_test</config_path>
+                        <label>API Key (test environment)</label>
+                        <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                        <comment>Pigeon Express API key (X-API-Key) for the test environment. One account for every store.</comment>
+                        <depends>
+                            <field id="test_mode">1</field>
+                        </depends>
+                    </field>
+                    <field id="api_secret_test" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="21" translate="label comment" type="obscure">
+                        <config_path>carriers/pigeonexpress/api_secret_test</config_path>
+                        <label>API Secret (test environment)</label>
+                        <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                        <comment>Pigeon Express API secret (X-API-Secret). If empty, API Key is used for both.</comment>
+                        <depends>
+                            <field id="test_mode">1</field>
+                        </depends>
+                    </field>
+                    <field id="api_key_live" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="22" translate="label comment" type="obscure">
+                        <config_path>carriers/pigeonexpress/api_key_live</config_path>
+                        <label>API Key (live environment)</label>
+                        <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                        <comment>Pigeon Express API key (X-API-Key) for the live environment. One account for every store.</comment>
+                        <depends>
+                            <field id="test_mode">0</field>
+                        </depends>
+                    </field>
+                    <field id="api_secret_live" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="23" translate="label comment" type="obscure">
+                        <config_path>carriers/pigeonexpress/api_secret_live</config_path>
+                        <label>API Secret (live environment)</label>
+                        <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                        <comment>Pigeon Express API secret (X-API-Secret). If empty, API Key is used for both.</comment>
+                        <depends>
+                            <field id="test_mode">0</field>
+                        </depends>
+                    </field>
+                    <field id="enable_logging" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="30" translate="label" type="select">
+                        <config_path>carriers/pigeonexpress/enable_logging</config_path>
+                        <label>Enable Logging / Error Handling</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>Log API requests and errors for debugging.</comment>
+                    </field>
+                </group>
+                <group id="general" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="15" translate="label comment">
+                    <label>General settings</label>
                     <comment>Carrier name and availability.</comment>
                     <field id="title" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="15" translate="label" type="text">
                         <config_path>carriers/pigeonexpress/title</config_path>
@@ -45,118 +98,206 @@
                         <can_be_empty>1</can_be_empty>
                         <source_model>Magento\Directory\Model\Config\Source\Country</source_model>
                     </field>
-                    <field id="who_pays" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="120" translate="label comment" type="select">
-                        <config_path>carriers/pigeonexpress/who_pays</config_path>
-                        <label>Who Pays the Shipping</label>
-                        <source_model>PigeonExpress\Shipping\Model\Config\Source\WhoPays</source_model>
-                        <comment><![CDATA[Who Pigeon Express invoices for the shipping. This can be changed per shipment on the order screen.<br/>
-                        <strong>It does not change what the customer is charged at checkout.</strong> Pigeon Express quotes the same price either way, so if you choose Receiver the courier collects the delivery charge on top of anything Magento has already billed. Set your shipping rate to zero for the affected delivery types, or leave this on Sender.]]></comment>
+                </group>
+                <group id="shipment_origin" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="20" translate="label comment">
+                    <label>Send From</label>
+                    <comment>Where your parcels enter the Pigeon Express network. The office and locker lists fill in once your API credentials are saved and locations have synced.</comment>
+                    <field id="pickup_type" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="132" translate="label" type="select">
+                        <config_path>carriers/pigeonexpress/pickup_type</config_path>
+                        <label>Pickup Type</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupType</source_model>
+                        <comment>How your parcels reach us: you drop them off at one of our offices, our couriers collect them from your address, or you leave them in a parcel locker. This is also the origin used when calculating rates.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
-                    <field id="locker_max_width" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="122" translate="label comment" type="text">
-                        <config_path>carriers/pigeonexpress/locker_max_width</config_path>
-                        <label>Locker Compartment Width (cm)</label>
-                        <validate>validate-zero-or-greater validate-number</validate>
-                        <comment><![CDATA[Only the locker compartment is checked here; the other limits come from Pigeon Express when a parcel is priced. Leave a side at 0 to skip the check.]]></comment>
+                    <field id="pickup_office_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="133" translate="label" type="select">
+                        <config_path>carriers/pigeonexpress/pickup_office_id</config_path>
+                        <label>Office</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\OfficePicker</frontend_model>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupOffice</source_model>
+                        <comment><![CDATA[Search by office name, town or street. You take your parcels to this office yourself, and it is also the origin used to calculate shipping rates.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">office</field>
                         </depends>
                     </field>
-                    <field id="locker_max_height" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="123" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/locker_max_height</config_path>
-                        <label>Locker Compartment Height (cm)</label>
-                        <validate>validate-zero-or-greater validate-number</validate>
+                    <field id="pickup_office_hours" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="133.5" translate="label">
+                        <label>Working hours</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\OfficeHours</frontend_model>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">office</field>
                         </depends>
                     </field>
-                    <field id="locker_max_depth" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="124" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/locker_max_depth</config_path>
-                        <label>Locker Compartment Depth (cm)</label>
-                        <validate>validate-zero-or-greater validate-number</validate>
+                    <field id="pickup_saved_address_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="133.6" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/pickup_saved_address_id</config_path>
+                        <label>Saved address</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\SavedAddress</source_model>
+                        <comment><![CDATA[The addresses saved in your Pigeon Express account. The courier collects from the one you choose. Add or change them in your account; the list here is refreshed with the location sync.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">saved_address</field>
                         </depends>
                     </field>
-                    <field id="override_address_fields" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="126" translate="label comment" type="select">
-                        <config_path>carriers/pigeonexpress/override_address_fields</config_path>
-                        <label>Override Address Fields</label>
-                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                        <comment><![CDATA[With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's lists instead of typing them, so the address always matches what we hold. With No, Magento's standard address fields are used.]]></comment>
+                    <field id="pickup_locker_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="133.7" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/pickup_locker_id</config_path>
+                        <label>Parcel locker for hand-in</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\LockerPicker</frontend_model>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupLocker</source_model>
+                        <comment><![CDATA[The Pigeon Express parcel locker you leave shipments in. The list is populated from the most recent sync.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">locker</field>
                         </depends>
                     </field>
-                    <field id="checkout_logo" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="140" translate="label comment" type="select">
-                        <config_path>carriers/pigeonexpress/checkout_logo</config_path>
-                        <label>Checkout Logo</label>
-                        <source_model>PigeonExpress\Shipping\Model\Config\Source\CheckoutLogo</source_model>
-                        <comment>Shown beside the Pigeon Express methods at checkout. Two of the versions are drawn in white for dark backgrounds and will be invisible on a light checkout, which is why they say so.</comment>
+                    <field id="pickup_fallback_office_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="133.8" translate="label" type="select">
+                        <config_path>carriers/pigeonexpress/pickup_fallback_office_id</config_path>
+                        <label>Office when the shipment does not fit a parcel locker</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\FallbackOfficePicker</frontend_model>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupOffice</source_model>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">locker</field>
                         </depends>
                     </field>
-                    <field id="location_search_limit" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="130" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/location_search_limit</config_path>
-                        <label>Location Autocomplete Results</label>
-                        <validate>validate-zero-or-greater validate-number</validate>
-                        <comment>Max number of Office/APS results in checkout autocomplete (e.g. 10–20).</comment>
+                    <field id="pickup_address_city_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="134" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_city_label</config_path>
+                        <label>City</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\PickupAddressPicker</frontend_model>
+                        <comment>Start typing and choose the city from the Pigeon Express list. The postal code is filled in from it.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="label_contents" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="135" translate="label comment" type="select">
-                        <config_path>carriers/pigeonexpress/label_contents</config_path>
-                        <label>Label Contents</label>
-                        <source_model>PigeonExpress\Shipping\Model\Config\Source\LabelContents</source_model>
-                        <comment>What the waybill says the parcel holds. The carrier prints this, so everyone who handles the parcel can read it. A fixed description replaces every product name with one wording and drops the quantities, so the label reads "Contents: Clothing" rather than "Contents: 5 pcs. - Push It Messenger Bag". The insured sum and any cash on delivery travel separately and are unaffected.</comment>
+                    <field id="pickup_address_postal_code" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="135" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_postal_code</config_path>
+                        <label>Postal Code</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ReadonlyField</frontend_model>
+                        <comment>Filled in from the city. Only open for typing when Pigeon Express holds no postal code for it.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="label_contents_text" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label comment" type="text">
-                        <config_path>carriers/pigeonexpress/label_contents_text</config_path>
-                        <label>Fixed Description</label>
-                        <comment>Printed in place of every product name. Something the courier can act on but a bystander learns nothing from, for example "Стоки" or "Дрехи". Left empty, the label reads "Стоки".</comment>
+                    <field id="pickup_address_street_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_street_label</config_path>
+                        <label>Street</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\PickupAddressPicker</frontend_model>
+                        <comment>Choose the city first, then start typing and choose the street. If it is not on the list, type it; it is sent as written.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="label_contents">fixed_text</field>
+                            <field id="pickup_type">address</field>
+                        </depends>
+                    </field>
+                    <field id="pickup_address_street_number" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="137" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_street_number</config_path>
+                        <label>Street Number</label>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">address</field>
+                        </depends>
+                    </field>
+                    <field id="pickup_address_city_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="138" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_city_id</config_path>
+                        <label>City ID</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\HiddenField</frontend_model>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">address</field>
+                        </depends>
+                    </field>
+                    <field id="pickup_address_street_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="139" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/pickup_address_street_id</config_path>
+                        <label>Street ID</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\HiddenField</frontend_model>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="pickup_type">address</field>
                         </depends>
                     </field>
                 </group>
-                <group id="api_setup" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="20" translate="label comment">
-                    <label>API Setup</label>
-                    <comment>Credentials and connection to Pigeon Express.</comment>
-                    <field id="api_key" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="20" translate="label comment" type="obscure">
-                        <config_path>carriers/pigeonexpress/api_key</config_path>
-                        <label>API Key</label>
-                        <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
-                        <comment>Pigeon Express API key (X-API-Key). One account for every store.</comment>
+                <group id="courier_request" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="25" translate="label comment">
+                    <label>Courier request</label>
+                    <comment><![CDATA[What a courier request proposes. You request a courier from the orders grid ("Request a Pigeon Express courier"), from the order ("Request a courier") or from Sales &gt; Pigeon Express courier requests, and can change everything there. Shown only when the pickup type is "Address" or a saved address.]]></comment>
+                    <depends>
+                        <field id="carriers/pigeonexpress/shipment_origin/pickup_type" separator=",">address,saved_address</field>
+                    </depends>
+                    <field id="courier_time_from" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="10" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/courier_time_from</config_path>
+                        <label>Pickup time from</label>
+                        <backend_model>PigeonExpress\Shipping\Model\Config\Backend\Clock</backend_model>
+                        <comment><![CDATA[Start of the time the courier may come, as HH:MM. Default 10:00.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
                     </field>
-                    <field id="api_secret" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="21" translate="label" type="obscure">
-                        <config_path>carriers/pigeonexpress/api_secret</config_path>
-                        <label>API Secret</label>
-                        <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
-                        <comment>Pigeon Express API secret (X-API-Secret). If empty, API Key is used for both.</comment>
+                    <field id="courier_time_to" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="20" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/courier_time_to</config_path>
+                        <label>Pickup time to</label>
+                        <backend_model>PigeonExpress\Shipping\Model\Config\Backend\Clock</backend_model>
+                        <comment><![CDATA[End of the time the courier may come, as HH:MM. It must be within the working hours of Pigeon Express. Default 17:00.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
                     </field>
-                    <field id="test_mode" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="25" translate="label comment" type="select">
-                        <config_path>carriers/pigeonexpress/test_mode</config_path>
-                        <label>Test Mode</label>
-                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                        <comment>Use the Pigeon Express test environment. Applies to every store. Offices, lockers and cities are kept separately for test and live, and switching schedules a sync.</comment>
+                    <field id="courier_same_day_until" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="30" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/courier_same_day_until</config_path>
+                        <label>Same-day requests until</label>
+                        <backend_model>PigeonExpress\Shipping\Model\Config\Backend\Clock</backend_model>
+                        <comment><![CDATA[Until this time the form proposes today, after it the next working day, and it shows how long today stays open. Pigeon Express still decides whether a date can be served. Default 15:00.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
                     </field>
-                    <field id="enable_logging" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="30" translate="label" type="select">
-                        <config_path>carriers/pigeonexpress/enable_logging</config_path>
-                        <label>Enable Logging / Error Handling</label>
-                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                        <comment>Log API requests and errors for debugging.</comment>
+                    <field id="courier_package_type" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="40" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/courier_package_type</config_path>
+                        <label>Type of shipments</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\CourierPackageType</source_model>
+                        <comment><![CDATA[What the courier collects, so Pigeon Express sends a suitable vehicle.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="courier_instructions" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="50" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/courier_instructions</config_path>
+                        <label>Instructions for the courier</label>
+                        <comment><![CDATA[Optional. Proposed in every courier request, for example where to ring or park.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="courier_contact_name" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="60" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/courier_contact_name</config_path>
+                        <label>Contact person</label>
+                        <comment><![CDATA[Sent as the contact person of a courier request. Left empty, Pigeon Express uses the contact details of your account.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="courier_contact_phone" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="70" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/courier_contact_phone</config_path>
+                        <label>Contact phone</label>
+                        <validate>validate-phoneLax</validate>
+                        <comment><![CDATA[Sent with courier requests, so the courier can call you. Left empty, Pigeon Express uses the contact details of your account.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="courier_contact_email" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="80" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/courier_contact_email</config_path>
+                        <label>Contact email</label>
+                        <validate>validate-email</validate>
+                        <comment><![CDATA[Sent with courier requests. Left empty, Pigeon Express uses the contact details of your account.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
                     </field>
                 </group>
-                <group id="additional_services" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="40" translate="label comment">
-                    <label>Additional Services</label>
-                    <comment>Services applied to every shipment. Prices come from Pigeon Express. Only services in your account are listed, and one the chosen delivery method cannot perform is skipped.</comment>
+                <group id="checkout" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="30" translate="label comment">
+                    <label>Checkout and cash on delivery</label>
+                    <comment>What the customer sees when ordering, which orders are sent as cash on delivery, and who pays the courier.</comment>
                     <field id="cod_payment_methods" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="60" translate="label" type="multiselect">
                         <config_path>carriers/pigeonexpress/cod_payment_methods</config_path>
                         <label>COD Payment Methods</label>
@@ -171,14 +312,46 @@
                         <comment>Show the cash on delivery fee next to each COD payment method at checkout, for example "Cash on delivery (+ 0.40 €)". Asks the API for the fee before the customer chooses, which adds one rate request per shipping recalculation.</comment>
                         <depends><field id="carriers/pigeonexpress/active">1</field></depends>
                     </field>
-                    <field id="service_return_at_my_expense" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="64" translate="label" type="select">
-                        <config_path>carriers/pigeonexpress/service_return_at_my_expense</config_path>
-                        <label>Paper Return Receipt</label>
-                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                        <comment>Request for a paper return receipt (at sender's expense).</comment>
-                        <depends><field id="carriers/pigeonexpress/active">1</field></depends>
-                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ServiceField</frontend_model>
+                    <field id="who_pays" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="120" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/who_pays</config_path>
+                        <label>Who pays the courier for cash on delivery orders</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\WhoPays</source_model>
+                        <comment><![CDATA[Pre-selected on orders paid by cash on delivery. Orders paid online, and orders with free delivery, always start on Sender: the customer has already paid the shop for delivery. You can still change it on each order.<br/><strong>It does not change what the customer is charged at checkout.</strong> If you choose Receiver, the courier collects the delivery charge on top of anything Magento has already billed, so set your shipping rate to zero for the affected delivery types, or leave this on Sender.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
                     </field>
+                    <field id="override_address_fields" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="126" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/override_address_fields</config_path>
+                        <label>Override Address Fields</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[With Yes, a customer choosing address delivery picks their city and street from Pigeon Express's lists instead of typing them, so the address always matches what we hold. With No, Magento's standard address fields are used.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="location_search_limit" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="130" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/location_search_limit</config_path>
+                        <label>Location Autocomplete Results</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <comment>Max number of Office/APS results in checkout autocomplete (e.g. 10–20).</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="checkout_logo" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="140" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/checkout_logo</config_path>
+                        <label>Checkout Logo</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\CheckoutLogo</source_model>
+                        <comment>Shown beside the Pigeon Express methods at checkout. Two of the versions are drawn in white for dark backgrounds and will be invisible on a light checkout, which is why they say so.</comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                </group>
+                <group id="additional_services" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="40" translate="label comment">
+                    <label>Additional Services</label>
+                    <comment>Services applied to every shipment. Prices come from Pigeon Express. Only services in your account are listed, and one the chosen delivery method cannot perform is skipped.</comment>
                     <field id="service_requires_signature" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="65" translate="label" type="select">
                         <config_path>carriers/pigeonexpress/service_requires_signature</config_path>
                         <label>ID Verification and Document Signature</label>
@@ -203,14 +376,6 @@
                         <depends><field id="carriers/pigeonexpress/active">1</field></depends>
                         <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ServiceField</frontend_model>
                     </field>
-                    <field id="service_return_receipt" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="68" translate="label" type="select">
-                        <config_path>carriers/pigeonexpress/service_return_receipt</config_path>
-                        <label>Digital Return Receipt</label>
-                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
-                        <comment>Request for a return receipt in electronic format.</comment>
-                        <depends><field id="carriers/pigeonexpress/active">1</field></depends>
-                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ServiceField</frontend_model>
-                    </field>
                     <field id="service_return_documents" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="68" translate="label" type="select">
                         <config_path>carriers/pigeonexpress/service_return_documents</config_path>
                         <label>Service Return Documents</label>
@@ -218,6 +383,16 @@
                         <comment>Return of original documents from the recipient to the sender after signing.</comment>
                         <depends><field id="carriers/pigeonexpress/active">1</field></depends>
                         <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ServiceField</frontend_model>
+                    </field>
+                    <field id="return_receipt_mode" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="69" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/return_receipt_mode</config_path>
+                        <label>Return receipt</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ReturnReceiptField</frontend_model>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\ReturnReceiptMode</source_model>
+                        <comment><![CDATA[Electronic: the recipient's signature comes back as a file. Paper: the signed receipt comes back to the shop. Each is charged separately. You can still change it on each order.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
                     </field>
                 </group>
                 <group id="address_delivery" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="50" translate="label comment">
@@ -314,6 +489,16 @@
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
+                    <field id="address_fallback_price" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="109" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/address_fallback_price</config_path>
+                        <label>Price when the rate cannot be calculated</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <comment><![CDATA[Charged when Pigeon Express cannot price the delivery. Leave empty to hide this method when Pigeon Express cannot price it. A parcel Pigeon Express cannot carry is hidden either way.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="address_pricing_mode">dynamic</field>
+                        </depends>
+                    </field>
                 </group>
                 <group id="office_delivery" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="60" translate="label comment">
                     <label>Office Delivery</label>
@@ -406,6 +591,25 @@
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
+                    <field id="office_fallback_price" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="119" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/office_fallback_price</config_path>
+                        <label>Price when the rate cannot be calculated</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <comment><![CDATA[Charged when Pigeon Express cannot price the delivery. Leave empty to hide this method when Pigeon Express cannot price it. A parcel Pigeon Express cannot carry is hidden either way.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="office_pricing_mode">dynamic</field>
+                        </depends>
+                    </field>
+                    <field id="office_show_working_hours" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="119.5" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/office_show_working_hours</config_path>
+                        <label>Show working hours</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[Shows the working hours of the selected office in the checkout.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
                 </group>
                 <group id="aps_delivery" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="70" translate="label comment">
                     <label>Parcel Locker (APS) Delivery</label>
@@ -489,90 +693,154 @@
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
-                </group>
-                <group id="shipment_origin" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="30" translate="label comment">
-                    <label>Pickup Location</label>
-                    <comment>Where your parcels enter the Pigeon Express network. The office list fills in once your API credentials are saved and locations have synced.</comment>
-                    <field id="pickup_type" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="132" translate="label" type="select">
-                        <config_path>carriers/pigeonexpress/pickup_type</config_path>
-                        <label>Pickup Type</label>
-                        <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupType</source_model>
-                        <comment>How your parcels reach us: you drop them off at one of our offices, or our couriers collect them from your address. This is also the origin used when calculating rates.</comment>
+                    <field id="aps_fallback_price" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="128" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/aps_fallback_price</config_path>
+                        <label>Price when the rate cannot be calculated</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <comment><![CDATA[Charged when Pigeon Express cannot price the delivery. Leave empty to hide this method when Pigeon Express cannot price it. A parcel Pigeon Express cannot carry is hidden either way.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="aps_pricing_mode">dynamic</field>
+                        </depends>
+                    </field>
+                    <field id="aps_show_working_hours" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="128.5" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/aps_show_working_hours</config_path>
+                        <label>Show working hours</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[Shows the working hours of the selected parcel locker in the checkout.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
-                    <field id="pickup_office_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="133" translate="label" type="select">
-                        <config_path>carriers/pigeonexpress/pickup_office_id</config_path>
-                        <label>Office</label>
+                </group>
+                <group id="returns" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="75" translate="label comment">
+                    <label>Returns and undelivered shipments</label>
+                    <comment>What happens to shipments the recipient refuses or does not collect.</comment>
+                    <field id="return_at_my_expense" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="10" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/return_at_my_expense</config_path>
+                        <label>Return at my expense</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[Pay for the return leg yourself when a shipment cannot be delivered. Leave off to have Pigeon Express charge the return to the recipient.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="return_to" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="20" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/return_to</config_path>
+                        <label>Where undelivered shipments return</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\ReturnTo</source_model>
+                        <comment><![CDATA[Leave on your Pigeon Express account to keep what it says. A chosen office with no office picked also follows the account.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="return_office_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="30" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/return_office_id</config_path>
+                        <label>Return office</label>
                         <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\OfficePicker</frontend_model>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupOffice</source_model>
-                        <comment><![CDATA[Search by office name, town or street. You take your parcels to this office yourself, and it is also the origin used to calculate shipping rates.]]></comment>
+                        <comment><![CDATA[A Pigeon Express office, not a parcel locker. The list is populated from the most recent sync.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="pickup_type">office</field>
+                            <field id="return_to">office</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_city_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="134" translate="label comment" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_city_label</config_path>
-                        <label>City</label>
-                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\PickupAddressPicker</frontend_model>
-                        <comment>Start typing and choose the city from the Pigeon Express list. The postal code is filled in from it.</comment>
+                    <field id="reverse_shipments" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="40" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/reverse_shipments</config_path>
+                        <label>Return shipments</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[The shop can create a return waybill from the order, for the customer to send the goods back. To enable them, contact your Pigeon Express representative.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_postal_code" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="135" translate="label comment" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_postal_code</config_path>
-                        <label>Postal Code</label>
-                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ReadonlyField</frontend_model>
-                        <comment>Filled in from the city. Only open for typing when Pigeon Express holds no postal code for it.</comment>
+                    <field id="reverse_notice" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="41">
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ReverseNotice</frontend_model>
+                    </field>
+                </group>
+                <group id="labels" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="78" translate="label comment">
+                    <label>Waybills</label>
+                    <comment>What the waybill says and when shipments are created.</comment>
+                    <field id="label_contents" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="135" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/label_contents</config_path>
+                        <label>Label Contents</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\LabelContents</source_model>
+                        <comment>What the waybill says the parcel holds. The carrier prints this, so everyone who handles the parcel can read it. A fixed description replaces every product name with one wording and drops the quantities, so the label reads "Contents: Clothing" rather than "Contents: 5 pcs. - Push It Messenger Bag". The insured sum and any cash on delivery travel separately and are unaffected.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_street_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label comment" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_street_label</config_path>
-                        <label>Street</label>
-                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\PickupAddressPicker</frontend_model>
-                        <comment>Choose the city first, then start typing and choose the street. If it is not on the list, type it; it is sent as written.</comment>
+                    <field id="label_contents_text" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/label_contents_text</config_path>
+                        <label>Fixed Description</label>
+                        <comment>Printed in place of every product name. Something the courier can act on but a bystander learns nothing from, for example "Стоки" or "Дрехи". Left empty, the label reads "Стоки".</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="pickup_type">address</field>
+                            <field id="label_contents">fixed_text</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_street_number" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="137" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_street_number</config_path>
-                        <label>Street Number</label>
+                    <field id="hide_content_on_label" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="137" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/hide_content_on_label</config_path>
+                        <label>Hide contents on the label</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment>The description is not printed on the label, but it is still sent to Pigeon Express.</comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_city_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="138" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_city_id</config_path>
-                        <label>City ID</label>
-                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\HiddenField</frontend_model>
+                    <field id="auto_create" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="140" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/auto_create</config_path>
+                        <label>Create shipments automatically</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[Create the shipment automatically when the order becomes Processing, or as soon as it is placed when it is paid by cash on delivery. If data is missing, the order gets a comment and you create the shipment by hand. In Live mode these are real, billed shipments.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="pickup_type">address</field>
                         </depends>
                     </field>
-                    <field id="pickup_address_street_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="139" translate="label" type="text">
-                        <config_path>carriers/pigeonexpress/pickup_address_street_id</config_path>
-                        <label>Street ID</label>
-                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\HiddenField</frontend_model>
+                </group>
+                <group id="status_tracking" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="79" translate="label comment">
+                    <label>Shipment status and tracking</label>
+                    <comment>Follows where each shipment is and, if you want, updates the order when it is delivered or comes back.</comment>
+                    <field id="status_sync" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="10" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/status_sync</config_path>
+                        <label>Track shipment status</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[Twice a day, checks where each shipment is and shows it on the order. On its own it never changes the order.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
-                            <field id="pickup_type">address</field>
+                        </depends>
+                    </field>
+                    <field id="order_on_delivery" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="20" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/order_on_delivery</config_path>
+                        <label>When the shipment is delivered</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\OrderOnDelivery</source_model>
+                        <comment><![CDATA[Complete the order: the order becomes Complete. For cash on delivery orders the invoice is created automatically.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="order_on_return" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="30" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/order_on_return</config_path>
+                        <label>When the shipment comes back</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\OrderOnReturn</source_model>
+                        <comment><![CDATA[For example when the customer refuses it. An order that already has an invoice cannot be cancelled or held; it only gets a note.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="create_magento_shipment" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="40" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/create_magento_shipment</config_path>
+                        <label>Create the Magento shipment</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[Marks the order as shipped with the tracking number when the waybill is created. The customer gets an email with the number. If you cancel the Pigeon Express shipment, the number is removed again.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
                 </group>
                 <group id="product_dimensions" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="80" translate="label comment">
-                    <label>Product Weight and Dimensions</label>
-                    <comment>Which product attributes hold weight and size, and what to fall back on when a product has none.</comment>
+                    <label>Parcel weight and dimensions</label>
+                    <comment>Which product attributes hold weight and size, what to fall back on when a product has none, and how packages are marked.</comment>
                     <field id="weight_attribute" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="139" translate="label" type="select">
                         <config_path>carriers/pigeonexpress/weight_attribute</config_path>
                         <label>Weight Attribute</label>
@@ -650,9 +918,43 @@
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
+                    <field id="locker_max_width" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="122" translate="label comment" type="text">
+                        <config_path>carriers/pigeonexpress/locker_max_width</config_path>
+                        <label>Locker Compartment Width (cm)</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <comment><![CDATA[Only the locker compartment is checked here; the other limits come from Pigeon Express when a parcel is priced. Leave a side at 0 to skip the check.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="locker_max_height" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="123" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/locker_max_height</config_path>
+                        <label>Locker Compartment Height (cm)</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="locker_max_depth" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="124" translate="label" type="text">
+                        <config_path>carriers/pigeonexpress/locker_max_depth</config_path>
+                        <label>Locker Compartment Depth (cm)</label>
+                        <validate>validate-zero-or-greater validate-number</validate>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="fragile_mode" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="160" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/fragile_mode</config_path>
+                        <label>Fragile packages</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\FragileMode</source_model>
+                        <comment><![CDATA[Marks packages as fragile so the courier handles them with care. This is not insurance: for that, use declared value. With "Chosen for each package on the order" you tick it per package when creating the shipment.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
                 </group>
                 <group id="location_sync" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="90" translate="label comment">
-                    <label>Location Sync</label>
+                    <label>Sync and diagnostics</label>
                     <comment>Offices, lockers, cities and the service catalogue are refreshed nightly.</comment>
                     <field id="sync_button" sortOrder="150" type="button"
                            showInDefault="1" showInStore="0" showInWebsite="0"

@@ -58,6 +58,11 @@ define(['jquery', 'mage/translate'], function ($, $t) {
             $location.closest('.admin__field').find('.admin__field-label span')
                 .text(type === 'aps' ? $t(config.apsLabel || 'Parcel locker')
                     : $t(config.officeLabel || 'Pigeon Express office'));
+
+            // Inspection and return receipts need somebody to hand the parcel
+            // over. Hidden by the CSS for a locker, and disabled so that a
+            // choice made for a door is not sent with a locker waybill.
+            $form.find('[data-pe-handover] select').prop('disabled', type === 'aps');
         }
 
         // A message describes the value that was checked, so the moment somebody
@@ -95,6 +100,105 @@ define(['jquery', 'mage/translate'], function ($, $t) {
                     $cod.val(amount);
                 }
             });
+        });
+
+        // -- Package rows ---------------------------------------------------
+
+        var $packages = $form.find('[data-role="pe-packages"]'),
+            $rows = $packages.find('[data-role="pe-package-rows"]'),
+            $template = $packages.find('[data-role="pe-package-template"]'),
+            $packageMessage = $packages.find('[data-role="pe-package-message"]'),
+            $handIn = $form.find('[data-role="pe-handin-text"]'),
+            handInTimer,
+            handInRequest;
+
+        /**
+         * Give the rows consecutive indexes, so the server reads them in the
+         * order they are shown, and keep the last row from being removed: a
+         * shipment without a package is not one.
+         */
+        function renumberPackages() {
+            var $all = $rows.find('[data-role="pe-package-row"]');
+
+            $all.each(function (index) {
+                $(this).find('input[name]').each(function () {
+                    this.name = this.name.replace(/pe\[packages\]\[[^\]]*\]/, 'pe[packages][' + index + ']');
+                });
+            });
+
+            $all.find('[data-role="pe-package-remove"]').prop('disabled', $all.length < 2);
+        }
+
+        /**
+         * Ask again where the shipment is handed in. Debounced, and only the
+         * last answer counts, so typing a weight does not flicker the line.
+         */
+        function refreshHandIn() {
+            if (!config.handInUrl || !$handIn.length) {
+                return;
+            }
+
+            clearTimeout(handInTimer);
+            $handIn.addClass('_stale');
+
+            handInTimer = setTimeout(function () {
+                if (handInRequest) {
+                    handInRequest.abort();
+                }
+
+                handInRequest = $.post(config.handInUrl, $form.serialize())
+                    .done(function (response) {
+                        if (response && typeof response.hand_in === 'string' && response.hand_in !== '') {
+                            $handIn.text(response.hand_in);
+                            $handIn.removeClass('_stale');
+                        }
+                    });
+            }, 500);
+        }
+
+        function packagesChanged() {
+            $packages.removeClass('_error');
+            $packageMessage.prop('hidden', true).text('');
+            refreshHandIn();
+        }
+
+        $packages.on('click', '[data-role="pe-package-add"]', function () {
+            var html = $template.html(),
+                $row;
+
+            if (!html) {
+                return;
+            }
+
+            $row = $($.parseHTML($.trim(html.replace(/__INDEX__/g, String($rows.children().length)))));
+            $rows.append($row);
+            renumberPackages();
+            $row.find('.pe-package-weight').trigger('focus');
+            packagesChanged();
+        });
+
+        $packages.on('click', '[data-role="pe-package-remove"]', function () {
+            if ($rows.find('[data-role="pe-package-row"]').length < 2) {
+                return;
+            }
+
+            $(this).closest('[data-role="pe-package-row"]').remove();
+            renumberPackages();
+            packagesChanged();
+        });
+
+        $packages.on('input change', '[data-role="pe-package-input"], .pe-package-fragile', packagesChanged);
+
+        // Declared value and return receipts send a shipment to the office
+        // too, and a locker cannot take them, so they count as well.
+        $form.on('change', '#pe_declared_value, #pe_review, #pe_return_receipt, #pe_delivery_type', refreshHandIn);
+
+        renumberPackages();
+
+        // -- Declared value ---------------------------------------------------
+
+        $form.find('[data-role="pe-declared-value"]').on('change', function () {
+            $form.find('[data-role="pe-declared-amount"]').prop('hidden', !this.checked);
         });
 
         if ($type.length) {
@@ -344,6 +448,10 @@ define(['jquery', 'mage/translate'], function ($, $t) {
                     $newFeeReceiver.html(response.receiver_formatted || response.formatted);
                     $newFeeRow.prop('hidden', false);
                     $message.text('');
+
+                    if (typeof response.hand_in === 'string' && response.hand_in !== '' && $handIn.length) {
+                        $handIn.text(response.hand_in).removeClass('_stale');
+                    }
                 })
                 .fail(function () {
                     $message.addClass('_error').text($t(config.unreachable || 'Could not reach Pigeon Express.'));
@@ -375,11 +483,39 @@ define(['jquery', 'mage/translate'], function ($, $t) {
                 }
             });
 
+            // Every package needs a weight; the size falls back to the default box.
+            $rows.find('.pe-package-weight').each(function () {
+                var value = parseFloat($.trim($(this).val()).replace(',', '.'));
+
+                if (!(value > 0)) {
+                    missing = true;
+                    $(this).addClass('_error');
+                    $packages.addClass('_error');
+                    $packageMessage.prop('hidden', false)
+                        .text($t(config.weightMessage || 'Please enter a weight greater than zero.'));
+                } else {
+                    $(this).removeClass('_error');
+                }
+            });
+
             if (missing) {
                 event.preventDefault();
                 $form.find('.admin__field._error').first()
                     .find('input[type="text"]').first().trigger('focus');
+
+                return;
             }
+
+            // One create per click: a second submit while the first is on its
+            // way could create a second waybill. The server locks the order
+            // as well; this only spares the admin the error.
+            if ($form.data('peSubmitting')) {
+                event.preventDefault();
+
+                return;
+            }
+            $form.data('peSubmitting', true);
+            $form.find('button[type="submit"]').prop('disabled', true);
         });
     };
 });

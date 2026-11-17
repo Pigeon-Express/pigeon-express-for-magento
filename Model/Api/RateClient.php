@@ -13,9 +13,9 @@ declare(strict_types=1);
 namespace PigeonExpress\Shipping\Model\Api;
 
 use Magento\Framework\App\CacheInterface;
+use PigeonExpress\Exceptions\ConflictException as SdkConflictException;
 use PigeonExpress\Exceptions\PigeonExpressException as SdkException;
 use PigeonExpress\Exceptions\ValidationException as SdkValidationException;
-use PigeonExpress\PigeonExpress;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\RateClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
@@ -24,8 +24,6 @@ use Psr\Log\LoggerInterface;
 
 class RateClient implements RateClientInterface
 {
-    private const DEMO_BASE_URL = 'https://api-demo.pigeonexpress.com';
-
     /** @var int */
     private const MAX_ATTEMPTS = 3;
 
@@ -61,16 +59,21 @@ class RateClient implements RateClientInterface
     /** @var CarrierLimits */
     private $limits;
 
+    /** @var ClientFactory */
+    private $clientFactory;
+
     public function __construct(
         ConfigInterface $config,
         LoggerInterface $logger,
         CacheInterface $cache,
-        CarrierLimits $limits
+        CarrierLimits $limits,
+        ClientFactory $clientFactory
     ) {
         $this->config = $config;
         $this->logger = $logger;
         $this->cache = $cache;
         $this->limits = $limits;
+        $this->clientFactory = $clientFactory;
     }
 
     public function calculate(array $payload, int $storeId): array
@@ -161,14 +164,8 @@ class RateClient implements RateClientInterface
      */
     private function callApi(array $payload, int $storeId): array
     {
-        $apiKey = $this->config->getApiKey($storeId);
-        if ($apiKey === '') {
-            throw new ApiException(__('Pigeon Express API key is not configured.'));
-        }
-        $apiSecret = $this->config->getApiSecret($storeId);
-        if ($apiSecret === '') {
-            $apiSecret = $apiKey;
-        }
+        // Throws at once when no key is configured: nothing to retry then.
+        $client = $this->clientFactory->create();
 
         $lastException = null;
         if ($this->config->isLoggingEnabled($storeId)) {
@@ -179,13 +176,6 @@ class RateClient implements RateClientInterface
         }
         for ($attempt = 1; $attempt <= self::MAX_ATTEMPTS; $attempt++) {
             try {
-                $options = ['timeout' => 30];
-                if ($this->config->isTestMode($storeId)) {
-                    $options['base_url'] = self::DEMO_BASE_URL;
-                }
-
-                $client = new PigeonExpress($apiKey, $apiSecret, $options);
-
                 if ($this->config->isLoggingEnabled($storeId)) {
                     $this->logger->info('[PigeonExpress] API request: shipments()->calculate', [
                         'attempt' => $attempt,
@@ -234,6 +224,15 @@ class RateClient implements RateClientInterface
                         'errors' => $e->getErrors(),
                     ]);
                 }
+            } catch (SdkConflictException $e) {
+                // 409: the very same quote is still being worked out. A refusal
+                // for this request: repeating it at once only meets the same
+                // answer, and checkout falls back as for any failed quote.
+                $lastException = $e;
+                if ($this->config->isLoggingEnabled($storeId)) {
+                    $this->logger->warning('[PigeonExpress] Rate API answered 409, not repeated: ' . $e->getMessage());
+                }
+                break;
             } catch (SdkException $e) {
                 $lastException = $e;
                 if ($this->config->isLoggingEnabled($storeId)) {

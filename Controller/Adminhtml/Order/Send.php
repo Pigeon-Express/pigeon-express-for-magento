@@ -15,9 +15,9 @@ use Magento\Framework\App\Action\HttpPostActionInterface;
 use Magento\Framework\App\Request\DataPersistorInterface;
 use Magento\Framework\Controller\Result\Redirect;
 use Magento\Sales\Api\OrderRepositoryInterface;
-use PigeonExpress\Shipping\Api\FreeShippingInterface;
 use PigeonExpress\Shipping\Api\ShipmentSenderInterface;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
+use PigeonExpress\Shipping\Model\Shipment\WhoPaysFacts;
 use Psr\Log\LoggerInterface;
 
 class Send extends Action implements HttpPostActionInterface
@@ -42,8 +42,8 @@ class Send extends Action implements HttpPostActionInterface
     /** @var LoggerInterface */
     private $logger;
 
-    /** @var FreeShippingInterface */
-    private $freeShipping;
+    /** @var WhoPaysFacts */
+    private $whoPaysFacts;
 
     public function __construct(
         Context $context,
@@ -52,14 +52,14 @@ class Send extends Action implements HttpPostActionInterface
         AddressForm $addressForm,
         DataPersistorInterface $dataPersistor,
         LoggerInterface $logger,
-        FreeShippingInterface $freeShipping
+        WhoPaysFacts $whoPaysFacts
     ) {
         $this->orderRepository = $orderRepository;
         $this->shipmentSender = $shipmentSender;
         $this->addressForm = $addressForm;
         $this->dataPersistor = $dataPersistor;
         $this->logger = $logger;
-        $this->freeShipping = $freeShipping;
+        $this->whoPaysFacts = $whoPaysFacts;
         parent::__construct($context);
     }
 
@@ -99,7 +99,8 @@ class Send extends Action implements HttpPostActionInterface
         $checked = $this->addressForm->validate(
             $fields,
             (int) $order->getStoreId(),
-            $this->freeShipping->wasAppliedToOrder($order) || !$this->shipmentSender->isCashOnDelivery($order)
+            $this->whoPaysFacts->nothingToCollect($order),
+            $this->whoPaysFacts->forOrder($order)['fixed']
         );
 
         if ($this->addressForm->hasErrors($checked['issues'])) {
@@ -150,7 +151,7 @@ class Send extends Action implements HttpPostActionInterface
     }
 
     /**
-     * @param array<string, string> $fields
+     * @param array<string, mixed> $fields
      * @param array<string, array{severity:string, message:string}> $issues
      */
     private function keepForm(int $orderId, array $fields, array $issues): void

@@ -15,6 +15,7 @@ use Magento\Framework\Exception\LocalizedException;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\QuoteManagement;
 use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Plugin\Checkout\ShippingInformationManagementValidationPlugin;
 use Psr\Log\LoggerInterface;
 
 class QuoteManagementPlugin
@@ -89,13 +90,9 @@ class QuoteManagementPlugin
             }
         }
 
-        $telephone = $address->getTelephone();
-        if ($telephone === null || trim((string) $telephone) === '') {
-            throw new LocalizedException(__('Phone number is required for Pigeon Express delivery.'));
-        }
-        if (!preg_match('/^[\d\s\-\+\(\)]{5,25}$/', trim((string) $telephone))) {
-            throw new LocalizedException(__('Please enter a valid phone number.'));
-        }
+        // The same check as the shipping step, again at the last moment: an
+        // order placed through another route must meet it too.
+        ShippingInformationManagementValidationPlugin::assertPhone((string) $address->getTelephone());
 
         return [$quote, $orderData];
     }

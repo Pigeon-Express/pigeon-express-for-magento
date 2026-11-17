@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<!-- Pigeon Express Shipping - admin only DI -->
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+    <!-- Sales > Orders: the newest waybill of each order, joined when the grid
+         is read. See the plugin for why it is not copied into sales_order_grid. -->
+    <type name="Magento\Framework\View\Element\UiComponent\DataProvider\CollectionFactory">
+        <plugin name="pigeonexpress_order_grid" sortOrder="100"
+                type="PigeonExpress\Shipping\Plugin\Sales\OrderGridPigeonExpressPlugin"/>
+    </type>
+    <type name="PigeonExpress\Shipping\Plugin\Sales\OrderGridPigeonExpressPlugin">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Magento\Grid\LabelZip">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+</config>

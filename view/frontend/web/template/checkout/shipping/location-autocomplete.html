@@ -48,6 +48,9 @@
                               data-bind="visible: $data.count, text: $parent.cityCountLabel($data)"></span>
                     </li>
                 </ul>
+                <p class="pe-hint pigeonexpress-suggest-empty"
+                   role="status"
+                   data-bind="visible: cityResultsVisible() && cityResults().length === 0, text: cityNoResultsText()"></p>
             </div>
         </div>
 
@@ -67,6 +70,12 @@
                         <span data-bind="i18n: 'Change'"></span>
                     </button>
                     <span class="pigeonexpress-selected-meta" data-bind="text: selectedMeta()"></span>
+                    <!-- ko if: selectedHours() -->
+                    <span class="pigeonexpress-selected-hours">
+                        <span class="pigeonexpress-selected-hours-label" data-bind="i18n: 'Working hours'"></span>:
+                        <span data-bind="text: selectedHours()"></span>
+                    </span>
+                    <!-- /ko -->
                 </div>
                 <!-- /ko -->
 

@@ -51,7 +51,9 @@ class OrderAddressSavePlugin
             $ext->getPigeonexpressLocationAddress(),
             $ext->getPigeonexpressInstructions(),
             $ext->getPigeonexpressDeliveryPrice(),
-            (bool) $ext->getPigeonexpressFreeShipping()
+            (bool) $ext->getPigeonexpressFreeShipping(),
+            $ext->getPigeonexpressCityId(),
+            $ext->getPigeonexpressStreetId()
         );
 
         return $result;

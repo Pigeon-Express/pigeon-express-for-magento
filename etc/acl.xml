@@ -13,7 +13,12 @@
                         <resource id="PigeonExpress_Shipping::send_shipment"
                                   title="Send Pigeon Express Shipment"
                                   translate="title"
-                                  sortOrder="100" />
+                                  sortOrder="100">
+                            <resource id="PigeonExpress_Shipping::hand_in_point"
+                                      title="See Where a Pigeon Express Shipment Is Handed In"
+                                      translate="title"
+                                      sortOrder="10" />
+                        </resource>
                         <resource id="PigeonExpress_Shipping::cancel_shipment"
                                   title="Cancel Pigeon Express Shipment"
                                   translate="title"
@@ -22,6 +27,35 @@
                                   title="Print Pigeon Express Label"
                                   translate="title"
                                   sortOrder="120" />
+                        <resource id="PigeonExpress_Shipping::edit_shipment"
+                                  title="Edit Pigeon Express Shipment"
+                                  translate="title"
+                                  sortOrder="130" />
+                        <resource id="PigeonExpress_Shipping::refresh_status"
+                                  title="Refresh Pigeon Express Shipment Status"
+                                  translate="title"
+                                  sortOrder="140" />
+                        <resource id="PigeonExpress_Shipping::shipment_details"
+                                  title="See Pigeon Express Charges"
+                                  translate="title"
+                                  sortOrder="150" />
+                        <resource id="PigeonExpress_Shipping::return_shipment"
+                                  title="Create and Cancel Pigeon Express Return Shipments"
+                                  translate="title"
+                                  sortOrder="160" />
+                        <resource id="PigeonExpress_Shipping::courier_requests"
+                                  title="Pigeon Express Courier Requests"
+                                  translate="title"
+                                  sortOrder="170">
+                            <resource id="PigeonExpress_Shipping::courier_request_create"
+                                      title="Request a Pigeon Express Courier"
+                                      translate="title"
+                                      sortOrder="10" />
+                            <resource id="PigeonExpress_Shipping::courier_request_cancel"
+                                      title="Cancel a Pigeon Express Courier Request"
+                                      translate="title"
+                                      sortOrder="20" />
+                        </resource>
                     </resource>
                 </resource>
                 <resource id="Magento_Backend::stores">

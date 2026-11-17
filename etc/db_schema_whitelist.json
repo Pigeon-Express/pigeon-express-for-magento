@@ -14,7 +14,8 @@
             "is_active": true,
             "created_at": true,
             "updated_at": true,
-            "environment": true
+            "environment": true,
+            "working_hours": true
         },
         "index": {
             "PIGEONEXPRESS_OFFICE_NAME": true,
@@ -42,7 +43,8 @@
             "is_active": true,
             "created_at": true,
             "updated_at": true,
-            "environment": true
+            "environment": true,
+            "working_hours": true
         },
         "index": {
             "PIGEONEXPRESS_APS_NAME": true,
@@ -83,7 +85,9 @@
             "pigeonexpress_location_id": true,
             "pigeonexpress_location_name": true,
             "pigeonexpress_location_address": true,
-            "pigeonexpress_instructions": true
+            "pigeonexpress_instructions": true,
+            "pigeonexpress_city_id": true,
+            "pigeonexpress_street_id": true
         },
         "constraint": {
             "PRIMARY": true
@@ -98,7 +102,9 @@
             "pigeonexpress_location_address": true,
             "pigeonexpress_instructions": true,
             "pigeonexpress_delivery_price": true,
-            "pigeonexpress_free_shipping": true
+            "pigeonexpress_free_shipping": true,
+            "pigeonexpress_city_id": true,
+            "pigeonexpress_street_id": true
         },
         "constraint": {
             "PRIMARY": true,
@@ -122,11 +128,18 @@
             "response": true,
             "form_fields": true,
             "sent_at": true,
-            "updated_at": true
+            "updated_at": true,
+            "status_code": true,
+            "status_name": true,
+            "status_at": true,
+            "status_checked_at": true,
+            "details_json": true,
+            "magento_shipment_id": true
         },
         "index": {
             "PIGEONEXPRESS_SHIPMENT_ORDER_ID": true,
-            "PIGEONEXPRESS_SHIPMENT_REFERENCE_NUMBER": true
+            "PIGEONEXPRESS_SHIPMENT_REFERENCE_NUMBER": true,
+            "PIGEONEXPRESS_SHIPMENT_STATUS_STATUS_CODE": true
         },
         "constraint": {
             "PRIMARY": true,
@@ -153,6 +166,95 @@
         "constraint": {
             "PRIMARY": true,
             "PIGEONEXPRESS_ADDITIONAL_SERVICE_CODE": true
+        }
+    },
+    "pigeonexpress_auto_create": {
+        "column": {
+            "order_id": true,
+            "status": true,
+            "attempts": true,
+            "run_after": true,
+            "message": true,
+            "queued_at": true,
+            "updated_at": true
+        },
+        "index": {
+            "PIGEONEXPRESS_AUTO_CREATE_STATUS_RUN_AFTER": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "PIGEONEXPRESS_AUTO_CREATE_ORDER_ID_SALES_ORDER_ENTITY_ID": true
+        }
+    },
+    "pigeonexpress_return_shipment": {
+        "column": {
+            "entity_id": true,
+            "order_id": true,
+            "environment": true,
+            "reference_number": true,
+            "tracking_number": true,
+            "status": true,
+            "status_code": true,
+            "status_name": true,
+            "status_checked_at": true,
+            "details_json": true,
+            "payload": true,
+            "sent_json": true,
+            "admin_user_id": true,
+            "created_at": true,
+            "updated_at": true
+        },
+        "index": {
+            "PIGEONEXPRESS_RETURN_SHIPMENT_ORDER_ID_STATUS": true,
+            "PIGEONEXPRESS_RETURN_SHIPMENT_REFERENCE_NUMBER": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "PIGEONEXPRESS_RETURN_SHIPMENT_ORDER_ID_SALES_ORDER_ENTITY_ID": true
+        }
+    },
+    "pigeonexpress_courier_request": {
+        "column": {
+            "entity_id": true,
+            "request_number": true,
+            "environment": true,
+            "status_code": true,
+            "status_name": true,
+            "pickup_date": true,
+            "time_type": true,
+            "time_from": true,
+            "time_to": true,
+            "address": true,
+            "request_type": true,
+            "admin_user_id": true,
+            "created_at": true,
+            "checked_at": true,
+            "updated_at": true
+        },
+        "index": {
+            "PIGEONEXPRESS_COURIER_REQUEST_ENVIRONMENT_CREATED_AT": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "PIGEONEXPRESS_COURIER_REQUEST_REQUEST_NUMBER_ENVIRONMENT": true
+        }
+    },
+    "pigeonexpress_courier_request_shipment": {
+        "column": {
+            "entity_id": true,
+            "request_id": true,
+            "order_id": true,
+            "reference_number": true
+        },
+        "index": {
+            "PIGEONEXPRESS_COURIER_REQUEST_SHIPMENT_ORDER_ID": true,
+            "PIGEONEXPRESS_COURIER_REQUEST_SHIPMENT_REFERENCE_NUMBER": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "FK_C8AF7200C6DAEDC3BC6F209ED86E7ABF": true,
+            "FK_4C42F18EF2AB49F50A4A0690B0E1C8A1": true,
+            "UNQ_3381FF300D2524BDEA3E56E1AD6255E3": true
         }
     }
 }

@@ -51,6 +51,23 @@ class LabelContents
     }
 
     /**
+     * The description each package carries: the fixed description, or the
+     * product names of the order, comma separated.
+     */
+    public function packageDescription(OrderInterface $order, int $storeId): string
+    {
+        $names = [];
+        foreach ($this->build($order, $storeId) as $item) {
+            $text = trim((string) ($item['description'] ?? ''));
+            if ($text !== '') {
+                $names[] = $text;
+            }
+        }
+
+        return implode(', ', array_unique($names));
+    }
+
+    /**
      * One line, no quantity.
      *
      * A merchant who has replaced the contents with a single wording does not

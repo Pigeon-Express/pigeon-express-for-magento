@@ -64,6 +64,9 @@ class LocationSync implements LocationSyncInterface
     /** @var Environment */
     private $environment;
 
+    /** @var \PigeonExpress\Shipping\Model\Account\SavedAddresses */
+    private $savedAddresses;
+
     public function __construct(
         LocationsClientInterface $locationsClient,
         OfficeFactory $officeFactory,
@@ -76,8 +79,10 @@ class LocationSync implements LocationSyncInterface
         LoggerInterface $logger,
         AdditionalServicesClientInterface $additionalServicesClient,
         AdditionalServiceRepository $additionalServiceRepository,
-        Environment $environment
+        Environment $environment,
+        \PigeonExpress\Shipping\Model\Account\SavedAddresses $savedAddresses
     ) {
+        $this->savedAddresses = $savedAddresses;
         $this->locationsClient = $locationsClient;
         $this->officeFactory = $officeFactory;
         $this->apsFactory = $apsFactory;
@@ -198,6 +203,12 @@ class LocationSync implements LocationSyncInterface
                 return $this->syncAdditionalServices();
             },
         ];
+
+        // The saved addresses of the account, for the "saved address" pickup
+        // type, are refreshed with everything else, as in WooCommerce.
+        $tasks['saved_addresses'] = function (): array {
+            return ['created' => 0, 'updated' => count($this->savedAddresses->refresh()), 'deactivated' => 0];
+        };
 
         $result = [];
         foreach ($tasks as $name => $task) {
@@ -326,5 +337,11 @@ class LocationSync implements LocationSyncInterface
         $model->setPostcode(null);
         $model->setLatitude(isset($row['latitude']) ? (float) $row['latitude'] : null);
         $model->setLongitude(isset($row['longitude']) ? (float) $row['longitude'] : null);
+        $model->setData(
+            'working_hours',
+            !empty($row['working_hours']) && is_array($row['working_hours'])
+                ? json_encode(array_values($row['working_hours']))
+                : null
+        );
     }
 }

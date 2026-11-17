@@ -13,8 +13,11 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\RateClientInterface;
+use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Exception\MissingDimensionsException;
+use PigeonExpress\Shipping\Exception\UnshippableException;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
+use PigeonExpress\Shipping\Model\Pickup\PickupPayload;
 use PigeonExpress\Shipping\Model\Rate\RateCollector;
 use PigeonExpress\Shipping\Model\Service\CodFeeResolver;
 use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
@@ -101,7 +104,68 @@ class RateCollectorTest extends TestCase
         $this->assertSame(7.50, $price);
     }
 
-    private function collector(?ConfigInterface $config = null): RateCollector
+    public function testAFailedRateIsChargedAtTheFallbackPrice(): void
+    {
+        $this->config->method('getFallbackPrice')->willReturn(6.9);
+        $this->packageBuilder->method('hasCompleteDimensions')->willReturn(true);
+        $this->packageBuilder->method('build')->willReturn([]);
+        $this->rateClient->method('calculate')->willThrowException(new ApiException(__('timeout')));
+
+        $this->assertSame(6.9, $this->collector()->getRatePrice($this->request(), 'office', self::STORE_ID));
+    }
+
+    public function testAZeroFallbackPriceIsARealPrice(): void
+    {
+        $this->config->method('getFallbackPrice')->willReturn(0.0);
+        $this->packageBuilder->method('build')->willReturn([]);
+        $this->rateClient->method('calculate')->willThrowException(new ApiException(__('timeout')));
+
+        $this->assertSame(0.0, $this->collector()->getRatePrice($this->request(), 'address', self::STORE_ID));
+    }
+
+    public function testWithoutAFallbackPriceAFailedRateHidesTheMethod(): void
+    {
+        $this->config->method('getFallbackPrice')->willReturn(null);
+        $this->packageBuilder->method('build')->willReturn([]);
+        $this->rateClient->method('calculate')->willThrowException(new ApiException(__('timeout')));
+
+        $this->expectException(ApiException::class);
+        $this->collector()->getRatePrice($this->request(), 'address', self::STORE_ID);
+    }
+
+    public function testAnOversizedLockerParcelIsHiddenWhateverTheFallbackPrice(): void
+    {
+        $this->config->method('getFallbackPrice')->willReturn(5.0);
+        $this->packageBuilder->method('hasCompleteDimensions')->willReturn(true);
+        $this->packageBuilder->method('build')->willThrowException(new UnshippableException(__('too big')));
+
+        $this->expectException(UnshippableException::class);
+        $this->collector()->getRatePrice($this->request(), 'aps', self::STORE_ID);
+    }
+
+    public function testTheQuoteUsesTheSharedPickup(): void
+    {
+        $this->packageBuilder->method('build')->willReturn([['weight' => 1.0]]);
+        $payload = null;
+        $this->rateClient->method('calculate')->willReturnCallback(
+            static function (array $sent) use (&$payload): array {
+                $payload = $sent;
+
+                return ['total_price' => 3.0];
+            }
+        );
+        $pickup = $this->createMock(PickupPayload::class);
+        $pickup->expects($this->once())->method('build')
+            ->with(self::STORE_ID, [['weight' => 1.0]], [], true)
+            ->willReturn(['pickup_type' => 'locker', 'pickup_office_id' => 485]);
+
+        $this->collector(null, $pickup)->getRatePrice($this->request(), 'address', self::STORE_ID);
+
+        $this->assertSame('locker', $payload['pickup_type']);
+        $this->assertSame(485, $payload['pickup_office_id']);
+    }
+
+    private function collector(?ConfigInterface $config = null, ?PickupPayload $pickup = null): RateCollector
     {
         /** @var RateCollector $collector */
         $collector = $this->objectManager->getObject(RateCollector::class, [
@@ -111,6 +175,7 @@ class RateCollectorTest extends TestCase
             'packageBuilder' => $this->packageBuilder,
             'codFeeResolver' => $this->createMock(CodFeeResolver::class),
             'serviceCodesBuilder' => $this->createMock(ServiceCodesBuilder::class),
+            'pickupPayload' => $pickup ?? $this->createMock(PickupPayload::class),
         ]);
 
         return $collector;

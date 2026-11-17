@@ -16,17 +16,15 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model\Api;
 
-use PigeonExpress\Exceptions\PigeonExpressException as SdkException;
 use PigeonExpress\PigeonExpress;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\LocationsClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Model\Location\WorkingHours;
 use Psr\Log\LoggerInterface;
 
 class LocationsClient implements LocationsClientInterface
 {
-    private const DEMO_BASE_URL = 'https://api-demo.pigeonexpress.com';
-
     /** Bulk syncs are not latency sensitive, so allow a generous timeout. */
     private const TIMEOUT = 120;
 
@@ -36,12 +34,22 @@ class LocationsClient implements LocationsClientInterface
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var ClientFactory */
+    private $clientFactory;
+
+    /** @var WorkingHours */
+    private $hoursFormatter;
+
     public function __construct(
         ConfigInterface $config,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        ClientFactory $clientFactory,
+        ?WorkingHours $hoursFormatter = null
     ) {
         $this->config = $config;
         $this->logger = $logger;
+        $this->clientFactory = $clientFactory;
+        $this->hoursFormatter = $hoursFormatter ?? new WorkingHours();
     }
 
     /**
@@ -116,45 +124,51 @@ class LocationsClient implements LocationsClientInterface
      */
     private function client(): PigeonExpress
     {
-        $apiKey = $this->config->getApiKey();
-        if ($apiKey === '') {
-            throw new ApiException(__('Pigeon Express API key is not configured.'));
-        }
-
-        $apiSecret = $this->config->getApiSecret();
-        if ($apiSecret === '') {
-            $apiSecret = $apiKey;
-        }
-
-        $options = ['timeout' => self::TIMEOUT];
-        if ($this->config->isTestMode()) {
-            $options['base_url'] = self::DEMO_BASE_URL;
-        }
-
-        try {
-            return new PigeonExpress($apiKey, $apiSecret, $options);
-        } catch (SdkException $e) {
-            throw new ApiException(__('Failed to reach Pigeon Express: %1', $e->getMessage()), $e);
-        }
+        return $this->clientFactory->create(self::TIMEOUT);
     }
 
     /**
      * Map an office or locker onto the row shape LocationSync expects.
      *
      * @param \PigeonExpress\DTO\Response\Office $office
-     * @return array{id:?int, name:string, city_id:?int, address:string, type:string, latitude:?float, longitude:?float}
+     * @return array{id:?int, name:string, city_id:?int, address:string, type:string, latitude:?float, longitude:?float, working_hours:?array}
      */
     private function normalizeOffice($office): array
     {
         return [
-            'id'        => $office->getId() ?: null,
-            'name'      => (string) $office->getName(),
-            'city_id'   => $office->getCityId(),
-            'address'   => (string) $office->getAddress(),
-            'type'      => (string) $office->getType(),
-            'latitude'  => $office->getLatitude(),
-            'longitude' => $office->getLongitude(),
+            'id'            => $office->getId() ?: null,
+            'name'          => (string) $office->getName(),
+            'city_id'       => $office->getCityId(),
+            'address'       => (string) $office->getAddress(),
+            'type'          => (string) $office->getType(),
+            'latitude'      => $office->getLatitude(),
+            'longitude'     => $office->getLongitude(),
+            'working_hours' => $this->workingHours($office),
         ];
+    }
+
+    /**
+     * The office's opening hours as a list of {day, open, close} entries,
+     * or null when the API gave none.
+     *
+     * @param \PigeonExpress\DTO\Response\Office $office
+     * @return array<int, array<string, string>>|null
+     */
+    private function workingHours($office): ?array
+    {
+        $hours = method_exists($office, 'getWorkingHours') ? $office->getWorkingHours() : null;
+        if (!is_object($hours)) {
+            return null;
+        }
+
+        // The list as the API sent it, lunch breaks included. An SDK without
+        // getEntries() keeps only one stretch a day, keyed by day.
+        $raw = method_exists($hours, 'getEntries') ? $hours->getEntries() : [];
+        if ($raw === [] && method_exists($hours, 'toArray')) {
+            $raw = array_filter((array) $hours->toArray());
+        }
+
+        return $this->hoursFormatter->normalise($raw);
     }
 
     private function log(string $what, int $count): void

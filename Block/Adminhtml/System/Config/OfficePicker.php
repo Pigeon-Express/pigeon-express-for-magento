@@ -45,14 +45,7 @@ class OfficePicker extends Field
             'PigeonExpress_Shipping/js/office-picker' => [
                 'selectId' => $element->getHtmlId(),
                 'offices'  => $this->offices(),
-                'text'     => [
-                    'placeholder' => (string) __('Search by office name, town or street'),
-                    'clear'       => (string) __('Clear'),
-                    'noResults'   => (string) __('Nothing found'),
-                    'noOffices'   => (string) __('No offices yet. Save your API credentials and run the location sync.'),
-                    'linked'      => (string) __('Pigeon Express ID %1'),
-                    'missing'     => (string) __('Office %1 is no longer in the Pigeon Express list. Choose another.'),
-                ],
+                'text'     => $this->texts(),
             ],
         ]));
 
@@ -66,13 +59,40 @@ class OfficePicker extends Field
     }
 
     /**
+     * The wording of the picker. A locker picker says locker.
+     *
+     * @return array<string, string>
+     */
+    protected function texts(): array
+    {
+        return [
+            'placeholder' => (string) __('Search by office name, town or street'),
+            'clear'       => (string) __('Clear'),
+            'noResults'   => (string) __('Nothing found'),
+            'noOffices'   => (string) __('No offices yet. Save your API credentials and run the location sync.'),
+            'linked'      => (string) __('Pigeon Express ID %1'),
+            'missing'     => (string) __('Office %1 is no longer in the Pigeon Express list. Choose another.'),
+        ];
+    }
+
+    /**
+     * The collection the picker lists.
+     *
+     * @return \Magento\Framework\Data\Collection\AbstractDb
+     */
+    protected function createCollection()
+    {
+        return $this->officeCollectionFactory->create();
+    }
+
+    /**
      * Active offices as {id, name, address}, by name.
      *
      * @return array<int, array{id:string, name:string, address:string}>
      */
     private function offices(): array
     {
-        $collection = $this->officeCollectionFactory->create();
+        $collection = $this->createCollection();
         $collection->addFieldToFilter('is_active', 1);
         $collection->setOrder('name', 'ASC');
 

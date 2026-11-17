@@ -19,6 +19,7 @@ use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Exception\MissingDimensionsException;
 use PigeonExpress\Shipping\Exception\UnshippableException;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
+use PigeonExpress\Shipping\Model\Pickup\PickupPayload;
 use PigeonExpress\Shipping\Model\QuoteAddressLocationPersistor;
 use PigeonExpress\Shipping\Model\ResourceModel\City\CollectionFactory as CityCollectionFactory;
 use PigeonExpress\Shipping\Model\Service\CodFeeResolver;
@@ -57,6 +58,9 @@ class RateCollector
     /** @var ServiceCodesBuilder */
     private $serviceCodesBuilder;
 
+    /** @var PickupPayload */
+    private $pickupPayload;
+
     public function __construct(
         ConfigInterface $config,
         RateClientInterface $rateClient,
@@ -67,8 +71,10 @@ class RateCollector
         CityCollectionFactory $cityCollectionFactory,
         CodFeeResolver $codFeeResolver,
         ServiceCodesBuilder $serviceCodesBuilder,
+        PickupPayload $pickupPayload,
         ?CheckoutSession $checkoutSession = null
     ) {
+        $this->pickupPayload = $pickupPayload;
         $this->config = $config;
         $this->rateClient = $rateClient;
         $this->logger = $logger;
@@ -154,18 +160,34 @@ class RateCollector
     }
 
     /**
-     * The flat rate, when there is one, and otherwise no method at all.
+     * The price for when the rate cannot be calculated, when the merchant set
+     * one; otherwise the flat rate, when there is one; otherwise no method.
      *
      * A store on dynamic pricing keeps no flat rate: the field is hidden and
      * cleared on save, so it is always zero. Returning it as a fallback offered
      * the customer free shipping every time the carrier could not be reached,
      * which is worse than the method being absent, and silently so. A rethrow
-     * here reaches the carrier, which skips the delivery type.
+     * here reaches the carrier, which skips the delivery type. The fallback
+     * price is the merchant's own answer to that (WooCommerce's "Price when
+     * the rate cannot be calculated"); zero there is a real choice. A parcel
+     * the carrier cannot take never gets here: that is hidden whatever is set.
      *
      * @throws \Throwable
      */
     private function fallbackOrHide(\Throwable $e, string $deliveryType, int $storeId): float
     {
+        $fallback = $this->config->getFallbackPrice($deliveryType, $storeId);
+        if ($fallback !== null) {
+            if ($this->config->isLoggingEnabled($storeId)) {
+                $this->logger->warning(
+                    '[PigeonExpress] Dynamic rate failed, charging the fallback price: ' . $e->getMessage(),
+                    ['deliveryType' => $deliveryType, 'storeId' => $storeId, 'price' => $fallback]
+                );
+            }
+
+            return $fallback;
+        }
+
         $flatRate = (float) $this->config->getDeliveryTypeFlatRate($deliveryType, $storeId);
 
         if ($flatRate <= 0.0) {
@@ -214,7 +236,9 @@ class RateCollector
         }
 
         $payload = [
-            'pickup_type' => $configPickupType,
+            'pickup_type' => $configPickupType === ConfigInterface::PICKUP_TYPE_SAVED_ADDRESS
+                ? ConfigInterface::PICKUP_TYPE_ADDRESS
+                : $configPickupType,
             'delivery_type' => $apiDeliveryType,
             'packages' => $this->packageBuilder->build(
                 $lines,
@@ -240,19 +264,12 @@ class RateCollector
             $payload['service_codes'] = $serviceCodes;
         }
 
-        // Pickup: from config only (never from quote).
-        if ($configPickupType === ConfigInterface::PICKUP_TYPE_OFFICE) {
-            $pickupOfficeId = $this->config->getPickupOfficeId($storeId);
-            if ($pickupOfficeId === null || $pickupOfficeId <= 0) {
-                if ($this->config->isLoggingEnabled($storeId)) {
-                    $this->logger->warning('[PigeonExpress] Pickup type is Office but no pickup office selected in config; rate unavailable.');
-                }
-                throw new ApiException(__('Pickup location: please select a pickup office in the Pigeon Express carrier configuration.'));
-            }
-            $payload['pickup_office_id'] = $pickupOfficeId;
-        } elseif ($configPickupType === ConfigInterface::PICKUP_TYPE_ADDRESS) {
-            $payload['pickup_address'] = $this->buildPickupAddressFromConfig($storeId);
-        }
+        // Pickup: from config only (never from quote), through the builder
+        // shipment creation uses, so the quote is for the same hand-in point.
+        $payload = array_merge(
+            $payload,
+            $this->pickupPayload->build($storeId, $payload['packages'], $serviceCodes, true)
+        );
 
         // Delivery: from quote (customer choice). Quote stores entity_id; API expects api_id.
         // Falls back to first active office/APS from DB when no location selected yet.
@@ -332,45 +349,6 @@ class RateCollector
         }
 
         throw new ApiException(__('Unsupported delivery type "%1".', $deliveryType));
-    }
-
-    /**
-     * Build pickup_address payload from config (when pickup type is Address).
-     *
-     * @return array{city_id:int, street_number:string, street_id?:int, street_name?:string, postal_code?:string}
-     * @throws ApiException
-     */
-    private function buildPickupAddressFromConfig(int $storeId): array
-    {
-        $cityId = $this->config->getPickupAddressCityId($storeId);
-        if ($cityId === null || $cityId === '') {
-            throw new ApiException(__('Pickup location: the pickup address city is not configured.'));
-        }
-        $streetNumber = $this->config->getPickupAddressStreetNumber($storeId);
-        $streetNumber = $streetNumber !== null && $streetNumber !== '' ? $streetNumber : '1';
-        $result = [
-            'city_id' => (int) $cityId,
-            'street_number' => $streetNumber,
-        ];
-        $streetId = $this->config->getPickupAddressStreetId($storeId);
-        if ($streetId !== null && $streetId !== '') {
-            $result['street_id'] = (int) $streetId;
-        } else {
-            $streetLabel = $this->config->getPickupAddressStreetLabel($storeId);
-            if ($streetLabel !== null && $streetLabel !== '') {
-                $result['street_name'] = $streetLabel;
-            }
-            $additionalInfo = trim($streetLabel ?? '') !== '' ? trim($streetLabel) : 'Address';
-            if (strlen($additionalInfo) < 3) {
-                $additionalInfo = 'Address';
-            }
-            $result['additional_info'] = $additionalInfo;
-        }
-        $postalCode = $this->config->getPickupAddressPostalCode($storeId);
-        if ($postalCode !== null && $postalCode !== '') {
-            $result['postal_code'] = $postalCode;
-        }
-        return $result;
     }
 
     /**

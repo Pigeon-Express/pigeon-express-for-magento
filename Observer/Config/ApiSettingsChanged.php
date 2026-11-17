@@ -18,6 +18,7 @@ use Magento\Framework\App\CacheInterface;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Event\ObserverInterface;
 use Magento\Framework\Message\ManagerInterface;
+use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Model\Api\AddressResolver;
 use PigeonExpress\Shipping\Model\Api\RateClient;
 use PigeonExpress\Shipping\Model\Service\CarrierLimits;
@@ -27,10 +28,19 @@ use Psr\Log\LoggerInterface;
 
 class ApiSettingsChanged implements ObserverInterface
 {
+    /**
+     * A key of either environment counts: the hidden pair is not posted, so
+     * only the active one can appear here, and the legacy pair is kept in
+     * case anything still writes it.
+     */
     private const PATHS = [
-        'carriers/pigeonexpress/api_key',
-        'carriers/pigeonexpress/api_secret',
-        'carriers/pigeonexpress/test_mode',
+        ConfigInterface::XML_PATH_API_KEY_TEST,
+        ConfigInterface::XML_PATH_API_SECRET_TEST,
+        ConfigInterface::XML_PATH_API_KEY_LIVE,
+        ConfigInterface::XML_PATH_API_SECRET_LIVE,
+        ConfigInterface::XML_PATH_API_KEY_LEGACY,
+        ConfigInterface::XML_PATH_API_SECRET_LEGACY,
+        ConfigInterface::XML_PATH_TEST_MODE,
     ];
 
     /** @var SyncScheduler */

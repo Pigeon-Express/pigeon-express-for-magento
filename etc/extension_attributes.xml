@@ -13,6 +13,8 @@
         <attribute code="pigeonexpress_location_address" type="string"/>
         <attribute code="pigeonexpress_instructions" type="string"/>
         <attribute code="pigeonexpress_delivery_price" type="double"/>
+        <attribute code="pigeonexpress_city_id" type="string"/>
+        <attribute code="pigeonexpress_street_id" type="string"/>
     </extension_attributes>
     <!-- Quote shipping address: stored so it survives reload and is available for collectRates -->
     <extension_attributes for="Magento\Quote\Api\Data\AddressInterface">
@@ -22,6 +24,8 @@
         <attribute code="pigeonexpress_location_address" type="string"/>
         <attribute code="pigeonexpress_instructions" type="string"/>
         <attribute code="pigeonexpress_delivery_price" type="double"/>
+        <attribute code="pigeonexpress_city_id" type="string"/>
+        <attribute code="pigeonexpress_street_id" type="string"/>
     </extension_attributes>
     <!-- Order shipping address: persisted when order is placed.
          pigeonexpress_free_shipping records why the delivery cost nothing, which
@@ -34,6 +38,8 @@
         <attribute code="pigeonexpress_location_address" type="string"/>
         <attribute code="pigeonexpress_instructions" type="string"/>
         <attribute code="pigeonexpress_delivery_price" type="double"/>
+        <attribute code="pigeonexpress_city_id" type="string"/>
+        <attribute code="pigeonexpress_street_id" type="string"/>
         <attribute code="pigeonexpress_free_shipping" type="int"/>
     </extension_attributes>
 </config>

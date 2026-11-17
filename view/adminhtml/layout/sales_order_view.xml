@@ -9,7 +9,13 @@
             <block class="PigeonExpress\Shipping\Block\Delivery\Info"
                    name="pigeonexpress.delivery.info.admin"
                    template="PigeonExpress_Shipping::delivery/info.phtml"
-                   before="-"/>
+                   before="-">
+                <!-- Included from delivery/info.phtml with getChildHtml(). -->
+                <block class="PigeonExpress\Shipping\Block\Adminhtml\Order\ReturnShipment"
+                       name="pigeonexpress.return.shipment"/>
+                <block class="PigeonExpress\Shipping\Block\Adminhtml\Order\CourierRequest"
+                       name="pigeonexpress.courier.request"/>
+            </block>
         </referenceContainer>
     </body>
 </page>

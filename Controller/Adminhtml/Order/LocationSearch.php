@@ -74,7 +74,7 @@ class LocationSearch extends Action implements HttpGetActionInterface
                 'id'    => (int) $row['id'],
                 'name'  => $name,
                 // The address is what tells two counters in one town apart.
-                'label' => trim($name . ' — ' . (string) $row['address'], ' —'),
+                'label' => trim($name . ' - ' . (string) $row['address'], ' -'),
             ];
         }
 

@@ -23,6 +23,7 @@ parameters:
         - Observer
         - Plugin
         - Setup
+        - Ui
     bootstrapFiles:
         - ../../../../vendor/autoload.php
     treatPhpDocTypesAsCertain: false

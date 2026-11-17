@@ -3,7 +3,24 @@
     <event name="sales_order_place_after">
         <observer name="pigeonexpress_order_instructions" instance="PigeonExpress\Shipping\Observer\Sales\OrderPlaceAfter" />
     </event>
+    <!-- Queues the order for an automatic shipment when it reaches Processing.
+         Only queues; the cron job pigeonexpress_auto_create creates it. -->
+    <event name="sales_order_save_after">
+        <observer name="pigeonexpress_auto_create_queue" instance="PigeonExpress\Shipping\Observer\Sales\QueueAutoCreate" />
+    </event>
     <event name="email_order_set_template_vars_before">
         <observer name="pigeonexpress_email_order_template_vars" instance="PigeonExpress\Shipping\Observer\Email\OrderTemplateVars" />
+    </event>
+    <!-- The waybill's native Magento shipment and tracking number
+         (Model\Magento\NativeShipment), and completing a delivered order
+         (Model\Magento\CompleteOnDelivery). -->
+    <event name="pigeonexpress_shipment_created">
+        <observer name="pigeonexpress_create_magento_shipment" instance="PigeonExpress\Shipping\Observer\Shipment\CreateMagentoShipment" />
+    </event>
+    <event name="pigeonexpress_shipment_cancelled">
+        <observer name="pigeonexpress_remove_magento_track" instance="PigeonExpress\Shipping\Observer\Shipment\RemoveMagentoTrack" />
+    </event>
+    <event name="pigeonexpress_shipment_status_changed">
+        <observer name="pigeonexpress_complete_order_on_delivery" instance="PigeonExpress\Shipping\Observer\Shipment\CompleteOrderOnDelivery" />
     </event>
 </config>

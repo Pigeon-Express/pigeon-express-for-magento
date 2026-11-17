@@ -26,14 +26,41 @@ use PigeonExpress\Shipping\Model\OrderAddressLocationPersistor;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment\CollectionFactory as ShipmentCollectionFactory;
 use PigeonExpress\Shipping\Model\Config\Source\WhoPays;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
+use PigeonExpress\Shipping\Model\Shipment\HandInText;
+use PigeonExpress\Shipping\Model\Shipment\WhoPaysFacts;
+use PigeonExpress\Shipping\Model\AdditionalServiceRepository;
+use Magento\Framework\AuthorizationInterface;
+use PigeonExpress\Shipping\Block\Adminhtml\Order\Charges;
+use PigeonExpress\Shipping\Controller\Adminhtml\Order\Edit as EditController;
+use PigeonExpress\Shipping\Model\ShipmentEditor;
+use PigeonExpress\Shipping\Model\Status\StatusCodes;
+use PigeonExpress\Shipping\Model\Status\StatusNames;
 
 class Info extends Template
 {
+    /** @var ShipmentEditor */
+    private $shipmentEditor;
+
+    /** @var StatusNames */
+    private $statusNames;
+
+    /** @var AuthorizationInterface */
+    private $authorization;
+
     /** @var \PigeonExpress\Shipping\Model\ShipmentCanceller */
     private $shipmentCanceller;
 
-    /** @var array{fields: array<string, string>, issues: array<string, array{severity:string, message:string}>}|null */
+    /** @var array{fields: array<string, mixed>, issues: array<string, array{severity:string, message:string}>}|null */
     private $form;
+
+    /** @var WhoPaysFacts */
+    private $whoPaysFacts;
+
+    /** @var HandInText */
+    private $handInText;
+
+    /** @var AdditionalServiceRepository */
+    private $serviceRepository;
 
     /** @var AddressForm */
     private $addressForm;
@@ -120,8 +147,17 @@ class Info extends Template
         DataPersistorInterface $dataPersistor,
         ShipmentSenderInterface $shipmentSender,
         WhoPays $whoPaysSource,
+        WhoPaysFacts $whoPaysFacts,
+        HandInText $handInText,
+        AdditionalServiceRepository $serviceRepository,
+        ShipmentEditor $shipmentEditor,
+        StatusNames $statusNames,
+        AuthorizationInterface $authorization,
         array $data = []
     ) {
+        $this->shipmentEditor = $shipmentEditor;
+        $this->statusNames = $statusNames;
+        $this->authorization = $authorization;
         $this->config = $config;
         $this->checkoutSession = $checkoutSession;
         $this->registry = $registry;
@@ -135,6 +171,9 @@ class Info extends Template
         $this->dataPersistor = $dataPersistor;
         $this->shipmentSender = $shipmentSender;
         $this->whoPaysSource = $whoPaysSource;
+        $this->whoPaysFacts = $whoPaysFacts;
+        $this->handInText = $handInText;
+        $this->serviceRepository = $serviceRepository;
     }
 
     /**
@@ -442,6 +481,158 @@ class Info extends Template
     }
 
     /**
+     * Where the parcel is, as Pigeon Express last said, for the status row.
+     *
+     * @return array{code:string, label:string, date:string, checked:string, tone:string}
+     */
+    public function getStatusSummary(): array
+    {
+        $shipment = $this->getExistingShipment();
+        $code = $shipment !== null ? $shipment->getStatusCode() : '';
+
+        return [
+            'code'    => $code,
+            'label'   => $code !== '' ? $this->statusNames->label($code, $shipment->getStatusName()) : '',
+            'date'    => $code !== '' ? $this->formatUtc((string) $shipment->getStatusAt()) : '',
+            'checked' => $shipment !== null ? $this->formatUtc((string) $shipment->getStatusCheckedAt()) : '',
+            'tone'    => $code !== '' ? StatusCodes::tone($code) : '',
+        ];
+    }
+
+    /**
+     * A UTC "Y-m-d H:i:s" in the admin's time zone and locale, '' for none.
+     */
+    private function formatUtc(string $utc): string
+    {
+        if ($utc === '') {
+            return '';
+        }
+
+        try {
+            return (string) $this->_localeDate->formatDateTime(
+                new \DateTime($utc, new \DateTimeZone('UTC')),
+                \IntlDateFormatter::MEDIUM,
+                \IntlDateFormatter::SHORT
+            );
+        } catch (\Throwable $e) {
+            return $utc;
+        }
+    }
+
+    public function isAllowed(string $resource): bool
+    {
+        try {
+            return $this->authorization->isAllowed($resource);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    public function getRefreshUrl(): string
+    {
+        $order = $this->getOrder();
+
+        return $order && $order->getId()
+            ? $this->getUrl('pigeonexpress/order/refresh', ['order_id' => $order->getId()])
+            : '';
+    }
+
+    public function getDetailsUrl(): string
+    {
+        $order = $this->getOrder();
+
+        return $order && $order->getId()
+            ? $this->getUrl('pigeonexpress/order/details', ['order_id' => $order->getId()])
+            : '';
+    }
+
+    /** The order page with the shipment form open on the existing shipment. */
+    public function getEditUrl(): string
+    {
+        $order = $this->getOrder();
+
+        return $order && $order->getId()
+            ? $this->getUrl('sales/order/view', ['order_id' => $order->getId(), EditController::EDIT_PARAM => 1])
+            : '';
+    }
+
+    public function getEditSubmitUrl(): string
+    {
+        $order = $this->getOrder();
+
+        return $order && $order->getId()
+            ? $this->getUrl('pigeonexpress/order/edit', ['order_id' => $order->getId()])
+            : '';
+    }
+
+    public function getOrderViewUrl(): string
+    {
+        $order = $this->getOrder();
+
+        return $order && $order->getId() ? $this->getUrl('sales/order/view', ['order_id' => $order->getId()]) : '';
+    }
+
+    /**
+     * Why the live shipment cannot be changed, '' when it can.
+     */
+    public function getEditBlockReason(): string
+    {
+        return $this->shipmentEditor->editBlockReason($this->getExistingShipment());
+    }
+
+    /**
+     * Whether the shipment form is open on the existing shipment, to change it.
+     */
+    public function isEditing(): bool
+    {
+        return (bool) $this->getRequest()->getParam(EditController::EDIT_PARAM)
+            && $this->hasActiveShipment()
+            && $this->getEditBlockReason() === ''
+            && $this->isAllowed(EditController::ADMIN_RESOURCE);
+    }
+
+    /**
+     * Whether the shipment form is shown: to create a shipment, or to change one.
+     */
+    public function isFormShown(): bool
+    {
+        return ($this->getSendUrl() !== '' && !$this->hasActiveShipment()) || $this->isEditing();
+    }
+
+    /** The URL the shipment form posts to. */
+    public function getFormActionUrl(): string
+    {
+        return $this->isEditing() ? $this->getEditSubmitUrl() : $this->getSendUrl();
+    }
+
+    /**
+     * The "Pigeon Express charges" box for the live shipment, '' before the
+     * details were first read.
+     */
+    public function getChargesHtml(): string
+    {
+        $shipment = $this->getExistingShipment();
+        $order = $this->getOrder();
+        if ($shipment === null || !$order) {
+            return '';
+        }
+
+        /** @var Charges $charges */
+        $charges = $this->getLayout()->createBlock(Charges::class);
+        $charges->setShipment($shipment)->setOrder($order);
+
+        return (string) $charges->toHtml();
+    }
+
+    /** Whether the live shipment has its charges stored. */
+    public function hasCharges(): bool
+    {
+        $shipment = $this->getExistingShipment();
+
+        return $shipment !== null && $shipment->getDetails() !== null;
+    }
+
+    /**
      * Admin URL for the Send to Pigeon Express controller.
      */
     public function getSendUrl(): string
@@ -699,14 +890,21 @@ class Info extends Template
     {
         $status = (string) $shipment->getStatus();
 
+        // The carrier's status once it has been read, unless the waybill was
+        // cancelled here.
+        $code = (string) $shipment->getStatusCode();
+        if ($code !== '' && $status !== \PigeonExpress\Shipping\Model\ShipmentCanceller::STATUS_CANCELLED) {
+            return $this->statusNames->label($code, (string) $shipment->getStatusName());
+        }
+
         $labels = [
-            'sent'                => __('Registered'),
-            'shipment_registered' => __('Registered'),
+            'sent'                => __('Shipment registered'),
+            'shipment_registered' => __('Shipment registered'),
             'cancelled'           => __('Cancelled'),
             'in_transit'          => __('In transit'),
             'out_for_delivery'    => __('Out for delivery'),
             'delivered'           => __('Delivered'),
-            'returned'            => __('Returned'),
+            'returned'            => __('Returned to the sender'),
         ];
 
         if (isset($labels[$status])) {
@@ -967,6 +1165,7 @@ class Info extends Template
         $rejected = $this->rejectedForm((int) $order->getId());
         if ($rejected !== null) {
             $this->form = $rejected;
+            $this->fillPackages();
 
             return $this->form;
         }
@@ -984,13 +1183,16 @@ class Info extends Template
                 (string) ($location['location_name'] ?? '')
             );
 
+            $facts = $this->whoPaysFacts->forOrder($order);
             $this->form = $this->addressForm->validate(
                 $fields,
                 (int) $order->getStoreId(),
-                !empty($location['free_shipping']) || $this->isPrepaid()
+                !empty($location['free_shipping']) || !$facts['cod'],
+                $facts['fixed']
             );
 
             $this->fillParcel();
+            $this->fillPackages();
         } catch (\Throwable $e) {
             $this->form['issues']['address'] = [
                 'severity' => AddressForm::SEVERITY_ERROR,
@@ -1015,26 +1217,323 @@ class Info extends Template
             $fields['cod_amount'] = $this->formatAmount($this->getCodAmountFor($fields['who_pays'] ?? ''));
         }
 
-        // Figures restored from an earlier waybill stay as they were sent.
-        if ($this->addressForm->parcel($fields) !== null) {
+    }
+
+    /**
+     * Start the package rows from what the order would be sent as.
+     *
+     * Rows restored from an earlier waybill, or from a form that was just
+     * rejected, stay as they were. Otherwise each parcel PackageBuilder makes
+     * of the order becomes a row, so left alone they produce the same shipment.
+     */
+    private function fillPackages(): void
+    {
+        if (!empty($this->form['fields']['packages']) && is_array($this->form['fields']['packages'])) {
             return;
         }
 
-        $packages = $this->getPackages();
-        if (empty($packages)) {
-            return;
+        $fragile = $this->getFragileMode() === AddressForm::FRAGILE_ALWAYS;
+        $rows = [];
+        foreach ($this->getPackages() as $package) {
+            $rows[] = [
+                'weight'      => round((float) $package['weight'], 3),
+                'length'      => (int) ceil((float) $package['length']),
+                'width'       => (int) ceil((float) $package['width']),
+                'height'      => (int) ceil((float) $package['height']),
+                'description' => '',
+                'fragile'     => $fragile,
+            ];
         }
 
-        $weight = 0.0;
-        foreach ($packages as $package) {
-            $weight += (float) $package['weight'];
+        $this->form['fields']['packages'] = $rows;
+    }
+
+    /**
+     * The package rows for the form, each value as it goes into its box.
+     *
+     * Never empty: with nothing worked out from the order there is still one
+     * row, with the store's default box, for the admin to fill in.
+     *
+     * @return array<int, array{weight:string, length:string, width:string, height:string, description:string, fragile:bool}>
+     */
+    public function getPackageRows(): array
+    {
+        $rows = [];
+        foreach ((array) ($this->getForm()['fields']['packages'] ?? []) as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $rows[] = $this->packageRow($row);
         }
 
-        $fields['weight'] = $this->trimNumber($weight);
-        $fields['length'] = $this->trimNumber((float) $packages[0]['length']);
-        $fields['width'] = $this->trimNumber((float) $packages[0]['width']);
-        $fields['height'] = $this->trimNumber((float) $packages[0]['height']);
-        $fields['parcels'] = (string) count($packages);
+        return $rows !== [] ? $rows : [$this->getEmptyPackageRow()];
+    }
+
+    /**
+     * The row the "Add a package" button copies: empty weight, the default box.
+     *
+     * @return array{weight:string, length:string, width:string, height:string, description:string, fragile:bool}
+     */
+    public function getEmptyPackageRow(): array
+    {
+        $storeId = $this->getStoreId();
+
+        return $this->packageRow([
+            'weight'  => '',
+            'length'  => (int) ceil($this->config->getDefaultLength($storeId)),
+            'width'   => (int) ceil($this->config->getDefaultWidth($storeId)),
+            'height'  => (int) ceil($this->config->getDefaultHeight($storeId)),
+            'fragile' => $this->getFragileMode() === AddressForm::FRAGILE_ALWAYS,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array{weight:string, length:string, width:string, height:string, description:string, fragile:bool}
+     */
+    private function packageRow(array $row): array
+    {
+        $text = static function ($value): string {
+            if (is_float($value)) {
+                return rtrim(rtrim(number_format($value, 3, '.', ''), '0'), '.');
+            }
+
+            return is_scalar($value) ? (string) $value : '';
+        };
+
+        $mode = $this->getFragileMode();
+
+        return [
+            'weight'      => $text($row['weight'] ?? ''),
+            'length'      => $text($row['length'] ?? ''),
+            'width'       => $text($row['width'] ?? ''),
+            'height'      => $text($row['height'] ?? ''),
+            'description' => $text($row['description'] ?? ''),
+            'fragile'     => $mode === AddressForm::FRAGILE_ALWAYS
+                || ($mode === AddressForm::FRAGILE_PER_PACKAGE && !empty($row['fragile'])),
+        ];
+    }
+
+    /**
+     * never, always or per_package: whether the rows have a Fragile box, and
+     * whether it can be changed.
+     */
+    public function getFragileMode(): string
+    {
+        return $this->addressForm->fragileMode($this->getStoreId());
+    }
+
+    /**
+     * What a row's description box shows while empty: the label contents the
+     * store sends when a row says nothing.
+     */
+    public function getPackageDescriptionPlaceholder(): string
+    {
+        $storeId = $this->getStoreId();
+        if ($this->config->getLabelContentsMode($storeId) === 'fixed_text') {
+            $text = trim($this->config->getLabelContentsText($storeId));
+            if ($text !== '') {
+                return $text;
+            }
+        } elseif ($this->config->getLabelContentsMode($storeId) !== '') {
+            return (string) __('Product names');
+        }
+
+        return (string) __('Optional');
+    }
+
+    /**
+     * Longest description a row may carry.
+     */
+    public function getPackageDescriptionMaxLength(): int
+    {
+        return AddressForm::PACKAGE_DESCRIPTION_MAX_LENGTH;
+    }
+
+    private function getStoreId(): ?int
+    {
+        $order = $this->getOrder();
+
+        return $order ? (int) $order->getStoreId() : null;
+    }
+
+    // -- Services ------------------------------------------------------------
+
+    /**
+     * Whether the merchant's Pigeon Express account offers a service.
+     *
+     * Read from the synced catalogue. An empty catalogue means it was never
+     * synced, not that nothing is offered, so then everything is shown.
+     */
+    private function isServiceOffered(string $code): bool
+    {
+        try {
+            $active = $this->serviceRepository->getActiveByCode();
+        } catch (\Throwable $e) {
+            return true;
+        }
+
+        return $active === [] || isset($active[$code]);
+    }
+
+    public function isDeclaredValueOffered(): bool
+    {
+        return $this->isServiceOffered('declared_value');
+    }
+
+    public function isDeclaredValueChecked(): bool
+    {
+        return !empty($this->getForm()['fields']['declared_value']);
+    }
+
+    /**
+     * The declared value the admin typed, as it goes into its box; empty for
+     * the value of the goods.
+     */
+    public function getDeclaredValueAmount(): string
+    {
+        $amount = $this->getForm()['fields']['declared_value_amount'] ?? null;
+        if (is_float($amount) || is_int($amount)) {
+            return $this->formatAmount((float) $amount);
+        }
+
+        return is_string($amount) ? $amount : '';
+    }
+
+    /**
+     * The value of the goods, which declared value insures when no amount is typed.
+     */
+    public function getGoodsValue(): string
+    {
+        $order = $this->getOrder();
+        if (!$order) {
+            return '';
+        }
+
+        // What is sent when no amount is typed: the goods value within the
+        // carrier's limits.
+        return $this->formatAmount(
+            \PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder::declaredValueDefault(
+                \PigeonExpress\Shipping\Model\ShipmentSender::goodsValue($order)
+            )
+        );
+    }
+
+    /**
+     * Inspection before payment choices the account offers. Always has None.
+     *
+     * @return array<string, string>
+     */
+    public function getReviewOptions(): array
+    {
+        $options = [AddressForm::REVIEW_NONE => (string) __('No inspection')];
+        if ($this->isServiceOffered('shipment_review')) {
+            $options[AddressForm::REVIEW_VIEW] = (string) __('Inspection only');
+        }
+        if ($this->isServiceOffered('shipment_test_before_payment')) {
+            $options[AddressForm::REVIEW_VIEW_TEST] = (string) __('Inspection and testing');
+        }
+
+        return $options;
+    }
+
+    /**
+     * Return receipt choices the account offers. Always has None.
+     *
+     * @return array<string, string>
+     */
+    public function getReceiptOptions(): array
+    {
+        $electronic = $this->isServiceOffered('return_receipt');
+        $paper = $this->isServiceOffered('paper_return_receipt');
+
+        $options = [AddressForm::RECEIPT_NONE => (string) __('No return receipt')];
+        if ($electronic) {
+            $options[AddressForm::RECEIPT_ELECTRONIC] = (string) __('Electronic');
+        }
+        if ($paper) {
+            $options[AddressForm::RECEIPT_PAPER] = (string) __('Paper');
+        }
+        if ($electronic && $paper) {
+            $options[AddressForm::RECEIPT_BOTH] = (string) __('Electronic and paper');
+        }
+
+        return $options;
+    }
+
+    // -- Who pays ------------------------------------------------------------
+
+    /**
+     * Which rule suggested the side the form starts on: an AddressForm::WHO_PAYS_RULE_* value.
+     */
+    public function getWhoPaysRule(): string
+    {
+        $order = $this->getOrder();
+        if (!$order || !$order->getId()) {
+            return AddressForm::WHO_PAYS_RULE_COD;
+        }
+
+        $facts = $this->whoPaysFacts->forOrder($order);
+        // The flag recorded at checkout, as isFreeShipping() reads it.
+        if ($this->isFreeShipping()) {
+            return AddressForm::WHO_PAYS_RULE_FREE_SHIPPING;
+        }
+
+        return $this->addressForm->whoPaysRule($facts['cod'], false, $facts['fixed']);
+    }
+
+    /**
+     * The sentence under Who pays that names the rule behind the suggestion.
+     */
+    public function getWhoPaysReason(): string
+    {
+        return $this->addressForm->whoPaysReason($this->getWhoPaysRule(), $this->getStoreId());
+    }
+
+    /**
+     * Whether nothing is left to pay on the order: a bank transfer still on
+     * hold is not cash on delivery, but it is not paid either.
+     */
+    public function isOrderPaid(): bool
+    {
+        $order = $this->getOrder();
+        if (!$order || !$order->getId()) {
+            return false;
+        }
+
+        return (float) $order->getTotalDue() <= 0.0001 && (float) $order->getTotalPaid() > 0.0;
+    }
+
+    // -- Hand-in point -------------------------------------------------------
+
+    /**
+     * Whether the shop hands its shipments in at a parcel locker, so the
+     * panel says where this one goes.
+     */
+    public function isHandInShown(): bool
+    {
+        return $this->handInText->isApplicable($this->getStoreId());
+    }
+
+    /**
+     * "Parcel locker X" or "Office Y (why)", for the package rows as they stand.
+     */
+    public function getHandInText(): string
+    {
+        return $this->handInText->describe($this->getForm()['fields'], $this->getStoreId());
+    }
+
+    /**
+     * Endpoint that says the hand-in point again after the rows change.
+     */
+    public function getHandInUrl(): string
+    {
+        $order = $this->getOrder();
+        if (!$order || !$order->getId()) {
+            return '';
+        }
+
+        return $this->getUrl('pigeonexpress/order/handin', ['order_id' => $order->getId()]);
     }
 
     /**
@@ -1114,10 +1613,19 @@ class Info extends Template
 
         $this->dataPersistor->clear(SendController::FORM_STORAGE_KEY);
 
-        return [
-            'fields' => is_array($stored['fields'] ?? null) ? $stored['fields'] : $this->addressForm->blank(),
-            'issues' => is_array($stored['issues'] ?? null) ? $stored['issues'] : [],
-        ];
+        $fields = is_array($stored['fields'] ?? null) ? $stored['fields'] : $this->addressForm->blank();
+        $issues = is_array($stored['issues'] ?? null) ? $stored['issues'] : [];
+
+        // A street that has an id is settled: the id is what goes on the
+        // waybill. A warning carried over from before it was set would ask the
+        // admin to choose a street they have already chosen.
+        if ((string) ($fields['street_id'] ?? '') !== ''
+            && ($issues['street']['severity'] ?? '') === AddressForm::SEVERITY_WARNING
+        ) {
+            unset($issues['street']);
+        }
+
+        return ['fields' => $fields, 'issues' => $issues];
     }
 
     /**
@@ -1125,7 +1633,9 @@ class Info extends Template
      */
     public function getFieldValue(string $field): string
     {
-        return (string) ($this->getForm()['fields'][$field] ?? '');
+        $value = $this->getForm()['fields'][$field] ?? '';
+
+        return is_scalar($value) ? (string) $value : '';
     }
 
     /**

@@ -18,6 +18,10 @@
                 <!-- General (Stage 2: dynamic rates via API) -->
                 <api_key></api_key>
                 <api_secret></api_secret>
+                <api_key_test></api_key_test>
+                <api_secret_test></api_secret_test>
+                <api_key_live></api_key_live>
+                <api_secret_live></api_secret_live>
                 <test_mode>1</test_mode>
                 <enable_logging>0</enable_logging>
                 <cod_payment_methods></cod_payment_methods>
@@ -70,6 +74,8 @@
                      merchant's labels. Privacy is opt in. -->
                 <label_contents>product_names</label_contents>
                 <label_contents_text></label_contents_text>
+                <!-- Off, as in WooCommerce: the carrier prints the contents by default. -->
+                <hide_content_on_label>0</hide_content_on_label>
                 <!-- Pickup location, also the origin used for rate calculation -->
                 <pickup_type>office</pickup_type>
                 <!-- The courier collects the shipping charge from the recipient.
@@ -100,6 +106,39 @@
                 <address_flat_rate_cod_fee>1</address_flat_rate_cod_fee>
                 <office_flat_rate_cod_fee>1</office_flat_rate_cod_fee>
                 <aps_flat_rate_cod_fee>1</aps_flat_rate_cod_fee>
+                <!-- Empty: a delivery Pigeon Express cannot price is hidden, as before. -->
+                <address_fallback_price></address_fallback_price>
+                <office_fallback_price></office_fallback_price>
+                <aps_fallback_price></aps_fallback_price>
+                <!-- Off, as in WooCommerce. -->
+                <office_show_working_hours>0</office_show_working_hours>
+                <aps_show_working_hours>0</aps_show_working_hours>
+                <!-- Packages: off, as in WooCommerce. -->
+                <fragile_mode>never</fragile_mode>
+                <!-- One select for both receipts. A data patch fills it from the
+                     two Yes/No settings it replaces. -->
+                <return_receipt_mode>none</return_receipt_mode>
+                <!-- Return shipments: offered, as in WooCommerce; hidden by
+                     itself once Pigeon Express refuses them for the account. -->
+                <reverse_shipments>1</reverse_shipments>
+                <!-- Courier request proposals, as in WooCommerce. -->
+                <courier_time_from>10:00</courier_time_from>
+                <courier_time_to>17:00</courier_time_to>
+                <courier_same_day_until>15:00</courier_same_day_until>
+                <courier_package_type>standard</courier_package_type>
+                <courier_instructions></courier_instructions>
+                <courier_contact_name></courier_contact_name>
+                <courier_contact_phone></courier_contact_phone>
+                <courier_contact_email></courier_contact_email>
+                <!-- Returns: as in WooCommerce, the account decides until told otherwise. -->
+                <return_at_my_expense>0</return_at_my_expense>
+                <return_to>profile</return_to>
+                <!-- A shipment costs money: never created by itself unless asked. -->
+                <auto_create>0</auto_create>
+                <status_sync>1</status_sync>
+                <order_on_delivery>none</order_on_delivery>
+                <order_on_return>none</order_on_return>
+                <create_magento_shipment>1</create_magento_shipment>
             </pigeonexpress>
         </carriers>
     </default>

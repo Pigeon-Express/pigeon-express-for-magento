@@ -37,7 +37,9 @@ class QuoteAddressLocationPersistor
         ?string $locationId,
         ?string $locationName,
         ?string $locationAddress,
-        ?string $instructions
+        ?string $instructions,
+        ?string $cityId = null,
+        ?string $streetId = null
     ): void {
         $conn = $this->resource->getConnection();
         $table = $this->resource->getTableName(self::TABLE);
@@ -50,6 +52,7 @@ class QuoteAddressLocationPersistor
             'pigeonexpress_location_address' => $locationAddress ?? '',
             'pigeonexpress_instructions' => $instructions ?? '',
         ];
+        $data += $this->idColumns($cityId, $streetId);
 
         $conn->insertOnDuplicate($table, $data, array_keys($data));
     }
@@ -58,7 +61,7 @@ class QuoteAddressLocationPersistor
      * Load location data by quote address id.
      *
      * @param int $addressId
-     * @return array{delivery_type: string, location_id: string, location_name: string, location_address: string, instructions: string}|null
+     * @return array{delivery_type: string, location_id: string, location_name: string, location_address: string, instructions: string, city_id: string, street_id: string}|null
      */
     public function getByAddressId(int $addressId): ?array
     {
@@ -73,6 +76,8 @@ class QuoteAddressLocationPersistor
                     'location_name' => 'pigeonexpress_location_name',
                     'location_address' => 'pigeonexpress_location_address',
                     'instructions' => 'pigeonexpress_instructions',
+                    'city_id' => 'pigeonexpress_city_id',
+                    'street_id' => 'pigeonexpress_street_id',
                 ])
                 ->where('address_id = ?', $addressId)
         );
@@ -87,6 +92,29 @@ class QuoteAddressLocationPersistor
             'location_name' => (string) $row['location_name'],
             'location_address' => (string) $row['location_address'],
             'instructions' => (string) $row['instructions'],
+            'city_id' => $row['city_id'] !== null ? (string) $row['city_id'] : '',
+            'street_id' => $row['street_id'] !== null ? (string) $row['street_id'] : '',
         ];
+    }
+
+    /**
+     * The id columns to write: an id as a number, '' as NULL (cleared), and
+     * nothing at all for null, so a save that does not know them (choosing an
+     * office) leaves what the address step stored.
+     *
+     * @return array<string, int|null>
+     */
+    private function idColumns(?string $cityId, ?string $streetId): array
+    {
+        $out = [];
+        foreach (['pigeonexpress_city_id' => $cityId, 'pigeonexpress_street_id' => $streetId] as $column => $value) {
+            if ($value === null) {
+                continue;
+            }
+            $value = trim($value);
+            $out[$column] = ctype_digit($value) && (int) $value > 0 ? (int) $value : null;
+        }
+
+        return $out;
     }
 }

@@ -70,6 +70,18 @@ body.pigeonexpress-shipping-active .shipping-address-item:not(:last-child) {
     line-height: 1.4;
 }
 
+/* Working hours, when the store shows them: a line of its own under the address. */
+.pigeonexpress-selected-hours {
+    color: #333;
+    flex-basis: 100%;
+    font-size: 1.2rem;
+    line-height: 1.4;
+}
+
+.pigeonexpress-selected-hours-label {
+    font-weight: 600;
+}
+
 /* Pushed to the far end of the row, away from the name it would otherwise read
    as part of. */
 .pigeonexpress-selected .pigeonexpress-change {

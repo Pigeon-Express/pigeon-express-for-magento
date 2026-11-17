@@ -107,4 +107,48 @@ class Shipment extends AbstractModel
     {
         return $this->getData('sent_at');
     }
+
+    /**
+     * The carrier's status code as last read, or '' before the first read.
+     * Not the same as getStatus(), which is the module's own lifecycle
+     * (created or cancelled here).
+     */
+    public function getStatusCode(): string
+    {
+        return (string) $this->getData('status_code');
+    }
+
+    public function getStatusName(): string
+    {
+        return (string) $this->getData('status_name');
+    }
+
+    /** When the carrier recorded the status, UTC "Y-m-d H:i:s", or null. */
+    public function getStatusAt(): ?string
+    {
+        $value = $this->getData('status_at');
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
+    /** When the status was last read from the carrier, UTC "Y-m-d H:i:s", or null. */
+    public function getStatusCheckedAt(): ?string
+    {
+        $value = $this->getData('status_checked_at');
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
+    /**
+     * The trimmed copy of the carrier's shipment details, or null when they
+     * were never read. See Model\Status\ShipmentDetailsStore.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getDetails(): ?array
+    {
+        $decoded = json_decode((string) $this->getData('details_json'), true);
+
+        return is_array($decoded) && isset($decoded['fetched_at']) ? $decoded : null;
+    }
 }

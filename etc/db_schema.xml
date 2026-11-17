@@ -14,6 +14,7 @@
         <column xsi:type="varchar" name="postcode" length="20" nullable="true" comment="Postcode"/>
         <column xsi:type="decimal" name="latitude" scale="8" precision="10" nullable="true" comment="Latitude"/>
         <column xsi:type="decimal" name="longitude" scale="8" precision="11" nullable="true" comment="Longitude"/>
+        <column xsi:type="text" name="working_hours" nullable="true" comment="Working hours as JSON: list of {day, open, close}"/>
         <column xsi:type="smallint" name="is_active" unsigned="true" nullable="false" default="1" comment="Is Active"/>
         <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
@@ -47,6 +48,7 @@
         <column xsi:type="varchar" name="postcode" length="20" nullable="true" comment="Postcode"/>
         <column xsi:type="decimal" name="latitude" scale="8" precision="10" nullable="true" comment="Latitude"/>
         <column xsi:type="decimal" name="longitude" scale="8" precision="11" nullable="true" comment="Longitude"/>
+        <column xsi:type="text" name="working_hours" nullable="true" comment="Working hours as JSON: list of {day, open, close}"/>
         <column xsi:type="smallint" name="is_active" unsigned="true" nullable="false" default="1" comment="Is Active"/>
         <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
@@ -99,6 +101,8 @@
         <column xsi:type="varchar" name="pigeonexpress_location_name" length="255" nullable="true" comment="Location name"/>
         <column xsi:type="text" name="pigeonexpress_location_address" nullable="true" comment="Location address"/>
         <column xsi:type="text" name="pigeonexpress_instructions" nullable="true" comment="Delivery instructions"/>
+        <column xsi:type="int" name="pigeonexpress_city_id" unsigned="true" nullable="true" comment="Pigeon Express city id chosen at checkout"/>
+        <column xsi:type="int" name="pigeonexpress_street_id" unsigned="true" nullable="true" comment="Pigeon Express street id chosen at checkout"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="address_id"/>
         </constraint>
@@ -114,6 +118,8 @@
         <column xsi:type="text" name="pigeonexpress_instructions" nullable="true" comment="Delivery instructions"/>
         <column xsi:type="decimal" name="pigeonexpress_delivery_price" precision="12" scale="4" nullable="true" comment="Delivery price at order place"/>
         <column xsi:type="smallint" name="pigeonexpress_free_shipping" unsigned="true" nullable="false" default="0" comment="Delivery was given away by a threshold or a cart rule"/>
+        <column xsi:type="int" name="pigeonexpress_city_id" unsigned="true" nullable="true" comment="Pigeon Express city id chosen at checkout"/>
+        <column xsi:type="int" name="pigeonexpress_street_id" unsigned="true" nullable="true" comment="Pigeon Express street id chosen at checkout"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="address_id"/>
         </constraint>
@@ -169,6 +175,12 @@
         <column xsi:type="text" name="payload" nullable="true" comment="JSON of request sent to API"/>
         <column xsi:type="text" name="response" nullable="true" comment="JSON of API response"/>
         <column xsi:type="text" name="form_fields" nullable="true" comment="JSON of the admin shipment form as sent, restored after a cancel"/>
+        <column xsi:type="varchar" name="status_code" length="64" nullable="true" comment="Carrier status code, as last read"/>
+        <column xsi:type="varchar" name="status_name" length="255" nullable="true" comment="Carrier name for that status"/>
+        <column xsi:type="datetime" name="status_at" nullable="true" comment="When the carrier recorded the status (UTC)"/>
+        <column xsi:type="datetime" name="status_checked_at" nullable="true" comment="Last successful status read (UTC)"/>
+        <column xsi:type="mediumtext" name="details_json" nullable="true" comment="Last GET /shipments/{ref} answer, trimmed, with fetched_at"/>
+        <column xsi:type="int" name="magento_shipment_id" unsigned="true" nullable="true" comment="Native Magento shipment (sales_shipment.entity_id)"/>
         <column xsi:type="timestamp" name="sent_at" on_update="false" nullable="true" default="CURRENT_TIMESTAMP" comment="Sent At"/>
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">
@@ -181,6 +193,124 @@
             <column name="order_id"/>
         </index>
         <index referenceId="PIGEONEXPRESS_SHIPMENT_REFERENCE_NUMBER" indexType="btree">
+            <column name="reference_number"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_SHIPMENT_STATUS_STATUS_CODE" indexType="btree">
+            <column name="status"/>
+            <column name="status_code"/>
+        </index>
+    </table>
+
+    <table name="pigeonexpress_auto_create" resource="default" engine="innodb"
+           comment="Pigeon Express orders waiting for an automatic shipment">
+        <column xsi:type="int" name="order_id" unsigned="true" nullable="false" comment="Order ID (sales_order.entity_id)"/>
+        <column xsi:type="varchar" name="status" length="16" nullable="false" default="pending"
+                comment="pending, running, done, skipped, failed or unknown"/>
+        <column xsi:type="smallint" name="attempts" unsigned="true" nullable="false" default="0" comment="Attempts made"/>
+        <column xsi:type="timestamp" name="run_after" nullable="false" default="CURRENT_TIMESTAMP" on_update="false"
+                comment="Not before this time"/>
+        <column xsi:type="text" name="message" nullable="true" comment="Last result"/>
+        <column xsi:type="timestamp" name="queued_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="false" comment="Queued At"/>
+        <column xsi:type="timestamp" name="updated_at" nullable="false" default="CURRENT_TIMESTAMP" on_update="true" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="order_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="PIGEONEXPRESS_AUTO_CREATE_ORDER_ID_SALES_ORDER_ENTITY_ID"
+                   table="pigeonexpress_auto_create" column="order_id"
+                   referenceTable="sales_order" referenceColumn="entity_id" onDelete="CASCADE"/>
+        <index referenceId="PIGEONEXPRESS_AUTO_CREATE_STATUS_RUN_AFTER" indexType="btree">
+            <column name="status"/>
+            <column name="run_after"/>
+        </index>
+    </table>
+    <!-- The return shipment of an order (is_reverse): a table of its own, not a
+         row in pigeonexpress_shipment, so nothing that reads the order's own
+         waybill (grid, status sync, labels, native shipment) can pick it up.
+         One live row per order (status created); cancelled rows are kept. -->
+    <table name="pigeonexpress_return_shipment" resource="default" engine="innodb" comment="Pigeon Express return shipments">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="order_id" unsigned="true" nullable="false" comment="Order ID (sales_order.entity_id)"/>
+        <column xsi:type="varchar" name="environment" length="4" nullable="false" default="live" comment="live or test"/>
+        <column xsi:type="varchar" name="reference_number" length="100" nullable="false" comment="Waybill number"/>
+        <column xsi:type="varchar" name="tracking_number" length="100" nullable="true" comment="Tracking number"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="created" comment="created or cancelled"/>
+        <column xsi:type="varchar" name="status_code" length="64" nullable="true" comment="Carrier status code, as last read"/>
+        <column xsi:type="varchar" name="status_name" length="255" nullable="true" comment="Carrier name for that status"/>
+        <column xsi:type="datetime" name="status_checked_at" nullable="true" comment="Last status read (UTC)"/>
+        <column xsi:type="mediumtext" name="details_json" nullable="true" comment="Last GET /shipments/{ref} answer, trimmed"/>
+        <column xsi:type="text" name="payload" nullable="true" comment="JSON of the body sent"/>
+        <column xsi:type="text" name="sent_json" nullable="true" comment="JSON of what was sent, as the panel shows it"/>
+        <column xsi:type="int" name="admin_user_id" unsigned="true" nullable="true" comment="Admin who created it"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="PIGEONEXPRESS_RETURN_SHIPMENT_ORDER_ID_SALES_ORDER_ENTITY_ID"
+                   table="pigeonexpress_return_shipment" column="order_id"
+                   referenceTable="sales_order" referenceColumn="entity_id" onDelete="CASCADE"/>
+        <index referenceId="PIGEONEXPRESS_RETURN_SHIPMENT_ORDER_ID_STATUS" indexType="btree">
+            <column name="order_id"/>
+            <column name="status"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_RETURN_SHIPMENT_REFERENCE_NUMBER" indexType="btree">
+            <column name="reference_number"/>
+        </index>
+    </table>
+
+    <!-- Courier requests made from this shop. The API has no list endpoint,
+         so the shop keeps its own. -->
+    <table name="pigeonexpress_courier_request" resource="default" engine="innodb" comment="Pigeon Express courier requests">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="varchar" name="request_number" length="64" nullable="false" comment="Request number, e.g. CR-458106744669"/>
+        <column xsi:type="varchar" name="environment" length="4" nullable="false" default="live" comment="live or test"/>
+        <column xsi:type="varchar" name="status_code" length="64" nullable="true" comment="Carrier status code"/>
+        <column xsi:type="varchar" name="status_name" length="255" nullable="true" comment="Carrier name for that status"/>
+        <column xsi:type="date" name="pickup_date" nullable="true" comment="Requested pickup date"/>
+        <column xsi:type="varchar" name="time_type" length="16" nullable="false" default="interval" comment="interval or specific_time"/>
+        <column xsi:type="varchar" name="time_from" length="5" nullable="true" comment="HH:MM"/>
+        <column xsi:type="varchar" name="time_to" length="5" nullable="true" comment="HH:MM"/>
+        <column xsi:type="text" name="address" nullable="true" comment="Pickup address as one line"/>
+        <column xsi:type="varchar" name="request_type" length="16" nullable="true" comment="single or groupage"/>
+        <column xsi:type="int" name="admin_user_id" unsigned="true" nullable="true" comment="Admin who made it"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <column xsi:type="datetime" name="checked_at" nullable="true" comment="Last status read (UTC)"/>
+        <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_COURIER_REQUEST_REQUEST_NUMBER_ENVIRONMENT">
+            <column name="request_number"/>
+            <column name="environment"/>
+        </constraint>
+        <index referenceId="PIGEONEXPRESS_COURIER_REQUEST_ENVIRONMENT_CREATED_AT" indexType="btree">
+            <column name="environment"/>
+            <column name="created_at"/>
+        </index>
+    </table>
+
+    <table name="pigeonexpress_courier_request_shipment" resource="default" engine="innodb" comment="Shipments in a Pigeon Express courier request">
+        <column xsi:type="int" name="entity_id" unsigned="true" nullable="false" identity="true" comment="Entity ID"/>
+        <column xsi:type="int" name="request_id" unsigned="true" nullable="false" comment="pigeonexpress_courier_request.entity_id"/>
+        <column xsi:type="int" name="order_id" unsigned="true" nullable="false" comment="Order ID (sales_order.entity_id)"/>
+        <column xsi:type="varchar" name="reference_number" length="100" nullable="false" comment="Waybill number"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="entity_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="PIGEONEXPRESS_COURIER_REQUEST_SHIPMENT_REQUEST_ID_PIGEONEXPRESS_COURIER_REQUEST_ENTITY_ID"
+                   table="pigeonexpress_courier_request_shipment" column="request_id"
+                   referenceTable="pigeonexpress_courier_request" referenceColumn="entity_id" onDelete="CASCADE"/>
+        <constraint xsi:type="foreign" referenceId="PIGEONEXPRESS_COURIER_REQUEST_SHIPMENT_ORDER_ID_SALES_ORDER_ENTITY_ID"
+                   table="pigeonexpress_courier_request_shipment" column="order_id"
+                   referenceTable="sales_order" referenceColumn="entity_id" onDelete="CASCADE"/>
+        <constraint xsi:type="unique" referenceId="PIGEONEXPRESS_COURIER_REQUEST_SHIPMENT_REQUEST_ID_REFERENCE_NUMBER">
+            <column name="request_id"/>
+            <column name="reference_number"/>
+        </constraint>
+        <index referenceId="PIGEONEXPRESS_COURIER_REQUEST_SHIPMENT_ORDER_ID" indexType="btree">
+            <column name="order_id"/>
+        </index>
+        <index referenceId="PIGEONEXPRESS_COURIER_REQUEST_SHIPMENT_REFERENCE_NUMBER" indexType="btree">
             <column name="reference_number"/>
         </index>
     </table>

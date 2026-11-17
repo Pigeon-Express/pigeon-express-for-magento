@@ -1,0 +1,45 @@
+<?php
+/**
+ * Order panel: the courier request of the shipment, or "Request a courier".
+ *
+ * @var \PigeonExpress\Shipping\Block\Adminhtml\Order\CourierRequest $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+if (!$block->isShown()) {
+    return;
+}
+$peState = $block->getState();
+$peRequest = $peState['request'];
+?>
+<div class="pe-panel pe-courier-slot" id="pe-courier-request">
+    <?php if ($peRequest !== null) : ?>
+    <div class="pe-status-row">
+        <span class="pe-status-label"><?= $escaper->escapeHtml(__('Courier request:')) ?></span>
+        <strong><?= $escaper->escapeHtml((string) $peRequest['request_number']) ?></strong>
+        <span class="pe-shipment-status pe-shipment-status--<?= $escaper->escapeHtmlAttr($block->statusTone($peRequest)) ?>"><?= $escaper->escapeHtml($block->statusLabel($peRequest)) ?></span>
+        <span class="pe-status-date"><?= $escaper->escapeHtml(__('Pickup: %1', $block->when($peRequest))) ?></span>
+        <form action="<?= $escaper->escapeUrl($block->getActionUrl('refresh', (string) $peRequest['request_number'])) ?>" method="post" class="pe-inline-form">
+            <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
+            <button type="submit" class="action-default scalable"><span><?= $escaper->escapeHtml(__('Refresh status')) ?></span></button>
+        </form>
+        <?php if ($block->canCancel($peRequest)) : ?>
+        <form action="<?= $escaper->escapeUrl($block->getActionUrl('cancel', (string) $peRequest['request_number'])) ?>" method="post" class="pe-inline-form"
+              data-mage-init='<?= $escaper->escapeHtmlAttr(json_encode([
+                  "PigeonExpress_Shipping/js/confirm-submit" => [
+                      "title" => (string) __("Cancel courier request %1?", (string) $peRequest['request_number']),
+                      "message" => (string) __("Pigeon Express will not send the courier for this request. The shipments stay as they are and can be put in a new request."),
+                  ],
+              ])) ?>'>
+            <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
+            <button type="submit" class="action-default scalable"><span><?= $escaper->escapeHtml(__('Cancel request')) ?></span></button>
+        </form>
+        <?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <?php if ($peState['can_request']) : ?>
+    <a href="<?= $escaper->escapeUrl($block->getNewUrl()) ?>" class="action-default scalable pe-action"
+       title="<?= $escaper->escapeHtmlAttr(__('Pigeon Express sends a courier to collect your shipments.')) ?>">
+        <span><?= $escaper->escapeHtml(__('Request a courier')) ?></span>
+    </a>
+    <?php endif; ?>
+</div>

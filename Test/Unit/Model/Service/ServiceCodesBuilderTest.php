@@ -12,6 +12,7 @@ use PHPUnit\Framework\TestCase;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Model\AdditionalService;
 use PigeonExpress\Shipping\Model\AdditionalServiceRepository;
+use PigeonExpress\Shipping\Model\Config\Source\ReturnReceiptMode;
 use PigeonExpress\Shipping\Model\Config\Source\ReviewAndTest;
 use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
 use Psr\Log\LoggerInterface;
@@ -184,11 +185,31 @@ class ServiceCodesBuilderTest extends TestCase
         $this->assertSame(250.0, $codes['declared_value']);
     }
 
-    public function testInsuranceIsSkippedWhenThereIsNoGoodsValue(): void
+    public function testFreeGoodsAreInsuredForTheMinimum(): void
+    {
+        // As in WooCommerce: the carrier refuses less than 1 EUR, so free
+        // goods go at the minimum rather than failing the shipment.
+        $this->config = $this->configWithInsurance();
+
+        $this->assertSame(1.0, $this->build('office', 'office', 0.0, true, 0.0)['declared_value']);
+    }
+
+    public function testExpensiveGoodsAreInsuredForTheMaximum(): void
     {
         $this->config = $this->configWithInsurance();
 
-        $this->assertArrayNotHasKey('declared_value', $this->build('office', 'office', 0.0, true, 0.0));
+        $this->assertSame(5000.0, $this->build('office', 'office', 0.0, true, 6200.0)['declared_value']);
+    }
+
+    public function testATypedAmountIsSentAsTyped(): void
+    {
+        $this->config = $this->configWithInsurance();
+
+        $codes = $this->buildWith($this->catalogue(self::CATALOGUE), 'office', 'office', 0.0, true, 6200.0, [
+            ServiceCodesBuilder::OVERRIDE_DECLARED_VALUE_AMOUNT => 120.5,
+        ]);
+
+        $this->assertSame(120.5, $codes['declared_value']);
     }
 
     public function testNoInsuranceWhenTheServiceIsOff(): void
@@ -257,7 +278,8 @@ class ServiceCodesBuilderTest extends TestCase
         string $apiType,
         float $cod,
         bool $includeCod = true,
-        float $goodsValue = 0.0
+        float $goodsValue = 0.0,
+        array $overrides = []
     ): array {
         $this->repository = $this->createMock(AdditionalServiceRepository::class);
         $this->repository->method('getActiveByCode')->willReturn($catalogue);
@@ -269,7 +291,7 @@ class ServiceCodesBuilderTest extends TestCase
 
         $builder = new ServiceCodesBuilder($this->config, $this->repository, $this->createMock(LoggerInterface::class));
 
-        return $builder->build($deliveryType, $apiType, 1, $cod, $includeCod, $goodsValue);
+        return $builder->build($deliveryType, $apiType, 1, $cod, $includeCod, $goodsValue, $overrides);
     }
 
     /**
@@ -291,6 +313,74 @@ class ServiceCodesBuilderTest extends TestCase
         return $catalogue;
     }
 
+    // --- Form overrides and the return receipt select ------------------------
+
+    public function testBothReturnReceiptsAreSentWhenBothAreChosen(): void
+    {
+        $this->config = $this->createMock(ConfigInterface::class);
+        $this->config->method('getReturnReceiptMode')->willReturn(ConfigInterface::RECEIPT_BOTH);
+
+        $codes = $this->build('address', 'address', 0.0);
+
+        $this->assertTrue($codes['return_receipt']);
+        $this->assertTrue($codes['paper_return_receipt']);
+    }
+
+    public function testTheFormReceiptChoiceReplacesTheSetting(): void
+    {
+        $this->config = $this->createMock(ConfigInterface::class);
+        $this->config->method('getReturnReceiptMode')->willReturn(ConfigInterface::RECEIPT_BOTH);
+
+        $codes = $this->buildWith($this->catalogue(self::CATALOGUE), 'office', 'office', 0.0, true, 0.0, ['return_receipt' => 'paper']);
+
+        $this->assertTrue($codes['paper_return_receipt']);
+        $this->assertArrayNotHasKey('return_receipt', $codes);
+    }
+
+    public function testTheFormInspectionChoiceReplacesThePerMethodSetting(): void
+    {
+        $this->config = $this->configWithReview(ReviewAndTest::REVIEW);
+
+        $codes = $this->buildWith($this->catalogue(self::CATALOGUE), 'office', 'office', 0.0, true, 0.0, ['review' => 'view_test']);
+        $this->assertTrue($codes['shipment_test_before_payment']);
+        $this->assertArrayNotHasKey('shipment_review', $codes);
+
+        $none = $this->buildWith($this->catalogue(self::CATALOGUE), 'office', 'office', 0.0, true, 0.0, ['review' => 'none']);
+        $this->assertArrayNotHasKey('shipment_review', $none);
+    }
+
+    public function testThePerMethodInspectionReachesTheShipment(): void
+    {
+        // In WooCommerce the services of the method settings never reached the
+        // shipment. Here the per delivery type setting is read for the type.
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('getReviewAndTest')->willReturnCallback(
+            static function (string $type): string {
+                return $type === 'address' ? ReviewAndTest::TEST : ReviewAndTest::NO;
+            }
+        );
+        $this->config = $config;
+
+        $this->assertTrue($this->build('address', 'address', 0.0)['shipment_test_before_payment']);
+        $this->assertArrayNotHasKey('shipment_test_before_payment', $this->build('office', 'office', 0.0));
+    }
+
+    public function testDeclaredValueCanBeSwitchedOnAndPricedOnTheForm(): void
+    {
+        $codes = $this->buildWith($this->catalogue(self::CATALOGUE), 'office', 'office', 0.0, true, 0.0, ['declared_value' => true, 'declared_value_amount' => 75.5]);
+
+        $this->assertSame(75.5, $codes['declared_value']);
+    }
+
+    public function testDeclaredValueOffOnTheFormWinsOverTheSetting(): void
+    {
+        $this->config = $this->configWithInsurance();
+
+        $codes = $this->buildWith($this->catalogue(self::CATALOGUE), 'office', 'office', 0.0, true, 0.0, ['declared_value' => false]);
+
+        $this->assertArrayNotHasKey('declared_value', $codes);
+    }
+
     /**
      * @param string[] $enabled Admin toggle codes that are switched on
      * @return ConfigInterface&MockObject
@@ -306,6 +396,11 @@ class ServiceCodesBuilderTest extends TestCase
                 return in_array($code, $enabled, true);
             }
         );
+        // The two receipt toggles of old are one select now.
+        $config->method('getReturnReceiptMode')->willReturn(ReturnReceiptMode::modeFor(
+            in_array('return_receipt', $enabled, true),
+            in_array('return_at_my_expense', $enabled, true)
+        ));
 
         return $config;
     }

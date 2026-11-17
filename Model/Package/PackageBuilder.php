@@ -41,6 +41,9 @@ class PackageBuilder
     /** API requires a positive weight. */
     public const MIN_WEIGHT = 0.1;
 
+    /** Longest package description the carrier accepts, in characters. */
+    public const DESCRIPTION_MAX_LENGTH = 500;
+
     /** @var ConfigInterface */
     private $config;
 
@@ -142,6 +145,114 @@ class PackageBuilder
         $box = $this->normalizeDimensions($dimensions, $deliveryType);
 
         return array_fill(0, $parcels, $box + ['weight' => round($each, 3)]);
+    }
+
+    /**
+     * Packages from the shipment form's package rows, each as the admin typed it.
+     *
+     * Blank rows are skipped. A row's own description and fragile tick travel
+     * on, for finish() to apply. The carrier's limits still apply, as they do
+     * to manual(). Null when no row describes a parcel.
+     *
+     * @param array<int, mixed> $rows {weight, length, width, height, description, fragile}
+     * @return array<int, array<string, mixed>>|null
+     * @throws UnshippableException
+     */
+    public function fromForm(array $rows, string $deliveryType, int $storeId): ?array
+    {
+        $packages = [];
+        $cap = $this->maxWeightFor($deliveryType, $storeId);
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $weight = (float) str_replace(',', '.', (string) ($row['weight'] ?? 0));
+            $sides = [];
+            foreach (['length', 'width', 'height'] as $side) {
+                $sides[$side] = (float) str_replace(',', '.', (string) ($row[$side] ?? 0));
+            }
+            $description = trim((string) ($row['description'] ?? ''));
+
+            if ($weight <= 0.0 && max($sides) <= 0.0 && $description === '') {
+                continue;
+            }
+
+            // A side left empty takes the store's default size, as in WooCommerce,
+            // so the carrier is not sent a parcel with no size.
+            $defaults = [
+                'length' => $this->config->getDefaultLength($storeId),
+                'width'  => $this->config->getDefaultWidth($storeId),
+                'height' => $this->config->getDefaultHeight($storeId),
+            ];
+            foreach ($sides as $side => $value) {
+                if ($value <= 0.0 && $defaults[$side] > 0.0) {
+                    $sides[$side] = $defaults[$side];
+                }
+            }
+
+            $weight = $this->normalizeWeight($weight);
+            if ($weight > $cap) {
+                throw new UnshippableException(__(
+                    'A parcel of %1 kg is too heavy. Pigeon Express carries at most %2 kg per parcel.',
+                    round($weight, 2),
+                    $cap
+                ));
+            }
+
+            $package = $this->normalizeDimensions($sides, $deliveryType) + ['weight' => round($weight, 3)];
+            $package['description'] = $description;
+            $package['fragile'] = !empty($row['fragile']);
+            $packages[] = $package;
+        }
+
+        if ($packages === []) {
+            return null;
+        }
+
+        if (count($packages) > self::MAX_PACKAGES_PER_SHIPMENT) {
+            throw new UnshippableException(__(
+                'One Pigeon Express waybill carries at most %1 parcels.',
+                self::MAX_PACKAGES_PER_SHIPMENT
+            ));
+        }
+
+        return $packages;
+    }
+
+    /**
+     * Put the description and the fragile mark on every package.
+     *
+     * The description is the package's own, from the shipment form, or the
+     * label contents setting. The fragile mark follows the Fragile packages
+     * setting: never, always, or as ticked on each package. Sent only when on,
+     * so a store that does not use it keeps sending what it sent before.
+     *
+     * @param array<int, array<string, mixed>> $packages
+     * @return array<int, array<string, mixed>>
+     */
+    public function finish(array $packages, string $description, int $storeId): array
+    {
+        $mode = $this->config->getFragileMode($storeId);
+        $description = trim($description);
+
+        foreach ($packages as $i => $package) {
+            $own = trim((string) ($package['description'] ?? ''));
+            $text = $own !== '' ? $own : $description;
+            unset($packages[$i]['description'], $packages[$i]['fragile'], $packages[$i]['is_fragile']);
+
+            if ($text !== '') {
+                $packages[$i]['description'] = mb_substr($text, 0, self::DESCRIPTION_MAX_LENGTH);
+            }
+
+            $fragile = $mode === ConfigInterface::FRAGILE_ALWAYS
+                || ($mode === ConfigInterface::FRAGILE_PER_PACKAGE && !empty($package['fragile']));
+            if ($fragile) {
+                $packages[$i]['is_fragile'] = true;
+            }
+        }
+
+        return array_values($packages);
     }
 
     /**

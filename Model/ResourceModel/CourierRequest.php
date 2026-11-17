@@ -1,0 +1,20 @@
+<?php
+/**
+ * Resource model of pigeonexpress_courier_request, for the admin listing.
+ *
+ * @copyright Copyright (c). All rights reserved.
+ */
+
+declare(strict_types=1);
+
+namespace PigeonExpress\Shipping\Model\ResourceModel;
+
+use Magento\Framework\Model\ResourceModel\Db\AbstractDb;
+
+class CourierRequest extends AbstractDb
+{
+    protected function _construct()
+    {
+        $this->_init('pigeonexpress_courier_request', 'entity_id');
+    }
+}

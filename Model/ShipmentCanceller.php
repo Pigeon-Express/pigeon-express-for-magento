@@ -15,12 +15,16 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model;
 
+use Magento\Framework\Event\ManagerInterface as EventManager;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Sales\Api\OrderRepositoryInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\ShipmentClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment as ShipmentResource;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment\CollectionFactory as ShipmentCollectionFactory;
+use PigeonExpress\Shipping\Model\Status\StatusCodes;
+use PigeonExpress\Shipping\Model\Status\StatusRecorder;
 use Psr\Log\LoggerInterface;
 
 class ShipmentCanceller
@@ -54,13 +58,23 @@ class ShipmentCanceller
     /** @var LoggerInterface */
     private $logger;
 
+    /** @var EventManager|null */
+    private $eventManager;
+
+    /** @var OrderRepositoryInterface|null */
+    private $orderRepository;
+
     public function __construct(
         ShipmentClientInterface $shipmentClient,
         ShipmentCollectionFactory $shipmentCollectionFactory,
         ShipmentResource $shipmentResource,
         ConfigInterface $config,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        ?EventManager $eventManager = null,
+        ?OrderRepositoryInterface $orderRepository = null
     ) {
+        $this->eventManager = $eventManager;
+        $this->orderRepository = $orderRepository;
         $this->shipmentClient = $shipmentClient;
         $this->shipmentCollectionFactory = $shipmentCollectionFactory;
         $this->shipmentResource = $shipmentResource;
@@ -91,7 +105,7 @@ class ShipmentCanceller
                 'Pigeon Express can only cancel a shipment before the courier collects it. '
                 . 'This one is now "%1". For further assistance, please contact our '
                 . 'customer service.',
-                (string) $shipment->getStatus()
+                $this->statusText($shipment)
             ));
         }
 
@@ -103,7 +117,12 @@ class ShipmentCanceller
         $this->shipmentClient->cancel($reference, $storeId);
 
         $shipment->setStatus(self::STATUS_CANCELLED);
+        $shipment->setData('status_code', StatusCodes::CANCELLED);
+        $shipment->setData('status_name', null);
+        $shipment->setData('status_at', gmdate('Y-m-d H:i:s'));
         $this->shipmentResource->save($shipment);
+
+        $this->dispatchCancelled($orderId, $shipment);
 
         if ($this->config->isLoggingEnabled($storeId)) {
             $this->logger->info('[PigeonExpress] Shipment cancelled', [
@@ -120,7 +139,37 @@ class ShipmentCanceller
      */
     public function isCancellable(Shipment $shipment): bool
     {
-        return in_array((string) $shipment->getStatus(), self::CANCELLABLE_STATUSES, true);
+        // The carrier status as last read decides once there is one: Pigeon
+        // Express cancels only while the shipment is newly registered.
+        return in_array((string) $shipment->getStatus(), self::CANCELLABLE_STATUSES, true)
+            && StatusCodes::isStillRegistered($shipment->getStatusCode());
+    }
+
+    private function statusText(Shipment $shipment): string
+    {
+        $code = $shipment->getStatusCode();
+        if ($code === '') {
+            return (string) $shipment->getStatus();
+        }
+        $label = StatusCodes::knownLabel($code);
+
+        return $label !== '' ? $label : ($shipment->getStatusName() !== '' ? $shipment->getStatusName() : $code);
+    }
+
+    private function dispatchCancelled(int $orderId, Shipment $shipment): void
+    {
+        if ($this->eventManager === null || $this->orderRepository === null) {
+            return;
+        }
+
+        try {
+            $this->eventManager->dispatch(StatusRecorder::EVENT_CANCELLED, [
+                'order'        => $this->orderRepository->get($orderId),
+                'shipment_row' => $shipment->getData(),
+            ]);
+        } catch (\Throwable $e) {
+            $this->logger->error('[PigeonExpress] Shipment cancelled observer failed: ' . $e->getMessage());
+        }
     }
 
     /**

@@ -1,0 +1,162 @@
+<?php
+/**
+ * The form of a new Pigeon Express courier request.
+ *
+ * @var \PigeonExpress\Shipping\Block\Adminhtml\Courier\Form $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+if (!$block->isAvailable()) : ?>
+<div class="message message-warning"><div><?= $escaper->escapeHtml($block->getUnavailableText()) ?></div></div>
+<?php return; endif;
+$peData = $block->getFormData();
+$peValues = $peData['values'];
+$peText = function (string $name, string $label, int $span = 6, array $attributes = []) use ($peValues, $escaper) {
+    $extra = '';
+    foreach ($attributes as $key => $value) {
+        $extra .= ' ' . $escaper->escapeHtmlAttr($key) . '="' . $escaper->escapeHtmlAttr((string) $value) . '"';
+    }
+
+    return '<div class="admin__field pe-span-' . $span . '"><span class="pe-label-row"><label class="admin__field-label" for="pe_cr_'
+        . $escaper->escapeHtmlAttr($name) . '"><span>' . $escaper->escapeHtml($label) . '</span></label></span>'
+        . '<div class="admin__field-control"><input type="text" class="admin__control-text" id="pe_cr_' . $escaper->escapeHtmlAttr($name)
+        . '" name="courier[' . $escaper->escapeHtmlAttr($name) . ']" value="' . $escaper->escapeHtmlAttr((string) ($peValues[$name] ?? '')) . '"'
+        . $extra . '/></div></div>';
+};
+$peSearch = function (string $name, string $label, string $url, string $placeholder, string $dependsOn = '') use ($peValues, $escaper) {
+    $config = ['url' => $url, 'noResults' => (string) __('No matches found.')];
+    if ($dependsOn !== '') {
+        $config['dependsOn'] = $dependsOn;
+    }
+
+    return '<div class="admin__field pe-span-6"><span class="pe-label-row"><label class="admin__field-label" for="pe_cr_' . $name . '"><span>'
+        . $escaper->escapeHtml($label) . '</span></label></span>'
+        . '<div class="admin__field-control" data-role="pe-search" data-pe-search="' . $escaper->escapeHtmlAttr((string) json_encode($config)) . '">'
+        . '<input type="text" class="admin__control-text" id="pe_cr_' . $name . '" name="courier[' . $name . '_label]"'
+        . ' value="' . $escaper->escapeHtmlAttr((string) $peValues[$name . '_label']) . '" placeholder="' . $escaper->escapeHtmlAttr($placeholder) . '"/>'
+        . '<input type="hidden" id="pe_cr_' . $name . '_id" name="courier[' . $name . '_id]" value="' . $escaper->escapeHtmlAttr((string) $peValues[$name . '_id']) . '"/>'
+        . '</div></div>';
+};
+$peRadio = function (string $name, string $value, string $label) use ($peValues, $escaper) {
+    return '<label class="pe-radio"><input type="radio" name="courier[' . $name . ']" value="' . $escaper->escapeHtmlAttr($value) . '"'
+        . ((string) $peValues[$name] === $value ? ' checked="checked"' : '') . '/> ' . $escaper->escapeHtml($label) . '</label>';
+};
+?>
+<form action="<?= $escaper->escapeUrl($block->getSaveUrl()) ?>" method="post"
+      class="pe-panel pigeonexpress-shipment-form pe-courier-form"
+      data-mage-init='<?= $escaper->escapeHtmlAttr(json_encode(["PigeonExpress_Shipping/js/courier-form" => new \stdClass()])) ?>'>
+    <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
+    <?php if ($block->getBackOrderId() > 0) : ?>
+    <input type="hidden" name="back_order_id" value="<?= (int) $block->getBackOrderId() ?>"/>
+    <?php endif; ?>
+    <p class="pe-intro"><?= $escaper->escapeHtml(__('Pigeon Express sends a courier to collect your shipments.')) ?></p>
+    <div class="pe-layout">
+    <div class="pe-column pe-column-main">
+    <section class="pe-box">
+        <h4 class="pe-section-title"><?= $escaper->escapeHtml(__('When')) ?></h4>
+        <div class="pe-grid">
+            <?= /* @noEscape */ $peText('pickup_date', (string) __('Date'), 4, ['type' => 'date', 'min' => $peData['proposal']['today']]) ?>
+            <div class="admin__field pe-span-8">
+                <span class="pe-label-row"><span class="admin__field-label"><span><?= $escaper->escapeHtml(__('Pickup time')) ?></span></span></span>
+                <div class="admin__field-control pe-radios">
+                    <?= /* @noEscape */ $peRadio('time_type', 'interval', (string) __('Interval')) ?>
+                    <?= /* @noEscape */ $peRadio('time_type', 'specific_time', (string) __('Exact time')) ?>
+                </div>
+            </div>
+            <?= /* @noEscape */ $peText('time_from', (string) __('From'), 3, ['type' => 'time']) ?>
+            <div data-role="pe-time-to" class="pe-span-3"><?= /* @noEscape */ $peText('time_to', (string) __('To'), 12, ['type' => 'time']) ?></div>
+        </div>
+        <p class="pe-hint"><?= $escaper->escapeHtml($block->getProposalText()) ?></p>
+    </section>
+    <section class="pe-box">
+        <h4 class="pe-section-title"><?= $escaper->escapeHtml(__('Pickup address')) ?></h4>
+        <?php if ($peData['saved'] !== []) : ?>
+        <div class="pe-radios">
+            <?= /* @noEscape */ $peRadio('address_mode', 'saved', (string) __('Saved address')) ?>
+            <?= /* @noEscape */ $peRadio('address_mode', 'other', (string) __('Other address')) ?>
+        </div>
+        <div class="pe-grid" data-pe-mode="saved">
+            <div class="admin__field pe-span-12"><div class="admin__field-control">
+                <select class="admin__control-select" name="courier[saved_address_id]">
+                <?php foreach ($peData['saved'] as $peId => $peLabel) : ?>
+                    <option value="<?= (int) $peId ?>"<?= (string) $peId === (string) $peValues['saved_address_id'] ? ' selected="selected"' : '' ?>><?= $escaper->escapeHtml($peLabel) ?></option>
+                <?php endforeach; ?>
+                </select>
+            </div></div>
+        </div>
+        <?php else : ?>
+        <input type="hidden" name="courier[address_mode]" value="other"/>
+        <?php endif; ?>
+        <div class="pe-grid" data-pe-mode="other">
+            <?= /* @noEscape */ $peSearch('city', (string) __('City'), $block->getCitySearchUrl(), (string) __('- Search for a city -')) ?>
+            <?= /* @noEscape */ $peSearch('street', (string) __('Street'), $block->getStreetSearchUrl(), (string) __('- Search for a street -'), '#pe_cr_city_id') ?>
+            <?= /* @noEscape */ $peText('street_number', (string) __('Street number'), 3, ['maxlength' => 20]) ?>
+            <?= /* @noEscape */ $peText('address_info', (string) __('Address details'), 9, ['placeholder' => (string) __('Block, entrance, floor, how to find you')]) ?>
+        </div>
+    </section>
+    <section class="pe-box">
+        <h4 class="pe-section-title"><?= $escaper->escapeHtml(__('Shipments to collect')) ?></h4>
+        <p class="pe-hint"><?= $escaper->escapeHtml(__('The shipments the courier should collect. Only shipments that are not collected yet and not in another request can be added.')) ?></p>
+        <?php if ($peData['shipments'] !== []) : ?>
+        <ul class="pe-courier-shipments">
+            <?php foreach ($peData['shipments'] as $peShipment) : ?>
+            <li>
+                <input type="hidden" name="courier[orders][]" value="<?= (int) $peShipment['order_id'] ?>"/>
+                <a href="<?= $escaper->escapeUrl($block->getOrderUrl((int) $peShipment['order_id'])) ?>"><?= $escaper->escapeHtml(__('Order no. %1', $peShipment['number'])) ?></a>
+                &middot; <?= $escaper->escapeHtml($peShipment['reference']) ?>
+                <?php if ($peShipment['weight'] > 0) : ?>&middot; <?= $escaper->escapeHtml(__('%1 kg', (string) $peShipment['weight'])) ?><?php endif; ?>
+            </li>
+            <?php endforeach; ?>
+        </ul>
+        <?php elseif ($block->getOrderIds() !== []) : ?>
+        <p class="pe-hint"><?= $escaper->escapeHtml(__('None of the selected orders has a shipment that can be added. You can still request a courier without shipments.')) ?></p>
+        <?php else : ?>
+        <p class="pe-hint"><?= $escaper->escapeHtml(__('To add shipments, select their orders in Sales > Orders and choose "Request a Pigeon Express courier", or use "Request a courier" on the order.')) ?></p>
+        <?php endif; ?>
+        <?php if ($peData['skipped'] !== []) : ?>
+        <p class="pe-hint"><strong><?= $escaper->escapeHtml(__('Left out:')) ?></strong></p>
+        <ul class="pe-courier-skipped">
+            <?php foreach ($peData['skipped'] as $peSkip) : ?>
+            <li><?= $escaper->escapeHtml(__('Order #%1: %2', $peSkip['number'], $peSkip['reason'])) ?></li>
+            <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+    </section>
+    </div>
+    <div class="pe-column pe-column-side">
+    <section class="pe-box">
+        <h4 class="pe-section-title"><?= $escaper->escapeHtml(__('Contact person')) ?></h4>
+        <p class="pe-hint"><?= $escaper->escapeHtml(__('Left empty, Pigeon Express uses the contact details of your account. The defaults come from the Courier request settings.')) ?></p>
+        <div class="pe-grid">
+            <?= /* @noEscape */ $peText('contact_name', (string) __('Contact person'), 12) ?>
+            <?= /* @noEscape */ $peText('contact_phone', (string) __('Phone'), 6) ?>
+            <?= /* @noEscape */ $peText('contact_email', (string) __('Email'), 6) ?>
+            <?= /* @noEscape */ $peText('company_name', (string) __('Company'), 12) ?>
+        </div>
+    </section>
+    <section class="pe-box">
+        <h4 class="pe-section-title"><?= $escaper->escapeHtml(__('More')) ?></h4>
+        <div class="pe-grid">
+            <div class="admin__field pe-span-6">
+                <span class="pe-label-row"><label class="admin__field-label" for="pe_cr_package_type"><span><?= $escaper->escapeHtml(__('Package type')) ?></span></label></span>
+                <div class="admin__field-control">
+                    <select class="admin__control-select" id="pe_cr_package_type" name="courier[package_type]">
+                    <?php foreach ($block->getPackageTypes() as $peType => $peLabel) : ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($peType) ?>"<?= $peType === $peValues['package_type'] ? ' selected="selected"' : '' ?>><?= $escaper->escapeHtml($peLabel) ?></option>
+                    <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+            <?= /* @noEscape */ $peText('weight', (string) __('Estimated weight (kg)'), 6, ['inputmode' => 'decimal']) ?>
+            <?= /* @noEscape */ $peText('length', (string) __('Length (cm)'), 4, ['inputmode' => 'decimal']) ?>
+            <?= /* @noEscape */ $peText('width', (string) __('Width (cm)'), 4, ['inputmode' => 'decimal']) ?>
+            <?= /* @noEscape */ $peText('height', (string) __('Height (cm)'), 4, ['inputmode' => 'decimal']) ?>
+            <?= /* @noEscape */ $peText('instructions', (string) __('Instructions for the courier'), 12) ?>
+        </div>
+    </section>
+    <div class="pe-buttons">
+        <a href="<?= $escaper->escapeUrl($block->getListUrl()) ?>" class="action-default scalable"><span><?= $escaper->escapeHtml(__('Back')) ?></span></a>
+        <button type="submit" class="action-primary scalable"><span><?= $escaper->escapeHtml(__('Request courier')) ?></span></button>
+    </div>
+    </div>
+    </div>
+</form>

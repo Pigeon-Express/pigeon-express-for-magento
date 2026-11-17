@@ -19,6 +19,32 @@ interface ConfigInterface
     public const PICKUP_TYPE_OFFICE = 'office';
     public const PICKUP_TYPE_ADDRESS = 'address';
 
+    /** Hand shipments in at a parcel locker; what does not fit goes to a fallback office. */
+    public const PICKUP_TYPE_LOCKER = 'locker';
+
+    /** The courier collects from an address saved in the Pigeon Express account. */
+    public const PICKUP_TYPE_SAVED_ADDRESS = 'saved_address';
+
+    /** Fragile packages: none, all, or as ticked on each package of the shipment form. */
+    public const FRAGILE_NEVER = 'never';
+    public const FRAGILE_ALWAYS = 'always';
+    public const FRAGILE_PER_PACKAGE = 'per_package';
+
+    /** Return receipt: one choice of four, each receipt still sent as its own service. */
+    public const RECEIPT_NONE = 'none';
+    public const RECEIPT_ELECTRONIC = 'electronic';
+    public const RECEIPT_PAPER = 'paper';
+    public const RECEIPT_BOTH = 'both';
+
+    /** Inspection before payment, as the shipment form names it. */
+    public const REVIEW_NONE = 'none';
+    public const REVIEW_VIEW = 'view';
+    public const REVIEW_VIEW_TEST = 'view_test';
+
+    /** Where undelivered shipments go: as the Pigeon Express account says, or a chosen office. */
+    public const RETURN_TO_PROFILE = 'profile';
+    public const RETURN_TO_OFFICE = 'office';
+
     /** Pigeon Express bills the merchant for the shipping. */
     public const WHO_PAYS_SENDER = 'sender';
 
@@ -42,21 +68,57 @@ interface ConfigInterface
      */
     public function isActive(?int $storeId = null): bool;
 
+    /** Config paths of the key pair kept for each environment (default scope only). */
+    public const XML_PATH_API_KEY_TEST = 'carriers/pigeonexpress/api_key_test';
+    public const XML_PATH_API_SECRET_TEST = 'carriers/pigeonexpress/api_secret_test';
+    public const XML_PATH_API_KEY_LIVE = 'carriers/pigeonexpress/api_key_live';
+    public const XML_PATH_API_SECRET_LIVE = 'carriers/pigeonexpress/api_secret_live';
+
+    /** The single pair used before keys were kept per environment. Read as a fallback only. */
+    public const XML_PATH_API_KEY_LEGACY = 'carriers/pigeonexpress/api_key';
+    public const XML_PATH_API_SECRET_LEGACY = 'carriers/pigeonexpress/api_secret';
+
+    public const XML_PATH_TEST_MODE = 'carriers/pigeonexpress/test_mode';
+
+    /** Yes/No: the label is printed without the contents line. */
+    public const XML_PATH_HIDE_CONTENT_ON_LABEL = 'carriers/pigeonexpress/hide_content_on_label';
+
+    /** One select for both return receipts; replaces service_return_receipt and service_return_at_my_expense. */
+    public const XML_PATH_RETURN_RECEIPT_MODE = 'carriers/pigeonexpress/return_receipt_mode';
+
+    /** Yes/No: the top level return_at_my_expense flag. Not the paper receipt of old. */
+    public const XML_PATH_RETURN_AT_MY_EXPENSE = 'carriers/pigeonexpress/return_at_my_expense';
+
+    /** Yes/No: create the shipment in the background when the order reaches Processing. */
+    public const XML_PATH_AUTO_CREATE = 'carriers/pigeonexpress/auto_create';
+
     /**
-     * Get API key (decrypted).
+     * API key of the active environment (test or live), decrypted.
      *
-     * @param int|null $storeId
-     * @return string
+     * The pair of the environment chosen with Test Mode. The single key of
+     * earlier versions is used only while neither environment has a key of its
+     * own, so a store upgraded without running the data patch keeps working.
+     *
+     * @param int|null $storeId Ignored: the account is global
+     * @return string Empty when not configured
      */
     public function getApiKey(?int $storeId = null): string;
 
     /**
-     * Get API secret (decrypted). If not set, same as API key.
+     * API secret of the active environment, decrypted. If not set, same as the API key.
      *
-     * @param int|null $storeId
+     * @param int|null $storeId Ignored: the account is global
      * @return string
      */
     public function getApiSecret(?int $storeId = null): string;
+
+    /**
+     * Whether new shipments ask Pigeon Express to leave the contents line off the label.
+     *
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isHideContentOnLabel(?int $storeId = null): bool;
 
     /**
      * Is test mode enabled.
@@ -269,7 +331,7 @@ interface ConfigInterface
     public function getParcelDefaultsMode(?int $storeId = null): string;
 
     /**
-     * Pickup location type: 'office' or 'address'.
+     * Pickup location type: 'office', 'address', 'locker' or 'saved_address'.
      *
      * @param int|null $storeId
      * @return string
@@ -432,4 +494,109 @@ interface ConfigInterface
      * @return string
      */
     public function getReviewAndTest(string $deliveryType, ?int $storeId = null): string;
+
+    /**
+     * Fragile mark on packages: never, always, or per package as ticked on the
+     * shipment form.
+     *
+     * @param int|null $storeId
+     * @return string One of the FRAGILE_* constants
+     */
+    public function getFragileMode(?int $storeId = null): string;
+
+    /**
+     * Return receipt for new shipments: none, electronic, paper or both.
+     *
+     * @param int|null $storeId
+     * @return string One of the RECEIPT_* constants
+     */
+    public function getReturnReceiptMode(?int $storeId = null): string;
+
+    /**
+     * Inspection before payment for a delivery type, as the shipment form names
+     * it: none, view or view_test. Read from the per method setting.
+     *
+     * @param string $deliveryType One of address, office, aps
+     * @param int|null $storeId
+     * @return string One of the REVIEW_* constants
+     */
+    public function getReviewMode(string $deliveryType, ?int $storeId = null): string;
+
+    /**
+     * Whether every new shipment carries the declared value service.
+     *
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isDeclaredValueAlways(?int $storeId = null): bool;
+
+    /**
+     * Whether an undeliverable shipment comes back at the sender's cost
+     * (top level return_at_my_expense).
+     *
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isReturnAtMyExpense(?int $storeId = null): bool;
+
+    /**
+     * The office refused or uncollected shipments go back to, or null when the
+     * Pigeon Express account decides. A chosen office with no office given
+     * counts as the account setting.
+     *
+     * @param int|null $storeId
+     * @return int|null
+     */
+    public function getReturnOfficeId(?int $storeId = null): ?int;
+
+    /**
+     * The parcel locker shipments are handed in at (pickup type locker).
+     *
+     * @param int|null $storeId
+     * @return int|null
+     */
+    public function getPickupLockerId(?int $storeId = null): ?int;
+
+    /**
+     * The office a shipment goes to instead when it does not fit the locker.
+     *
+     * @param int|null $storeId
+     * @return int|null
+     */
+    public function getPickupFallbackOfficeId(?int $storeId = null): ?int;
+
+    /**
+     * Id of the address saved in the Pigeon Express account (pickup type saved_address).
+     *
+     * @param int|null $storeId
+     * @return int|null
+     */
+    public function getPickupSavedAddressId(?int $storeId = null): ?int;
+
+    /**
+     * Whether checkout shows the working hours of the chosen office or locker.
+     *
+     * @param string $deliveryType One of office, aps
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isShowWorkingHours(string $deliveryType, ?int $storeId = null): bool;
+
+    /**
+     * Price charged when Pigeon Express cannot price the delivery, or null to
+     * hide the method then. Zero is a real price.
+     *
+     * @param string $deliveryType One of address, office, aps
+     * @param int|null $storeId
+     * @return float|null
+     */
+    public function getFallbackPrice(string $deliveryType, ?int $storeId = null): ?float;
+
+    /**
+     * Whether shipments are created in the background when the order reaches Processing.
+     *
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isAutoCreateEnabled(?int $storeId = null): bool;
 }

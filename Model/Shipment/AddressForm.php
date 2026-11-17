@@ -22,7 +22,9 @@ namespace PigeonExpress\Shipping\Model\Shipment;
 use Magento\Sales\Api\Data\OrderAddressInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Model\Api\AddressResolver;
+use PigeonExpress\Shipping\Model\Phone\BulgarianPhone;
 use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
+use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
 use PigeonExpress\Shipping\Model\ShipmentSender;
 
 class AddressForm
@@ -34,12 +36,11 @@ class AddressForm
     public const SEVERITY_WARNING = 'warning';
 
     /**
-     * Shortest thing that can still be a phone number anywhere.
-     *
-     * Deliberately low. This is here to catch a field somebody typed "n/a" or a
-     * house number into, not to validate dialling plans.
+     * Longest courier note Pigeon Express accepts, in characters. The checkout
+     * field and the order form are limited to the same, so nothing is cut off
+     * silently on the way.
      */
-    private const MIN_PHONE_DIGITS = 8;
+    public const NOTE_MAX_LENGTH = 500;
 
     /**
      * Every field the form posts. Anything outside this list is ignored, so a
@@ -77,6 +78,46 @@ class AddressForm
      */
     public const PARCEL_FIELDS = ['weight', 'length', 'width', 'height', 'parcels'];
 
+    /**
+     * Inspection before payment, one per shipment: none, look only, or look
+     * and try. Pigeon Express offers it only where somebody hands the parcel
+     * over, so never at a locker.
+     */
+    public const REVIEW_NONE = 'none';
+    public const REVIEW_VIEW = 'view';
+    public const REVIEW_VIEW_TEST = 'view_test';
+    public const REVIEW_VALUES = [self::REVIEW_NONE, self::REVIEW_VIEW, self::REVIEW_VIEW_TEST];
+
+    /** Return receipt, one per shipment. Electronic and paper are charged separately. */
+    public const RECEIPT_NONE = 'none';
+    public const RECEIPT_ELECTRONIC = 'electronic';
+    public const RECEIPT_PAPER = 'paper';
+    public const RECEIPT_BOTH = 'both';
+    public const RECEIPT_VALUES = [
+        self::RECEIPT_NONE,
+        self::RECEIPT_ELECTRONIC,
+        self::RECEIPT_PAPER,
+        self::RECEIPT_BOTH,
+    ];
+
+    /** Which packages may carry the fragile mark, as the store setting says. */
+    public const FRAGILE_NEVER = 'never';
+    public const FRAGILE_ALWAYS = 'always';
+    public const FRAGILE_PER_PACKAGE = 'per_package';
+
+    /** Longest description one package row may carry. */
+    public const PACKAGE_DESCRIPTION_MAX_LENGTH = 100;
+
+    /**
+     * Why the form suggests the side it does, when the admin has not picked one.
+     * The order panel names the rule, so a merchant who expected the other side
+     * knows which setting, or which fact about the order, decided it.
+     */
+    public const WHO_PAYS_RULE_FREE_SHIPPING = 'free_shipping';
+    public const WHO_PAYS_RULE_FIXED_PRICE = 'fixed_price';
+    public const WHO_PAYS_RULE_COD = 'cod';
+    public const WHO_PAYS_RULE_PREPAID = 'prepaid';
+
     /** Fields that only make sense when the parcel goes to a street address. */
     private const ADDRESS_ONLY_FIELDS = [
         'city',
@@ -106,14 +147,20 @@ class AddressForm
     /** @var ConfigInterface */
     private $config;
 
+    /** @var \PigeonExpress\Shipping\Model\OrderAddressLocationPersistor|null */
+    private $locationPersistor;
+
     public function __construct(
         AddressResolver $resolver,
         LocationToApiIdResolver $locations,
-        ConfigInterface $config
+        ConfigInterface $config,
+        ?\PigeonExpress\Shipping\Model\OrderAddressLocationPersistor $locationPersistor = null
     ) {
         $this->resolver = $resolver;
         $this->locations = $locations;
         $this->config = $config;
+        // Configured in di.xml: an optional argument is otherwise left null.
+        $this->locationPersistor = $locationPersistor;
     }
 
     /**
@@ -132,19 +179,80 @@ class AddressForm
      *
      * @param array<string, string> $fields
      */
-    public function whoPays(array $fields, ?int $storeId = null, bool $freeShipping = false): string
-    {
+    public function whoPays(
+        array $fields,
+        ?int $storeId = null,
+        bool $freeShipping = false,
+        bool $fixedPrice = false
+    ): string {
         $value = (string) ($fields['who_pays'] ?? '');
 
         if ($value === ConfigInterface::WHO_PAYS_SENDER || $value === ConfigInterface::WHO_PAYS_RECEIVER) {
             return $value;
         }
 
-        if ($freeShipping) {
+        // A fixed price was what the customer agreed to pay the shop. Billing
+        // the recipient as well would have the courier charge the carrier's own
+        // price at the door on top of it.
+        if ($freeShipping || $fixedPrice) {
             return ConfigInterface::WHO_PAYS_SENDER;
         }
 
         return $this->config->getWhoPays($storeId);
+    }
+
+    /**
+     * Which rule sets the suggested side for an order. Free shipping first,
+     * then a fixed price, then cash on delivery or not.
+     */
+    public function whoPaysRule(bool $isCod, bool $freeShipping, bool $fixedPrice = false): string
+    {
+        if ($freeShipping) {
+            return self::WHO_PAYS_RULE_FREE_SHIPPING;
+        }
+
+        if ($fixedPrice) {
+            return self::WHO_PAYS_RULE_FIXED_PRICE;
+        }
+
+        return $isCod ? self::WHO_PAYS_RULE_COD : self::WHO_PAYS_RULE_PREPAID;
+    }
+
+    /**
+     * The side a rule suggests: the store setting for a cash on delivery
+     * order, the sender for everything else.
+     */
+    public function defaultWhoPays(string $rule, ?int $storeId = null): string
+    {
+        return $rule === self::WHO_PAYS_RULE_COD
+            ? $this->config->getWhoPays($storeId)
+            : ConfigInterface::WHO_PAYS_SENDER;
+    }
+
+    /**
+     * The sentence under the Who pays control that names the rule behind the
+     * suggestion, worded as in the WooCommerce plugin.
+     */
+    public function whoPaysReason(string $rule, ?int $storeId = null): string
+    {
+        switch ($rule) {
+            case self::WHO_PAYS_RULE_FREE_SHIPPING:
+                return (string) __(
+                    'Pigeon Express still invoices somebody for it. Leave this on Sender unless you mean '
+                    . 'the courier to collect from the recipient.'
+                );
+            case self::WHO_PAYS_RULE_FIXED_PRICE:
+                return (string) __('Default: Sender, because the customer was charged your fixed delivery price.');
+            case self::WHO_PAYS_RULE_COD:
+                return $this->defaultWhoPays($rule, $storeId) === ConfigInterface::WHO_PAYS_RECEIVER
+                    ? (string) __('Default: Receiver (the setting for cash on delivery orders).')
+                    : (string) __('Default: Sender (the setting for cash on delivery orders).');
+            default:
+                return (string) __(
+                    'Default: Sender, because the order is not cash on delivery: the customer pays the shop '
+                    . 'for delivery.'
+                );
+        }
     }
 
     /**
@@ -230,7 +338,42 @@ class AddressForm
             $fields[$key] = $value;
         }
 
+        // The city and street the customer picked from the carrier's lists at
+        // checkout, when they did: no guessing a street by its name, which is
+        // ambiguous where two streets share one (Sofia has two called ВИТОША).
+        foreach ($this->checkoutIds($address) as $key => $id) {
+            $id = trim((string) $id);
+            if (ctype_digit($id) && (int) $id > 0) {
+                $fields[$key] = $id;
+            }
+        }
+
         return $fields;
+    }
+
+    /**
+     * The city and street ids stored with the order address at checkout.
+     * Read from the address itself when it carries them, else from the table,
+     * because an address loaded with its order skips the load plugins.
+     *
+     * @return array{city_id?: mixed, street_id?: mixed}
+     */
+    private function checkoutIds(OrderAddressInterface $address): array
+    {
+        $ext = $address->getExtensionAttributes();
+        if ($ext !== null && method_exists($ext, 'getPigeonexpressStreetId')
+            && ((string) $ext->getPigeonexpressStreetId() !== '' || (string) $ext->getPigeonexpressCityId() !== '')
+        ) {
+            return ['city_id' => $ext->getPigeonexpressCityId(), 'street_id' => $ext->getPigeonexpressStreetId()];
+        }
+
+        if ($this->locationPersistor === null || !$address->getEntityId()) {
+            return [];
+        }
+
+        $row = $this->locationPersistor->getByAddressId((int) $address->getEntityId());
+
+        return $row === null ? [] : ['city_id' => $row['city_id'] ?? '', 'street_id' => $row['street_id'] ?? ''];
     }
 
     /**
@@ -260,7 +403,74 @@ class AddressForm
 
         $fields['delivery_type'] = $this->deliveryType($fields);
 
+        // The package rows and the services are not plain strings, so they are
+        // taken one by one and only when they were sent. A key that is missing
+        // means "as the settings say", which is what a form stored before
+        // these existed must come back as.
+        if (isset($submitted['packages']) && is_array($submitted['packages'])) {
+            $fields['packages'] = $this->packageRowsFromRequest($submitted['packages']);
+        }
+
+        if (array_key_exists('declared_value', $submitted) && !is_array($submitted['declared_value'])) {
+            $fields['declared_value'] = $this->flag($submitted['declared_value']);
+        }
+
+        if (array_key_exists('declared_value_amount', $submitted) && !is_array($submitted['declared_value_amount'])) {
+            $fields['declared_value_amount'] = $submitted['declared_value_amount'] === null
+                ? ''
+                : trim((string) $submitted['declared_value_amount']);
+        }
+
+        foreach (['review' => self::REVIEW_VALUES, 'return_receipt' => self::RECEIPT_VALUES] as $key => $allowed) {
+            if (isset($submitted[$key]) && is_string($submitted[$key]) && in_array($submitted[$key], $allowed, true)) {
+                $fields[$key] = $submitted[$key];
+            }
+        }
+
         return $fields;
+    }
+
+    /**
+     * Package rows as posted, or as stored by an earlier shipment, reduced to
+     * the keys a row has. Values stay as typed; validate() checks them.
+     *
+     * @param array<mixed> $rows
+     * @return array<int, array{weight:string, length:string, width:string, height:string, description:string, fragile:bool}>
+     */
+    private function packageRowsFromRequest(array $rows): array
+    {
+        $clean = [];
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $item = [];
+            foreach (['weight', 'length', 'width', 'height', 'description'] as $key) {
+                $value = $row[$key] ?? '';
+                $item[$key] = is_scalar($value) ? trim((string) $value) : '';
+            }
+            $item['fragile'] = $this->flag($row['fragile'] ?? false);
+
+            $clean[] = $item;
+        }
+
+        return $clean;
+    }
+
+    /**
+     * A checkbox or a stored flag as a boolean: "1", "on", "true", true and 1.
+     *
+     * @param mixed $value
+     */
+    private function flag($value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        return is_scalar($value) && in_array(strtolower(trim((string) $value)), ['1', 'on', 'true', 'yes'], true);
     }
 
     /**
@@ -270,19 +480,28 @@ class AddressForm
      * the address is fine should not be prevented from shipping by a street the
      * carrier has never heard of.
      *
-     * @param array<string, string> $fields
+     * Besides the address it settles the package rows (`packages`) and the
+     * per-shipment services (`declared_value`, `declared_value_amount`,
+     * `review`, `return_receipt`), filling from the settings whatever was not
+     * sent, so the result always carries every service key.
+     *
+     * @param array<string, mixed> $fields
      * @param bool $freeShipping The customer has nothing left to pay for this delivery:
      *                           it was free, or the order was paid online
-     * @return array{fields: array<string, string>, issues: array<string, array{severity:string, message:string}>}
+     * @param bool $fixedPrice   The customer was charged the shop's fixed delivery price
+     * @return array{fields: array<string, mixed>, issues: array<string, array{severity:string, message:string}>}
      */
-    public function validate(array $fields, int $storeId, bool $freeShipping = false): array
+    public function validate(array $fields, int $storeId, bool $freeShipping = false, bool $fixedPrice = false): array
     {
         $fields = array_merge($this->blank(), $fields);
         $fields['delivery_type'] = $this->deliveryType($fields);
-        $fields['who_pays'] = $this->whoPays($fields, $storeId, $freeShipping);
+        $fields['who_pays'] = $this->whoPays($fields, $storeId, $freeShipping, $fixedPrice);
+        $fields['note'] = mb_substr(trim((string) $fields['note']), 0, self::NOTE_MAX_LENGTH);
         $issues = [];
 
-        $this->checkParcel($fields, $issues);
+        $this->checkCodAmount($fields, $issues);
+        $this->checkPackages($fields, $issues, $storeId);
+        $this->checkServices($fields, $issues, $storeId);
 
         if ($fields['contact_name'] === '') {
             $issues['contact_name'] = $this->issue(
@@ -302,7 +521,7 @@ class AddressForm
             // A number too short to dial is the worst case of all: Pigeon Express
             // looks the recipient up by phone, so a wrong one can attach the
             // parcel to somebody else's stored address.
-            if (strlen((string) preg_replace('/\D/', '', $fields['contact_phone'])) < self::MIN_PHONE_DIGITS) {
+            if (!BulgarianPhone::isValid($fields['contact_phone'])) {
                 $issues['contact_phone'] = $this->issue(
                     self::SEVERITY_ERROR,
                     (string) __('"%1" is not a usable phone number. Check it with the customer.', $fields['contact_phone'])
@@ -378,45 +597,373 @@ class AddressForm
     }
 
     /**
-     * Check the parcel figures and write them back in one notation.
+     * Check the cash on delivery amount and write it back in one notation.
      *
      * Commas are accepted, because that is how a Bulgarian keyboard types a
      * decimal. Empty is fine: it means "as worked out from the order".
      *
-     * @param array<string, string> $fields
+     * @param array<string, mixed> $fields
      * @param array<string, array{severity:string, message:string}> $issues
      */
-    private function checkParcel(array &$fields, array &$issues): void
+    private function checkCodAmount(array &$fields, array &$issues): void
     {
-        foreach (array_merge(['cod_amount'], self::PARCEL_FIELDS) as $field) {
-            $raw = trim((string) ($fields[$field] ?? ''));
-            if ($raw === '') {
-                $fields[$field] = '';
-                continue;
-            }
+        $raw = trim((string) ($fields['cod_amount'] ?? ''));
+        if ($raw === '') {
+            $fields['cod_amount'] = '';
 
-            $value = $this->number($raw);
-            $positive = $field !== 'cod_amount';
-            if ($value === null || $value < 0 || ($positive && $value <= 0)) {
-                $issues[$field] = $this->issue(
-                    self::SEVERITY_ERROR,
-                    $positive
-                        ? (string) __('Please enter a number greater than zero.')
-                        : (string) __('Please enter an amount, or 0 for no cash on delivery.')
-                );
-                continue;
-            }
-
-            if ($field === 'parcels' && floor($value) !== $value) {
-                $issues[$field] = $this->issue(
-                    self::SEVERITY_ERROR,
-                    (string) __('The number of parcels must be a whole number.')
-                );
-                continue;
-            }
-
-            $fields[$field] = $field === 'parcels' ? (string) (int) $value : (string) $value;
+            return;
         }
+
+        $value = $this->number($raw);
+        if ($value === null || $value < 0) {
+            $issues['cod_amount'] = $this->issue(
+                self::SEVERITY_ERROR,
+                (string) __('Please enter an amount, or 0 for no cash on delivery.')
+            );
+
+            return;
+        }
+
+        $fields['cod_amount'] = (string) $value;
+    }
+
+    /**
+     * Check the package rows and write them back in one notation.
+     *
+     * A form stored before rows existed carries a total weight, a parcel count
+     * and one size instead. Those become that many equal rows here, so the
+     * admin sees them as rows, and the old fields are emptied: two ways of
+     * saying the same thing would sooner or later say different things.
+     *
+     * No rows at all leaves the parcels to be worked out from the order, as
+     * before. A row left completely empty is dropped; a row that is partly
+     * wrong is kept as typed, so the admin can correct it.
+     *
+     * @param array<string, mixed> $fields
+     * @param array<string, array{severity:string, message:string}> $issues
+     */
+    private function checkPackages(array &$fields, array &$issues, int $storeId): void
+    {
+        $rows = isset($fields['packages']) && is_array($fields['packages'])
+            ? $fields['packages']
+            : $this->rowsFromOldTotals($fields, $storeId);
+
+        foreach (self::PARCEL_FIELDS as $field) {
+            $fields[$field] = '';
+        }
+
+        if ($rows === null) {
+            unset($fields['packages']);
+
+            return;
+        }
+
+        $mode = $this->fragileMode($storeId);
+        $defaults = [
+            'length' => $this->config->getDefaultLength($storeId),
+            'width'  => $this->config->getDefaultWidth($storeId),
+            'height' => $this->config->getDefaultHeight($storeId),
+        ];
+
+        $clean = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $raw = [];
+            foreach (['weight', 'length', 'width', 'height', 'description'] as $key) {
+                $value = $row[$key] ?? '';
+                $raw[$key] = is_scalar($value) ? trim((string) $value) : '';
+            }
+
+            if (implode('', $raw) === '') {
+                continue;
+            }
+
+            $number = count($clean) + 1;
+            $item = [
+                'weight'      => $raw['weight'],
+                'length'      => $raw['length'],
+                'width'       => $raw['width'],
+                'height'      => $raw['height'],
+                'description' => mb_substr($raw['description'], 0, self::PACKAGE_DESCRIPTION_MAX_LENGTH),
+                'fragile'     => $this->fragileFor($mode, $row['fragile'] ?? false),
+            ];
+
+            $weight = $this->number($raw['weight']);
+            if ($weight === null || $weight <= 0) {
+                $issues['packages'] = $issues['packages'] ?? $this->issue(
+                    self::SEVERITY_ERROR,
+                    (string) __('Package %1: please enter a weight greater than zero.', $number)
+                );
+            } else {
+                $item['weight'] = round($weight, 3);
+            }
+
+            foreach (['length', 'width', 'height'] as $dimension) {
+                if ($raw[$dimension] === '') {
+                    // Left empty: the store's default box, as the order itself would get.
+                    $item[$dimension] = max(1, (int) ceil((float) $defaults[$dimension]));
+                    continue;
+                }
+
+                $size = $this->number($raw[$dimension]);
+                if ($size === null || $size <= 0) {
+                    $issues['packages'] = $issues['packages'] ?? $this->issue(
+                        self::SEVERITY_ERROR,
+                        (string) __('Package %1: please enter the size in centimetres, greater than zero.', $number)
+                    );
+                    continue;
+                }
+
+                $item[$dimension] = (int) ceil($size);
+            }
+
+            $clean[] = $item;
+        }
+
+        if ($clean === []) {
+            $issues['packages'] = $this->issue(
+                self::SEVERITY_ERROR,
+                (string) __('Add at least one package.')
+            );
+        }
+
+        $fields['packages'] = $clean;
+    }
+
+    /**
+     * Only the package part of validate(), for a caller that needs the rows
+     * and nothing else (the hand-in point), without looking up the address.
+     *
+     * @param array<string, mixed> $fields
+     * @return array{fields: array<string, mixed>, issues: array<string, array{severity:string, message:string}>}
+     */
+    public function validatePackages(array $fields, int $storeId): array
+    {
+        $issues = [];
+        $this->checkPackages($fields, $issues, $storeId);
+
+        return ['fields' => $fields, 'issues' => $issues];
+    }
+
+    /**
+     * The old total weight, parcel count and size as equal package rows, or
+     * null when the form did not carry them.
+     *
+     * @param array<string, mixed> $fields
+     * @return array<int, array<string, mixed>>|null
+     */
+    private function rowsFromOldTotals(array $fields, int $storeId): ?array
+    {
+        $parcel = $this->parcel($fields);
+        if ($parcel === null || $parcel['parcels'] < 1) {
+            return null;
+        }
+
+        $fragile = $this->fragileMode($storeId) === self::FRAGILE_ALWAYS;
+        $rows = [];
+        for ($i = 0; $i < $parcel['parcels']; $i++) {
+            $rows[] = [
+                'weight'      => (string) round($parcel['weight'] / $parcel['parcels'], 3),
+                'length'      => (string) $parcel['length'],
+                'width'       => (string) $parcel['width'],
+                'height'      => (string) $parcel['height'],
+                'description' => '',
+                'fragile'     => $fragile,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The checked package rows of a form, or null when the parcels are left to
+     * be worked out from the order.
+     *
+     * @param array<string, mixed> $fields Checked form values
+     * @return array<int, array{weight:float, length:int, width:int, height:int, description:string, fragile:bool}>|null
+     */
+    public function packages(array $fields): ?array
+    {
+        if (empty($fields['packages']) || !is_array($fields['packages'])) {
+            return null;
+        }
+
+        $rows = [];
+        foreach ($fields['packages'] as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+            $rows[] = [
+                'weight'      => (float) ($row['weight'] ?? 0),
+                'length'      => (int) ($row['length'] ?? 0),
+                'width'       => (int) ($row['width'] ?? 0),
+                'height'      => (int) ($row['height'] ?? 0),
+                'description' => (string) ($row['description'] ?? ''),
+                'fragile'     => !empty($row['fragile']),
+            ];
+        }
+
+        return $rows === [] ? null : $rows;
+    }
+
+    /**
+     * Which packages may be marked fragile, as the store setting says.
+     */
+    public function fragileMode(?int $storeId = null): string
+    {
+        $mode = method_exists($this->config, 'getFragileMode')
+            ? (string) $this->config->getFragileMode($storeId)
+            : self::FRAGILE_NEVER;
+
+        return in_array($mode, [self::FRAGILE_NEVER, self::FRAGILE_ALWAYS, self::FRAGILE_PER_PACKAGE], true)
+            ? $mode
+            : self::FRAGILE_NEVER;
+    }
+
+    /**
+     * The fragile mark of one row: forced by the setting unless it is per package.
+     *
+     * @param mixed $submitted
+     */
+    private function fragileFor(string $mode, $submitted): bool
+    {
+        if ($mode === self::FRAGILE_ALWAYS) {
+            return true;
+        }
+
+        return $mode === self::FRAGILE_PER_PACKAGE && $this->flag($submitted);
+    }
+
+    /**
+     * Check the per-shipment services and fill what was not sent from the settings.
+     *
+     * A locker has nobody to show the parcel to or to sign a receipt, so
+     * inspection and return receipts are always off there, whatever was sent.
+     *
+     * @param array<string, mixed> $fields
+     * @param array<string, array{severity:string, message:string}> $issues
+     */
+    private function checkServices(array &$fields, array &$issues, int $storeId): void
+    {
+        $type = $this->deliveryType($fields);
+        $isLocker = $type === ConfigInterface::DELIVERY_TYPE_APS;
+
+        $fields['declared_value'] = array_key_exists('declared_value', $fields)
+            ? $this->flag($fields['declared_value'])
+            : $this->declaredValueDefault($storeId);
+
+        $amount = $fields['declared_value_amount'] ?? null;
+        $amount = is_scalar($amount) ? trim((string) $amount) : '';
+        if (!$fields['declared_value'] || $amount === '') {
+            $fields['declared_value_amount'] = null;
+        } else {
+            $value = $this->number($amount);
+            if ($value === null || $value <= 0) {
+                $fields['declared_value_amount'] = $amount;
+                $issues['declared_value_amount'] = $this->issue(
+                    self::SEVERITY_ERROR,
+                    (string) __(
+                        'Enter the declared value as an amount greater than zero, '
+                        . 'or leave it empty to use the value of the goods.'
+                    )
+                );
+            } elseif (!$isLocker && (
+                $value < ServiceCodesBuilder::DECLARED_VALUE_MIN || $value > ServiceCodesBuilder::DECLARED_VALUE_MAX
+            )) {
+                // Checked, never moved, as in WooCommerce: Pigeon Express
+                // refuses the whole shipment outside its limits.
+                $fields['declared_value_amount'] = $amount;
+                $issues['declared_value_amount'] = $this->issue(
+                    self::SEVERITY_ERROR,
+                    (string) __(
+                        'Declared value: enter an amount from %1 to %2 €.',
+                        (int) ServiceCodesBuilder::DECLARED_VALUE_MIN,
+                        (int) ServiceCodesBuilder::DECLARED_VALUE_MAX
+                    )
+                );
+            } else {
+                $fields['declared_value_amount'] = round($value, 2);
+            }
+        }
+
+        $review = (string) ($fields['review'] ?? '');
+        if (!in_array($review, self::REVIEW_VALUES, true)) {
+            $review = $this->reviewDefault($type, $storeId);
+        }
+        $fields['review'] = $isLocker ? self::REVIEW_NONE : $review;
+
+        $receipt = (string) ($fields['return_receipt'] ?? '');
+        if (!in_array($receipt, self::RECEIPT_VALUES, true)) {
+            $receipt = $this->receiptDefault($storeId);
+        }
+        $fields['return_receipt'] = $isLocker ? self::RECEIPT_NONE : $receipt;
+    }
+
+    /**
+     * Whether a new shipment starts with declared value ticked.
+     */
+    public function declaredValueDefault(?int $storeId = null): bool
+    {
+        if (method_exists($this->config, 'isDeclaredValueAlways')) {
+            return (bool) $this->config->isDeclaredValueAlways($storeId);
+        }
+
+        return $this->config->isDeclaredValueEnabled($storeId);
+    }
+
+    /**
+     * The inspection a new shipment starts with, from the delivery type's setting.
+     */
+    public function reviewDefault(string $deliveryType, ?int $storeId = null): string
+    {
+        if ($deliveryType === ConfigInterface::DELIVERY_TYPE_APS) {
+            return self::REVIEW_NONE;
+        }
+
+        try {
+            if (method_exists($this->config, 'getReviewMode')) {
+                $mode = (string) $this->config->getReviewMode($deliveryType, $storeId);
+
+                return in_array($mode, self::REVIEW_VALUES, true) ? $mode : self::REVIEW_NONE;
+            }
+
+            $legacy = $this->config->getReviewAndTest($deliveryType, $storeId);
+        } catch (\Throwable $e) {
+            return self::REVIEW_NONE;
+        }
+
+        if ($legacy === 'test') {
+            return self::REVIEW_VIEW_TEST;
+        }
+
+        return $legacy === 'review' ? self::REVIEW_VIEW : self::REVIEW_NONE;
+    }
+
+    /**
+     * The return receipt a new shipment starts with, from the settings.
+     */
+    public function receiptDefault(?int $storeId = null): string
+    {
+        if (method_exists($this->config, 'getReturnReceiptMode')) {
+            $mode = (string) $this->config->getReturnReceiptMode($storeId);
+
+            return in_array($mode, self::RECEIPT_VALUES, true) ? $mode : self::RECEIPT_NONE;
+        }
+
+        $electronic = $this->config->isAdditionalServiceEnabled('return_receipt', $storeId);
+        $paper = $this->config->isAdditionalServiceEnabled('return_at_my_expense', $storeId);
+
+        if ($electronic && $paper) {
+            return self::RECEIPT_BOTH;
+        }
+        if ($electronic) {
+            return self::RECEIPT_ELECTRONIC;
+        }
+
+        return $paper ? self::RECEIPT_PAPER : self::RECEIPT_NONE;
     }
 
     /**

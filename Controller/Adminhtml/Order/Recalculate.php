@@ -22,9 +22,10 @@ use Magento\Framework\Controller\Result\Json;
 use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Sales\Api\OrderRepositoryInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
-use PigeonExpress\Shipping\Api\FreeShippingInterface;
 use PigeonExpress\Shipping\Api\ShipmentSenderInterface;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
+use PigeonExpress\Shipping\Model\Shipment\HandInText;
+use PigeonExpress\Shipping\Model\Shipment\WhoPaysFacts;
 use Psr\Log\LoggerInterface;
 
 class Recalculate extends Action implements HttpPostActionInterface
@@ -46,8 +47,11 @@ class Recalculate extends Action implements HttpPostActionInterface
     /** @var LoggerInterface */
     private $logger;
 
-    /** @var FreeShippingInterface */
-    private $freeShipping;
+    /** @var WhoPaysFacts */
+    private $whoPaysFacts;
+
+    /** @var HandInText */
+    private $handInText;
 
     public function __construct(
         Context $context,
@@ -56,14 +60,16 @@ class Recalculate extends Action implements HttpPostActionInterface
         ShipmentSenderInterface $shipmentSender,
         AddressForm $addressForm,
         LoggerInterface $logger,
-        FreeShippingInterface $freeShipping
+        WhoPaysFacts $whoPaysFacts,
+        HandInText $handInText
     ) {
         $this->resultJsonFactory = $resultJsonFactory;
         $this->orderRepository = $orderRepository;
         $this->shipmentSender = $shipmentSender;
         $this->addressForm = $addressForm;
         $this->logger = $logger;
-        $this->freeShipping = $freeShipping;
+        $this->whoPaysFacts = $whoPaysFacts;
+        $this->handInText = $handInText;
         parent::__construct($context);
     }
 
@@ -89,7 +95,8 @@ class Recalculate extends Action implements HttpPostActionInterface
         $checked = $this->addressForm->validate(
             $fields,
             (int) $order->getStoreId(),
-            $this->freeShipping->wasAppliedToOrder($order) || !$this->shipmentSender->isCashOnDelivery($order)
+            $this->whoPaysFacts->nothingToCollect($order),
+            $this->whoPaysFacts->forOrder($order)['fixed']
         );
 
         // A price for an address the carrier cannot resolve would be a guess, so
@@ -97,6 +104,10 @@ class Recalculate extends Action implements HttpPostActionInterface
         if ($this->addressForm->hasErrors($checked['issues'])) {
             return $result->setData(['error' => $this->addressForm->firstError($checked['issues'])]);
         }
+
+        // Where the shipment is handed in follows the packages, so it is said
+        // again with the price. Empty when the shop does not use a locker.
+        $handIn = $this->handInText->describe($checked['fields'], (int) $order->getStoreId());
 
         try {
             $quote = $this->shipmentSender->priceFor($order, $checked['fields']);
@@ -126,6 +137,7 @@ class Recalculate extends Action implements HttpPostActionInterface
             'receiver_formatted' => $order->formatPrice(
                 $whoPays === ConfigInterface::WHO_PAYS_RECEIVER ? $price : 0.0
             ),
+            'hand_in'            => $handIn,
         ]);
     }
 }

@@ -9,6 +9,7 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model;
 
+use Magento\Framework\Event\ManagerInterface as EventManager;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Sales\Api\Data\OrderInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
@@ -16,7 +17,16 @@ use PigeonExpress\Shipping\Api\RateClientInterface;
 use PigeonExpress\Shipping\Api\ShipmentClientInterface;
 use PigeonExpress\Shipping\Api\ShipmentSenderInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Exception\OrderLockedException;
+use PigeonExpress\Shipping\Exception\ReplayedShipmentException;
+use PigeonExpress\Shipping\Model\Api\ShipmentClient;
+use PigeonExpress\Shipping\Model\Shipment\OrderLock;
+use PigeonExpress\Shipping\Model\Shipment\WhoPaysFacts;
+use PigeonExpress\Shipping\Model\Status\ShipmentDetailsStore;
+use PigeonExpress\Shipping\Model\Status\StatusCodes;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
+use PigeonExpress\Shipping\Model\Phone\BulgarianPhone;
+use PigeonExpress\Shipping\Model\Pickup\PickupPayload;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
 use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
 use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
@@ -67,6 +77,27 @@ class ShipmentSender implements ShipmentSenderInterface
     /** @var \PigeonExpress\Shipping\Model\Shipment\LabelContents */
     private $labelContents;
 
+    /** @var OrderLock */
+    private $orderLock;
+
+    /** @var PickupPayload */
+    private $pickupPayload;
+
+    /** @var EventManager */
+    private $eventManager;
+
+    /** @var ShipmentDetailsStore */
+    private $detailsStore;
+
+    /** @var WhoPaysFacts|null */
+    private $whoPaysFacts;
+
+    /** Dispatched once a new shipment is stored, whichever way it was created. */
+    public const EVENT_CREATED = 'pigeonexpress_shipment_created';
+
+    /** Status code Pigeon Express gives a cancelled shipment. */
+    public const API_STATUS_CANCELLED = 'shipment_cancelled';
+
     public function __construct(
         ConfigInterface $config,
         ShipmentClientInterface $shipmentClient,
@@ -81,8 +112,17 @@ class ShipmentSender implements ShipmentSenderInterface
         ShipmentFactory $shipmentFactory,
         \PigeonExpress\Shipping\Model\ResourceModel\Shipment $shipmentResource,
         \PigeonExpress\Shipping\Api\FreeShippingInterface $freeShipping,
-        \PigeonExpress\Shipping\Model\Shipment\LabelContents $labelContents
+        \PigeonExpress\Shipping\Model\Shipment\LabelContents $labelContents,
+        OrderLock $orderLock,
+        PickupPayload $pickupPayload,
+        EventManager $eventManager,
+        ShipmentDetailsStore $detailsStore,
+        ?WhoPaysFacts $whoPaysFacts = null
     ) {
+        $this->whoPaysFacts = $whoPaysFacts;
+        $this->eventManager = $eventManager;
+        $this->detailsStore = $detailsStore;
+        $this->pickupPayload = $pickupPayload;
         $this->config = $config;
         $this->shipmentClient = $shipmentClient;
         $this->rateClient = $rateClient;
@@ -97,6 +137,7 @@ class ShipmentSender implements ShipmentSenderInterface
         $this->shipmentResource = $shipmentResource;
         $this->freeShipping = $freeShipping;
         $this->labelContents = $labelContents;
+        $this->orderLock = $orderLock;
     }
 
     /**
@@ -116,7 +157,36 @@ class ShipmentSender implements ShipmentSenderInterface
             throw new LocalizedException(__('Order does not use Pigeon Express shipping.'));
         }
 
-        // Guard: check not already sent.
+        // One create per order at a time. Without this, two Send requests
+        // arriving together both find no shipment and both create one.
+        $orderId = (int) $order->getId();
+        if (!$this->orderLock->acquire($orderId)) {
+            throw new OrderLockedException(__(
+                'A shipment for this order is being created right now. Reload the order in a moment.'
+            ));
+        }
+
+        try {
+            return $this->sendLocked($order, $overrides, $storeId, $shippingMethod);
+        } finally {
+            $this->orderLock->release($orderId);
+        }
+    }
+
+    /**
+     * send(), once this request holds the order's lock.
+     *
+     * @param array<string, mixed> $overrides
+     * @throws LocalizedException
+     */
+    private function sendLocked(
+        OrderInterface $order,
+        array $overrides,
+        int $storeId,
+        string $shippingMethod
+    ): Shipment {
+        // Guard: check not already sent. Read inside the lock, so a request
+        // that waited for another sees the shipment it created.
         $existing = $this->findExistingShipment((int) $order->getId());
         if ($existing !== null) {
             throw new LocalizedException(
@@ -131,6 +201,102 @@ class ShipmentSender implements ShipmentSenderInterface
                 'storeId'         => $storeId,
             ]);
         }
+
+        $built = $this->payloadFor($order, $overrides);
+        $payload = $built['payload'];
+        $fields = $built['fields'];
+
+        if ($this->config->isLoggingEnabled($storeId)) {
+            $this->logger->info('[PigeonExpress] ShipmentSender::send payload', [
+                'order_id' => $order->getId(),
+                'storeId'  => $storeId,
+                'payload'  => $payload,
+            ]);
+        }
+
+        // Call API. Sent once: see ShipmentClient::create().
+        $result = $this->shipmentClient->create($payload, $storeId);
+
+        // A replayed answer may be for a shipment cancelled since.
+        if ((string) ($result['replay'] ?? ShipmentClient::REPLAY_NONE) !== ShipmentClient::REPLAY_NONE) {
+            $this->refuseReplayedCancelled(
+                (int) $order->getId(),
+                (string) ($result['reference_number'] ?? ''),
+                $storeId,
+                (string) $result['replay']
+            );
+        }
+
+        // Save to DB.
+        /** @var Shipment $shipment */
+        $shipment = $this->shipmentFactory->create();
+        $shipment->setOrderId((int) $order->getId());
+        $shipment->setReferenceNumber($result['reference_number'] ?? '');
+        $shipment->setTrackingNumber($result['tracking_number'] ?? null);
+        $shipment->setStatus($result['status'] ?? 'sent');
+        $shipment->setDeliveryPrice(isset($result['delivery_price']) ? (float) $result['delivery_price'] : null);
+        $shipment->setPayload(json_encode($payload));
+        $shipment->setResponse(json_encode($result));
+        // Kept so that, should this waybill be cancelled, the form for the next
+        // one opens with what was sent rather than with the order's defaults.
+        $shipment->setFormFields(json_encode($fields));
+        // Every shipment starts as "Created", as in WooCommerce, so the panel
+        // shows a status at once. No check time: the carrier was not asked.
+        $shipment->setData('status_code', StatusCodes::REGISTERED);
+        $shipment->setData('status_at', gmdate('Y-m-d H:i:s'));
+        $this->shipmentResource->save($shipment);
+
+        $this->afterCreate($order, $shipment, $storeId);
+
+        if ($this->config->isLoggingEnabled($storeId)) {
+            $this->logger->info('[PigeonExpress] ShipmentSender::send success', [
+                'order_id'         => $order->getId(),
+                'reference_number' => $result['reference_number'],
+                'tracking_number'  => $result['tracking_number'] ?? null,
+            ]);
+        }
+
+        return $shipment;
+    }
+
+    /**
+     * Tell the rest of the shop, and read what Pigeon Express charged. Neither
+     * may undo a shipment that exists: failures are logged and left.
+     */
+    private function afterCreate(OrderInterface $order, Shipment $shipment, int $storeId): void
+    {
+        try {
+            $this->eventManager->dispatch(self::EVENT_CREATED, [
+                'order'        => $order,
+                'shipment_row' => $shipment->getData(),
+            ]);
+        } catch (\Throwable $e) {
+            $this->logger->error('[PigeonExpress] Shipment created observer failed: ' . $e->getMessage());
+        }
+
+        try {
+            $this->detailsStore->fetch($shipment, $storeId);
+        } catch (\Throwable $e) {
+            $this->logger->info('[PigeonExpress] Details of ' . $shipment->getReferenceNumber()
+                . ' not read after create: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * The create body for this order, and the checked form it was built from.
+     *
+     * The same body serves a change of the shipment (PUT /shipments/{ref}):
+     * the carrier clears whatever a change does not carry, so services, cash
+     * on delivery, declared value, packages, note and return office all go
+     * again. See ShipmentEditor.
+     *
+     * @param array<string, mixed> $overrides `address_fields`: the checked shipment form
+     * @return array{payload: array<string, mixed>, fields: array<string, mixed>}
+     * @throws LocalizedException
+     */
+    public function payloadFor(OrderInterface $order, array $overrides = []): array
+    {
+        $storeId = (int) $order->getStoreId();
 
         // Get shipping address.
         $address = $order->getShippingAddress();
@@ -147,7 +313,8 @@ class ShipmentSender implements ShipmentSenderInterface
         // What the admin filled in on the order screen, or what the order itself
         // says when nothing was submitted. Either way it goes through the same
         // checks, so a shipment created by any route is checked the same way.
-        $fields = isset($overrides['address_fields']) && is_array($overrides['address_fields'])
+        $unattended = !(isset($overrides['address_fields']) && is_array($overrides['address_fields']));
+        $fields = !$unattended
             ? $overrides['address_fields']
             : $this->addressForm->fromOrder(
                 $address,
@@ -157,13 +324,16 @@ class ShipmentSender implements ShipmentSenderInterface
                 (string) ($locationData['location_name'] ?? '')
             );
 
-        $checked = $this->addressForm->validate(
-            $fields,
-            $storeId,
-            !empty($locationData['free_shipping']) || !$this->isCashOnDelivery($order)
-        );
+        // The same facts the order screen uses, so a shipment created in bulk
+        // or by cron bills the same side the panel would have suggested: a
+        // fixed price COD order bills the sender, as in WooCommerce.
+        [$nothingToCollect, $fixedPrice] = $this->whoPaysInputs($order, $locationData);
+        $checked = $this->addressForm->validate($fields, $storeId, $nothingToCollect, $fixedPrice);
         if ($this->addressForm->hasErrors($checked['issues'])) {
             throw new LocalizedException(__($this->addressForm->firstError($checked['issues'])));
+        }
+        if ($unattended) {
+            $this->refuseGuessedStreet($fields, $checked);
         }
         $fields = $checked['fields'];
 
@@ -187,10 +357,6 @@ class ShipmentSender implements ShipmentSenderInterface
         $codAmount = $this->addressForm->codAmount($fields)
             ?? $this->detectCodAmount($order, $fields['who_pays']);
 
-        // Build pickup from config.
-        $pickupType = $this->config->getPickupType($storeId);
-        $pickupPayload = $this->buildPickupPayload($pickupType, $storeId);
-
         // Build delivery payload and determine API delivery type.
         [$apiDeliveryType, $deliveryPayload] = $this->buildDeliveryPayload(
             $deliveryType,
@@ -202,12 +368,19 @@ class ShipmentSender implements ShipmentSenderInterface
         $payload = [
             'receiver_name'  => $receiverName,
             'receiver_phone' => $receiverPhone,
-            'pickup_type'    => $pickupType,
             'delivery_type'  => $apiDeliveryType,
             'service_type'   => 'standard',
             'who_pays'       => $fields['who_pays'],
             'packages'       => $packages,
         ];
+
+        // The customer's email, as WooCommerce sends the billing email, so
+        // Pigeon Express can send its own notices. Left out when it is not a
+        // usable address (a marketplace placeholder, say).
+        $email = trim((string) $order->getCustomerEmail());
+        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false) {
+            $payload['receiver_email'] = $email;
+        }
 
         if ($instructions !== '') {
             $payload['note'] = $instructions;
@@ -223,7 +396,8 @@ class ShipmentSender implements ShipmentSenderInterface
             $storeId,
             $codAmount,
             true,
-            $this->detectGoodsValue($order)
+            $this->detectGoodsValue($order),
+            $this->serviceOverrides($fields)
         );
         if (!empty($serviceCodes)) {
             $payload['service_codes'] = $serviceCodes;
@@ -231,43 +405,34 @@ class ShipmentSender implements ShipmentSenderInterface
 
         $payload['inventory_items'] = $this->labelContents->build($order, $storeId);
 
+        // Where the shipment is handed in: with the locker pickup type that
+        // depends on the packages and services just decided.
+        $pickupPayload = $this->pickupPayload->build($storeId, $packages, $serviceCodes);
+
+        $payload += $this->returnFields($storeId);
+
+        // The order number, which Pigeon Express keeps with the shipment and
+        // echoes back, so a waybill can be traced to its order. Shown nowhere
+        // here; it is for the carrier's side.
+        $externalReference = trim((string) $order->getIncrementId());
+        if ($externalReference !== '') {
+            $payload['external_reference'] = mb_substr(
+                $externalReference,
+                0,
+                ShipmentClient::EXTERNAL_REFERENCE_MAX
+            );
+        }
+
+        // Sent only when switched on: the carrier defaults it to false, so a
+        // store that does not use it keeps sending what it sent before. The
+        // carrier stores it with the shipment, so later reprints keep it too.
+        if ($this->config->isHideContentOnLabel($storeId)) {
+            $payload['hide_content_on_label'] = true;
+        }
+
         $payload = array_merge($payload, $pickupPayload, $deliveryPayload);
 
-        if ($this->config->isLoggingEnabled($storeId)) {
-            $this->logger->info('[PigeonExpress] ShipmentSender::send payload', [
-                'order_id' => $order->getId(),
-                'storeId'  => $storeId,
-                'payload'  => $payload,
-            ]);
-        }
-
-        // Call API.
-        $result = $this->shipmentClient->create($payload, $storeId);
-
-        // Save to DB.
-        /** @var Shipment $shipment */
-        $shipment = $this->shipmentFactory->create();
-        $shipment->setOrderId((int) $order->getId());
-        $shipment->setReferenceNumber($result['reference_number'] ?? '');
-        $shipment->setTrackingNumber($result['tracking_number'] ?? null);
-        $shipment->setStatus($result['status'] ?? 'sent');
-        $shipment->setDeliveryPrice(isset($result['delivery_price']) ? (float) $result['delivery_price'] : null);
-        $shipment->setPayload(json_encode($payload));
-        $shipment->setResponse(json_encode($result));
-        // Kept so that, should this waybill be cancelled, the form for the next
-        // one opens with what was sent rather than with the order's defaults.
-        $shipment->setFormFields(json_encode($fields));
-        $this->shipmentResource->save($shipment);
-
-        if ($this->config->isLoggingEnabled($storeId)) {
-            $this->logger->info('[PigeonExpress] ShipmentSender::send success', [
-                'order_id'         => $order->getId(),
-                'reference_number' => $result['reference_number'],
-                'tracking_number'  => $result['tracking_number'] ?? null,
-            ]);
-        }
-
-        return $shipment;
+        return ['payload' => $payload, 'fields' => $fields];
     }
 
     /**
@@ -295,20 +460,15 @@ class ShipmentSender implements ShipmentSenderInterface
             $fields
         );
 
-        $pickupType = $this->config->getPickupType($storeId);
+        [$nothingToCollect, $fixedPrice] = $this->whoPaysInputs($order);
+        $whoPays = $this->addressForm->whoPays($fields, $storeId, $nothingToCollect, $fixedPrice);
 
-        $whoPays = $this->addressForm->whoPays(
-            $fields,
-            $storeId,
-            $this->freeShipping->wasAppliedToOrder($order) || !$this->isCashOnDelivery($order)
-        );
-
+        $packages = $this->buildPackages($order, $storeId, $deliveryType, $fields);
         $payload = [
-            'pickup_type'   => $pickupType,
             'delivery_type' => $apiDeliveryType,
             'service_type'  => 'standard',
             'who_pays'      => $whoPays,
-            'packages'      => $this->buildPackages($order, $storeId, $deliveryType, $fields),
+            'packages'      => $packages,
         ];
 
         // COD is included, exactly as send() includes it. The payment method of a
@@ -321,7 +481,8 @@ class ShipmentSender implements ShipmentSenderInterface
             $storeId,
             $this->addressForm->codAmount($fields) ?? $this->detectCodAmount($order, $whoPays),
             true,
-            $this->detectGoodsValue($order)
+            $this->detectGoodsValue($order),
+            $this->serviceOverrides($fields)
         );
         if (!empty($serviceCodes)) {
             $payload['service_codes'] = $serviceCodes;
@@ -329,7 +490,7 @@ class ShipmentSender implements ShipmentSenderInterface
 
         $payload = array_merge(
             $payload,
-            $this->buildPickupPayload($pickupType, $storeId),
+            $this->pickupPayload->build($storeId, $packages, $serviceCodes, true),
             $deliveryPayload
         );
 
@@ -339,6 +500,124 @@ class ShipmentSender implements ShipmentSenderInterface
             'price'    => (float) ($calculation['total_price'] ?? 0.0),
             'currency' => (string) ($calculation['currency'] ?? ''),
         ];
+    }
+
+    /**
+     * A shipment nobody reviewed (cron, bulk create) is not sent to a street
+     * that was guessed, as in WooCommerce (ShipmentDefaults::overrides_for).
+     *
+     * Fine when the customer gave the address through the Pigeon Express
+     * fields at checkout (the order carries the city id), or when the street
+     * of the free text matched exactly one street of the carrier. A street
+     * that matched nothing, or more than one, stays with the merchant.
+     *
+     * @param array<string, mixed> $fromOrder The form as read from the order, before validate()
+     * @param array{fields: array<string, mixed>, issues: array<string, mixed>} $checked
+     * @throws LocalizedException
+     */
+    private function refuseGuessedStreet(array $fromOrder, array $checked): void
+    {
+        if ($this->addressForm->deliveryType($checked['fields']) !== ConfigInterface::DELIVERY_TYPE_ADDRESS) {
+            return;
+        }
+
+        if ((string) ($fromOrder['city_id'] ?? '') !== '') {
+            return;
+        }
+
+        if ((string) ($checked['fields']['street_id'] ?? '') === '' || isset($checked['issues']['street'])) {
+            throw new LocalizedException(__('Pick the destination street before creating the shipment.'));
+        }
+    }
+
+    /**
+     * "Nothing left to collect" and "fixed price" for AddressForm::validate(),
+     * from WhoPaysFacts when it is wired (always, outside unit tests).
+     *
+     * @param array<string, mixed>|null $locationData
+     * @return array{0: bool, 1: bool}
+     */
+    private function whoPaysInputs(OrderInterface $order, ?array $locationData = null): array
+    {
+        if ($this->whoPaysFacts !== null) {
+            $facts = $this->whoPaysFacts->forOrder($order);
+
+            return [$this->whoPaysFacts->nothingToCollect($order), !empty($facts['fixed'])];
+        }
+
+        $free = $locationData !== null
+            ? !empty($locationData['free_shipping'])
+            : $this->freeShipping->wasAppliedToOrder($order);
+
+        return [$free || !$this->isCashOnDelivery($order), false];
+    }
+
+    /**
+     * After a create the carrier answered with its stored answer to an
+     * identical earlier create: refuse it when that shipment has been
+     * cancelled since, so nothing is stored for a waybill that does not exist.
+     *
+     * The carrier answers a create identical to one made less than 30 seconds
+     * earlier with that first answer, whatever became of the shipment: created,
+     * cancelled and created again within that time comes back as the cancelled
+     * one. Known locally when it was cancelled from this order; otherwise the
+     * carrier is asked. When it cannot be asked the shipment is kept: a real
+     * one left off the order would be created a second time, and a cancelled
+     * one kept by mistake is cleared with Cancel.
+     *
+     * @throws ReplayedShipmentException
+     */
+    public function refuseReplayedCancelled(int $orderId, string $reference, int $storeId, string $replay = ''): void
+    {
+        if ($reference === '') {
+            return;
+        }
+
+        $cancelled = $this->isCancelledLocally($orderId, $reference);
+
+        if (!$cancelled) {
+            try {
+                $status = $this->shipmentClient->get($reference, $storeId)->getStatus();
+                $code = is_object($status) && method_exists($status, 'getCode') ? (string) $status->getCode() : '';
+                $cancelled = $code === self::API_STATUS_CANCELLED;
+            } catch (\Throwable $e) {
+                $this->logger->warning(
+                    '[PigeonExpress] Create of ' . $reference . ' was a replay (' . $replay
+                    . '); read-back failed, kept: ' . $e->getMessage()
+                );
+
+                return;
+            }
+        }
+
+        if (!$cancelled) {
+            if ($this->config->isLoggingEnabled($storeId)) {
+                $this->logger->info('[PigeonExpress] Create of ' . $reference . ' was a replay (' . $replay . '); kept');
+            }
+
+            return;
+        }
+
+        $this->logger->warning(
+            '[PigeonExpress] Create of ' . $reference . ' was a replay (' . $replay
+            . ') of a cancelled shipment for order #' . $orderId . '; nothing stored'
+        );
+
+        throw new ReplayedShipmentException(__(
+            'The same shipment was sent again less than half a minute after the one that was cancelled. '
+            . 'Nothing was saved. Wait 30 seconds and create it again.'
+        ));
+    }
+
+    private function isCancelledLocally(int $orderId, string $reference): bool
+    {
+        $collection = $this->shipmentCollectionFactory->create();
+        $collection->addFieldToFilter('order_id', ['eq' => $orderId]);
+        $collection->addFieldToFilter('reference_number', ['eq' => $reference]);
+        $collection->addFieldToFilter('status', ['eq' => ShipmentCanceller::STATUS_CANCELLED]);
+        $collection->setPageSize(1);
+
+        return (bool) $collection->getFirstItem()->getId();
     }
 
     /**
@@ -418,6 +697,31 @@ class ShipmentSender implements ShipmentSenderInterface
         string $deliveryType = ConfigInterface::DELIVERY_TYPE_ADDRESS,
         array $fields = []
     ): array {
+        return $this->packageBuilder->finish(
+            $this->rawPackages($order, $storeId, $deliveryType, $fields),
+            $this->labelContents->packageDescription($order, $storeId),
+            $storeId
+        );
+    }
+
+    /**
+     * The packages before their description and fragile mark: the form's
+     * package rows, else the form's one size, else worked out from the order.
+     *
+     * @param array<string, mixed> $fields
+     * @return array<int, array<string, mixed>>
+     */
+    private function rawPackages(OrderInterface $order, int $storeId, string $deliveryType, array $fields): array
+    {
+        // The package rows of the shipment form replace the older single
+        // weight, count and size fields when they are there.
+        if (isset($fields['packages']) && is_array($fields['packages']) && $fields['packages'] !== []) {
+            $rows = $this->packageBuilder->fromForm($fields['packages'], $deliveryType, $storeId);
+            if ($rows !== null) {
+                return $rows;
+            }
+        }
+
         $parcel = $this->addressForm->parcel($fields);
         if ($parcel !== null) {
             return $this->packageBuilder->manual(
@@ -441,6 +745,78 @@ class ShipmentSender implements ShipmentSenderInterface
             $recorded,
             $recorded > 0.0 ? $recorded : null
         );
+    }
+
+    /**
+     * The shipment form's service choices, for the keys it sent. A key the
+     * form did not send leaves the setting in charge.
+     *
+     * @param array<string, mixed> $fields
+     * @return array<string, mixed>
+     */
+    private function serviceOverrides(array $fields): array
+    {
+        $overrides = [];
+
+        if (array_key_exists('declared_value', $fields) && $fields['declared_value'] !== ''
+            && $fields['declared_value'] !== null
+        ) {
+            $overrides[ServiceCodesBuilder::OVERRIDE_DECLARED_VALUE] = filter_var(
+                $fields['declared_value'],
+                FILTER_VALIDATE_BOOLEAN
+            );
+            $amount = $fields['declared_value_amount'] ?? null;
+            if (is_string($amount)) {
+                $amount = str_replace(',', '.', trim($amount));
+            }
+            if (is_numeric($amount) && (float) $amount > 0.0) {
+                $overrides[ServiceCodesBuilder::OVERRIDE_DECLARED_VALUE_AMOUNT] = round((float) $amount, 2);
+            }
+        }
+
+        $review = (string) ($fields['review'] ?? '');
+        if (in_array($review, [
+            ConfigInterface::REVIEW_NONE,
+            ConfigInterface::REVIEW_VIEW,
+            ConfigInterface::REVIEW_VIEW_TEST,
+        ], true)) {
+            $overrides[ServiceCodesBuilder::OVERRIDE_REVIEW] = $review;
+        }
+
+        $receipt = (string) ($fields['return_receipt'] ?? '');
+        if (in_array($receipt, [
+            ConfigInterface::RECEIPT_NONE,
+            ConfigInterface::RECEIPT_ELECTRONIC,
+            ConfigInterface::RECEIPT_PAPER,
+            ConfigInterface::RECEIPT_BOTH,
+        ], true)) {
+            $overrides[ServiceCodesBuilder::OVERRIDE_RETURN_RECEIPT] = $receipt;
+        }
+
+        return $overrides;
+    }
+
+    /**
+     * What happens to a shipment that cannot be delivered, from the Returns
+     * settings. Nothing when the account decides, which is what every
+     * shipment sent before these settings did. Create only.
+     *
+     * @return array<string, mixed>
+     */
+    private function returnFields(int $storeId): array
+    {
+        $out = [];
+
+        if ($this->config->isReturnAtMyExpense($storeId)) {
+            $out['return_at_my_expense'] = true;
+        }
+
+        $officeId = $this->config->getReturnOfficeId($storeId);
+        if ($officeId !== null) {
+            $out['return_office_id'] = $officeId;
+        }
+
+        return $out;
     }
 
     /**
@@ -478,49 +854,51 @@ class ShipmentSender implements ShipmentSenderInterface
     /**
      * Normalize phone to international format for PE API.
      *
-     * Bulgarian local (08XXXXXXXXX / 10 digits starting with 0) → +3598XXXXXXXX
-     * 00359... → +359...
-     * Already +... → kept as-is
+     * Bulgarian numbers follow BulgarianPhone (the WooCommerce rules), so a
+     * landline such as 021234567 becomes +35921234567, not +359021234567.
+     * A number given with another country code is kept as typed.
      */
     public static function normalizePhone(string $raw): string
     {
-        $raw = trim($raw);
         // Strip spaces, dashes, parentheses and dots, keeping digits and a leading +
-        $clean = preg_replace('/[\s\-\(\)\.]/', '', $raw);
+        $clean = (string) preg_replace('/[\s\-\(\)\.]/', '', trim($raw));
+        if ($clean === '') {
+            return '';
+        }
 
-        if (strpos($clean, '+') === 0) {
+        if (strpos($clean, '+') === 0 && strpos($clean, '+359') !== 0) {
             return $clean;
         }
 
-        // 00XXXXX → +XXXXX
-        if (strpos($clean, '00') === 0) {
-            return '+' . substr($clean, 2);
+        $normalized = BulgarianPhone::normalize($clean);
+        if ($normalized === null) {
+            return $clean;
         }
 
-        // Bulgarian local: 0XXXXXXXXX (10 digits starting with 0) → +359XXXXXXXXX
-        if (preg_match('/^0(\d{9})$/', $clean, $m)) {
-            return '+359' . $m[1];
-        }
-
-        // 9 raw digits, so assume Bulgarian and prepend +359
-        if (preg_match('/^\d{9}$/', $clean)) {
-            return '+359' . $clean;
-        }
-
-        return $clean;
+        return strpos($normalized, '359') === 0 ? '+' . $normalized : $normalized;
     }
 
     /**
      * Value of the goods for insurance purposes.
      *
-     * Products only. Shipping is not insured by the carrier, and including it
-     * would inflate the sum insured on every order.
+     * What the customer paid less the delivery, as in WooCommerce
+     * (BodyBuilder::goods_total): tax and discounts on the goods are
+     * honoured, and shipping (which holds the COD fee) is not insured.
      */
     private function detectGoodsValue(OrderInterface $order): float
     {
-        $subtotal = (float) $order->getSubtotal();
+        return self::goodsValue($order);
+    }
 
-        return $subtotal > 0.0 ? round($subtotal, 2) : 0.0;
+    /**
+     * See detectGoodsValue(). Public so the order panel shows the same figure.
+     */
+    public static function goodsValue(OrderInterface $order): float
+    {
+        $goods = (float) $order->getGrandTotal()
+            - ((float) $order->getShippingInclTax() - abs((float) $order->getShippingDiscountAmount()));
+
+        return $goods > 0.0 ? round($goods, 2) : 0.0;
     }
 
     /**
@@ -554,55 +932,6 @@ class ShipmentSender implements ShipmentSenderInterface
         }
 
         return max(0.0, round($amount, 2));
-    }
-
-    /**
-     * Build pickup portion of payload.
-     *
-     * @return array<string,mixed>
-     * @throws LocalizedException
-     * @throws ApiException
-     */
-    private function buildPickupPayload(string $pickupType, int $storeId): array
-    {
-        if ($pickupType === ConfigInterface::PICKUP_TYPE_OFFICE) {
-            $pickupOfficeId = $this->config->getPickupOfficeId($storeId);
-            if ($pickupOfficeId === null || $pickupOfficeId <= 0) {
-                throw new LocalizedException(__('Pickup office is not configured.'));
-            }
-            return ['pickup_office_id' => $pickupOfficeId];
-        }
-
-        // PICKUP_TYPE_ADDRESS
-        $cityId = $this->config->getPickupAddressCityId($storeId);
-        if ($cityId === null || $cityId === '') {
-            throw new LocalizedException(__('Pickup address city is not configured.'));
-        }
-        $streetNumber = $this->config->getPickupAddressStreetNumber($storeId);
-        $streetNumber = ($streetNumber !== null && $streetNumber !== '') ? $streetNumber : '1';
-        $result = [
-            'city_id'       => (int) $cityId,
-            'street_number' => $streetNumber,
-        ];
-        $streetId = $this->config->getPickupAddressStreetId($storeId);
-        if ($streetId !== null && $streetId !== '') {
-            $result['street_id'] = (int) $streetId;
-        } else {
-            $streetLabel = $this->config->getPickupAddressStreetLabel($storeId);
-            if ($streetLabel !== null && $streetLabel !== '') {
-                $result['street_name'] = $streetLabel;
-            }
-            $additionalInfo = trim($streetLabel ?? '') !== '' ? trim($streetLabel) : 'Address';
-            if (strlen($additionalInfo) < 3) {
-                $additionalInfo = 'Address';
-            }
-            $result['additional_info'] = $additionalInfo;
-        }
-        $postalCode = $this->config->getPickupAddressPostalCode($storeId);
-        if ($postalCode !== null && $postalCode !== '') {
-            $result['postal_code'] = $postalCode;
-        }
-        return ['pickup_address' => $result];
     }
 
     /**

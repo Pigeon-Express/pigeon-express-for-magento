@@ -34,6 +34,8 @@
     <type name="PigeonExpress\Shipping\Model\ShipmentSender">
         <arguments>
             <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+            <!-- Proxy: WhoPaysFacts itself asks the sender whether an order is COD. -->
+            <argument name="whoPaysFacts" xsi:type="object">PigeonExpress\Shipping\Model\Shipment\WhoPaysFacts\Proxy</argument>
         </arguments>
     </type>
     <type name="PigeonExpress\Shipping\Model\Api\AddressResolver">
@@ -44,9 +46,32 @@
     <type name="PigeonExpress\Shipping\Model\Rate\RateCollector">
         <arguments>
             <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+            <!-- Optional in the constructor, so Magento passes null unless told to. -->
+            <argument name="checkoutSession" xsi:type="object">Magento\Checkout\Model\Session\Proxy</argument>
         </arguments>
     </type>
     <type name="PigeonExpress\Shipping\Model\Cron\SyncLocations">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Shipment\AddressForm">
+        <arguments>
+            <argument name="locationPersistor" xsi:type="object">PigeonExpress\Shipping\Model\OrderAddressLocationPersistor</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Cron\AutoCreateShipments">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Observer\Sales\QueueAutoCreate">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+            <argument name="sender" xsi:type="object">PigeonExpress\Shipping\Api\ShipmentSenderInterface\Proxy</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Account\SavedAddresses">
         <arguments>
             <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
         </arguments>
@@ -143,5 +168,68 @@
     <type name="Magento\Quote\Model\Quote\Address\ToOrder">
         <plugin name="pigeonexpress_cod_fee_to_order"
                 type="PigeonExpress\Shipping\Plugin\Quote\ToOrderPlugin"/>
+    </type>
+    <!-- Native Magento shipment, tracking and completing on delivery: log to pigeonexpress.log. -->
+    <type name="PigeonExpress\Shipping\Model\Magento\NativeShipment">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Magento\CompleteOnDelivery">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Magento\OrderComment">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Observer\Shipment\CreateMagentoShipment">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Observer\Shipment\RemoveMagentoTrack">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Observer\Shipment\CompleteOrderOnDelivery">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <!-- Magento DI leaves an optional "= null" constructor argument null, so
+         ShipmentCanceller never had an event manager and the
+         pigeonexpress_shipment_cancelled event was never dispatched. -->
+    <type name="PigeonExpress\Shipping\Model\ShipmentCanceller">
+        <arguments>
+            <argument name="eventManager" xsi:type="object">Magento\Framework\Event\ManagerInterface</argument>
+            <argument name="orderRepository" xsi:type="object">Magento\Sales\Api\OrderRepositoryInterface</argument>
+        </arguments>
+    </type>
+    <!-- Sales > Pigeon Express courier requests listing. -->
+    <type name="Magento\Framework\View\Element\UiComponent\DataProvider\CollectionFactory">
+        <arguments>
+            <argument name="collections" xsi:type="array">
+                <item name="pigeonexpress_courier_request_listing_data_source" xsi:type="string">PigeonExpress\Shipping\Model\ResourceModel\CourierRequest\Grid\Collection</item>
+            </argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Courier\CourierRequestSubmitter">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\Courier\CourierRequestService">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
+    </type>
+    <type name="PigeonExpress\Shipping\Model\ReturnShipment\ReturnShipmentService">
+        <arguments>
+            <argument name="logger" xsi:type="object">PigeonExpress\Shipping\Logger\Logger</argument>
+        </arguments>
     </type>
 </config>

@@ -145,9 +145,10 @@
 .pe-span-9 { grid-column: span 9; }
 .pe-span-12 { grid-column: span 12; }
 
-/* One column once the panel is too narrow to hold two side by side. The admin
-   order view is itself squeezed on smaller screens, so this earns its keep. */
-@media (max-width: 900px) {
+/* One column once a box is too narrow to hold two fields side by side. Asked
+   of the box rather than the screen, because the same box is half the form on
+   a wide screen and all of it on a narrow one. */
+@container pe-box (max-width: 420px) {
     .pe-grid > .admin__field {
         grid-column: span 12;
     }
@@ -491,4 +492,385 @@
     font-weight: 600;
     margin-top: .6rem;
     padding-top: 1.4rem;
+}
+
+
+/* -- Two columns ----------------------------------------------------------
+
+   Left: where the parcel goes, to whom, and what it is. Right: the money, the
+   services, the note and the actions. The form is its own container, so the
+   columns follow the room the order view gives it rather than the screen:
+   the admin menu and the order tabs take a different share at every width. */
+
+.pigeonexpress-shipment-form.pe-panel {
+    container-name: pe-form;
+    container-type: inline-size;
+    max-width: 132rem;
+}
+
+.pe-layout {
+    display: grid;
+    gap: 2rem;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+@container pe-form (min-width: 860px) {
+    .pe-layout {
+        align-items: start;
+        grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    }
+}
+
+/* Browsers without container queries get the same split from the screen. */
+@supports not (container-type: inline-size) {
+    @media (min-width: 1280px) {
+        .pe-layout {
+            align-items: start;
+            grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+        }
+    }
+}
+
+.pe-column {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    min-width: 0;
+}
+
+.pe-box {
+    border: 1px solid #e3e3e3;
+    border-radius: 2px;
+    container-name: pe-box;
+    container-type: inline-size;
+    padding: 1.6rem 1.8rem 1.8rem;
+}
+
+.pe-box-title {
+    border-bottom: 1px solid #f0f0f0;
+    color: #303030;
+    font-size: 1.3rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    margin: 0 0 1.6rem;
+    padding-bottom: .8rem;
+    text-transform: uppercase;
+}
+
+.pe-box-intro {
+    color: #666;
+    font-size: 1.2rem;
+    margin: -.6rem 0 1.2rem;
+}
+
+/* The select keeps its own width inside a box, but never overflows it. */
+.pigeonexpress-shipment-form .pe-box .admin__control-select {
+    max-width: 100%;
+    width: 100%;
+}
+
+/* -- Package rows --------------------------------------------------------- */
+
+.pe-packages-scroll {
+    overflow-x: auto;
+}
+
+.pe-packages-table {
+    border-collapse: collapse;
+    min-width: 46rem;
+    width: 100%;
+}
+
+.pe-packages-table th {
+    color: #303030;
+    font-size: 1.2rem;
+    font-weight: 600;
+    line-height: 1.3;
+    padding: 0 .6rem .6rem 0;
+    text-align: left;
+    vertical-align: bottom;
+}
+
+.pe-packages-table th._required span:after {
+    color: #e02b27;
+    content: '*';
+    margin-left: .3rem;
+}
+
+.pe-packages-table td {
+    padding: 0 .6rem .8rem 0;
+    vertical-align: middle;
+}
+
+.pe-packages-table .admin__control-text {
+    box-sizing: border-box;
+    min-width: 0;
+    width: 100%;
+}
+
+.pe-packages-table .admin__control-text._error {
+    border-color: #e02b27;
+}
+
+.pe-packages-table .pe-col-weight { width: 14%; }
+.pe-packages-table .pe-col-size { width: 12%; }
+.pe-packages-table .pe-col-description { width: auto; }
+
+.pe-packages-table .pe-col-fragile {
+    text-align: center;
+    width: 4.5rem;
+}
+
+.pe-packages-table .pe-col-remove {
+    padding-right: 0;
+    text-align: center;
+    width: 3.2rem;
+}
+
+/* A plain cross: the row goes, nothing else happens. */
+.pe-packages-table .pe-package-remove {
+    background: none;
+    border: 0;
+    color: #514943;
+    cursor: pointer;
+    font-size: 2rem;
+    line-height: 1;
+    padding: .2rem .6rem;
+}
+
+.pe-packages-table .pe-package-remove:hover:not([disabled]) {
+    color: #e02b27;
+}
+
+.pe-visually-hidden {
+    clip: rect(0 0 0 0);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+.pe-packages-table .pe-package-fragile,
+.pigeonexpress-shipment-form .pe-checkbox {
+    height: 1.6rem;
+    margin: 0;
+    width: 1.6rem;
+}
+
+.pe-packages-table .pe-package-remove[disabled] {
+    opacity: .3;
+}
+
+.pe-packages-actions {
+    margin-top: .2rem;
+}
+
+.pe-packages > .pe-message {
+    margin-top: 1rem;
+}
+
+.pe-packages > .pe-message[hidden] {
+    display: none;
+}
+
+.pe-packages._error .pe-box-title {
+    color: #e02b27;
+}
+
+.pe-handin {
+    border-top: 1px solid #f0f0f0;
+    margin-top: 1.4rem;
+    min-width: 0;
+    padding-top: 1rem;
+}
+
+.pe-handin .pe-summary-row dd {
+    font-weight: 400;
+    text-align: right;
+    white-space: normal;
+}
+
+/* Being asked again: the old answer stays readable but no longer looks settled. */
+.pe-handin dd._stale {
+    color: #999;
+}
+
+/* -- Who pays, services --------------------------------------------------- */
+
+.pe-who-pays-reason {
+    color: #666;
+    font-size: 1.2rem;
+    line-height: 1.45;
+    margin-top: .6rem;
+}
+
+.pe-who-pays-reason strong {
+    color: #303030;
+    display: block;
+    font-weight: 600;
+}
+
+.pe-who-pays-reason span + span {
+    display: block;
+    margin-top: .3rem;
+}
+
+.pe-services .pe-service + .pe-service {
+    margin-top: 1.4rem;
+}
+
+.pe-service-check {
+    align-items: center;
+    display: flex;
+    gap: .6rem;
+}
+
+.pigeonexpress-shipment-form .pe-service-check .admin__field-label {
+    font-weight: 400;
+}
+
+.pe-declared-amount {
+    margin: .8rem 0 0 2.6rem;
+    max-width: 22rem;
+}
+
+.pe-declared-amount[hidden] {
+    display: none;
+}
+
+.pe-sublabel {
+    color: #777;
+    display: block;
+    font-size: 1.2rem;
+    margin-bottom: .4rem;
+}
+
+.pe-service-select .admin__field-label {
+    display: block;
+    margin-bottom: .6rem;
+}
+
+/* A locker takes neither inspection nor a return receipt. */
+.pigeonexpress-shipment-form[data-pe-type="aps"] [data-pe-handover],
+.pigeonexpress-shipment-form:not([data-pe-type="aps"]) [data-pe-locker-only] {
+    display: none;
+}
+
+.pe-locker-hint {
+    font-size: 1.2rem;
+    margin-top: 1rem;
+}
+
+/* -- Price and actions ---------------------------------------------------- */
+
+.pe-price .pe-summary {
+    min-width: 0;
+}
+
+.pe-price .pe-buttons {
+    border-top: 1px solid #f0f0f0;
+    justify-content: flex-end;
+    margin-top: 1.2rem;
+    padding-top: 1.4rem;
+}
+
+.pe-price .pe-quote-message {
+    text-align: left;
+}
+
+.pigeonexpress-shipment-form .admin__field.pe-free-shipping .pe-who-pays-reason {
+    color: #303030;
+}
+
+/* Shipment status and charges (status sync, details). */
+.pe-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 4px;
+}
+.pe-status-label {
+    font-weight: 600;
+}
+.pe-inline-form {
+    display: inline;
+    margin: 0;
+}
+.pe-status-date,
+.pe-status-checked,
+.pe-charges-aside {
+    color: #666;
+    font-size: 12px;
+}
+.pe-shipment-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: #e8f0fa;
+    color: #1d4f91;
+    font-weight: 600;
+}
+.pe-shipment-status--delivered { background: #e5f4e8; color: #185b2a; }
+.pe-shipment-status--failed { background: #fbe9e7; color: #8a1f11; }
+.pe-shipment-status--attention { background: #fff4dd; color: #7a4d00; }
+.pe-shipment-status--pickup { background: #f0eafa; color: #4b2a85; }
+.pe-shipment-status--none { background: #f1f1f1; color: #555; font-weight: 400; }
+.pe-charges {
+    margin-top: 16px;
+    padding: 12px 16px;
+    border: 1px solid #e3e3e3;
+    background: #fafafa;
+    max-width: 520px;
+}
+.pe-charges-title {
+    margin: 0 0 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+.pe-charges-breakdown {
+    margin: 4px 0 8px;
+}
+.pe-charges-breakdown summary {
+    cursor: pointer;
+    color: #007bdb;
+}
+.pe-charges-breakdown .pe-summary {
+    margin-top: 6px;
+    padding-left: 12px;
+}
+.pe-edit-notice {
+    margin-bottom: 16px;
+}
+
+/* -- Return shipment form ------------------------------------------------- */
+
+/* The box border already frames each section, so its title needs no line above it. */
+.pe-return-form .pe-box > .pe-section-title:first-child {
+    border-top: 0;
+    margin: 0 0 1.4rem;
+    padding-top: 0;
+}
+
+.pe-return-form .pe-radios {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .8rem 2.4rem;
+    margin-bottom: 1.4rem;
+}
+
+.pe-return-form .pe-radio,
+.pe-return-form .pe-checkbox {
+    align-items: center;
+    cursor: pointer;
+    display: inline-flex;
+    gap: .6rem;
+}
+
+/* The label shares its class with the 16px package checkboxes; undo that size here. */
+.pe-return-form label.pe-checkbox {
+    height: auto;
+    margin: 1.2rem 0 0;
+    width: auto;
 }

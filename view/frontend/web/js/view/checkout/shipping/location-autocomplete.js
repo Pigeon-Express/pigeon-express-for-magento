@@ -146,6 +146,8 @@ define([
                 return;
             }
 
+            this.cityResultsVisible(false);
+
             this._cityTimeout = setTimeout(function () {
                 $.getJSON(url.build('pigeonexpress/checkout/citySearch'), {
                     type: self.getSearchType(),
@@ -218,6 +220,17 @@ define([
         },
 
         /**
+         * The working hours of the chosen pickup point, already formatted by
+         * the server, or an empty string when the store does not show them
+         * for this delivery type or the carrier lists none.
+         */
+        selectedHours: function () {
+            var location = this.selectedLocation();
+
+            return location ? location.hours || '' : '';
+        },
+
+        /**
          * The label on the second field, which is not a generic one: an office
          * and a parcel locker are different things to be sent to.
          */
@@ -230,6 +243,16 @@ define([
         /**
          * How many pickup points a city holds, shown against its name.
          */
+        /**
+         * Said when the town typed has nowhere to collect from, so the customer
+         * is not left with an empty box and no reason.
+         */
+        cityNoResultsText: function () {
+            return this.getSearchType() === 'aps'
+                ? $t('There is no Pigeon Express parcel locker in this town. Choose another delivery method or a nearby town.')
+                : $t('There is no Pigeon Express office in this town. Choose another delivery method or a nearby town.');
+        },
+
         cityCountLabel: function (city) {
             var count = city && city.count ? Number(city.count) : 0;
 

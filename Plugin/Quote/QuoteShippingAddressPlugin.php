@@ -72,6 +72,8 @@ class QuoteShippingAddressPlugin
         $ext->setPigeonexpressLocationName($data['location_name'] ?: null);
         $ext->setPigeonexpressLocationAddress($data['location_address'] ?: null);
         $ext->setPigeonexpressInstructions($data['instructions'] ?: null);
+        $ext->setPigeonexpressCityId(($data['city_id'] ?? '') ?: null);
+        $ext->setPigeonexpressStreetId(($data['street_id'] ?? '') ?: null);
 
         return $result;
     }

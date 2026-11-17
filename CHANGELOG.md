@@ -26,12 +26,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add COD Fee to Flat Rate, per delivery type, for the Fixed pricing mode.
 - Parcel and payment section on the admin shipment form: COD value, total
   weight, number of parcels and parcel size. Edits are kept after a cancel.
+- Separate API keys for the test and live environments.
+- Settings grouped by task: API and environment, Send From, Checkout and cash
+  on delivery, Returns, Labels, Shipment status and tracking, and more.
+- Fragile packages and a package description per package.
+- Inspection before payment, return receipts and a declared value amount per
+  shipment.
+- Office and parcel locker working hours at checkout.
+- Fallback price when a rate cannot be calculated.
+- Hand shipments in at a parcel locker, with an office for the ones that do
+  not fit.
+- Pickup from a saved address in your Pigeon Express account.
+- Choose where returned shipments go, and return at your expense.
+- Automatic shipment creation when an order is Processing.
+- City and street chosen from the carrier's lists at checkout.
+- Several packages per shipment on the order screen.
+- Option to hide the contents on the label.
+- Shipment status in the order and in the orders grid, with a filter.
+- Optionally complete the order when the shipment is delivered (cash on
+  delivery orders are invoiced), and put it on hold or cancel it when the
+  shipment comes back.
+- Magento shipment and tracking number created with the waybill, and a
+  tracking link for customers.
+- Edit a shipment without cancelling it.
+- Shipment details with the charges from Pigeon Express.
+- Orders grid mass actions: create shipments, refresh status, download labels
+  and request a courier.
+- Return shipments created from the order.
+- Request a courier from an order or the orders grid, and manage requests
+  under Sales > Operations > Pigeon Express courier requests. The orders grid
+  shows "Courier requested" and filters orders waiting for the courier.
 
 ### Fixed
 
 - Location sync runs when the carrier is enabled in any store.
 - Choosing a COD payment method did not add the COD fee.
 - Recalculate on the admin shipment form left out COD.
+- Bug fixes.
 
 ## [1.2.1] - 2026-10-13
 

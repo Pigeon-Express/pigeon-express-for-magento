@@ -30,6 +30,12 @@ define([
                 pe.location_address || '';
             payload.addressInformation['extension_attributes']['pigeonexpress_instructions'] =
                 pe.instructions || '';
+            // The city and street picked from the carrier's lists (address
+            // fields), so the shipment need not guess a street by its name.
+            payload.addressInformation['extension_attributes']['pigeonexpress_city_id'] =
+                pe.pigeonexpress_city_id || '';
+            payload.addressInformation['extension_attributes']['pigeonexpress_street_id'] =
+                pe.pigeonexpress_street_id || '';
         }
         console.log('[PE payload-mixin] extension_attributes=', payload.addressInformation['extension_attributes']);
 

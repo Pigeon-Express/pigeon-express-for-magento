@@ -72,11 +72,18 @@ define(['jquery', 'jquery/validate'], function ($) {
          * checkboxes below keep that from happening to only part of the address.
          */
         function set(name, value) {
-            var $target = field(name);
+            var $target = field(name),
+                inherit = document.getElementById(ids[name] + '_inherit');
 
-            if ($target.length && !$target.prop('disabled')) {
-                $target.val(value).trigger('change');
+            if (!$target.length || (inherit && inherit.checked)) {
+                return;
             }
+
+            // Magento leaves a read-only field disabled when its row is revealed
+            // by a dependency (Pickup Type switched to Address without saving),
+            // so the id would never be written or saved. Not inheriting means it
+            // is ours to fill.
+            $target.prop('disabled', false).val(value).trigger('change');
         }
 
         function announce() {

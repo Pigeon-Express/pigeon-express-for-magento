@@ -14,7 +14,8 @@
         "magento/module-sales": "*",
         "magento/module-store": "*",
         "magento/module-config": "*",
-        "magento/module-cron": "*"
+        "magento/module-cron": "*",
+        "pigeonexpress/php-sdk": "^1.2"
     },
     "autoload": {
         "psr-4": {
@@ -27,8 +28,5 @@
     "require-dev": {
         "phpunit/phpunit": "^9.6",
         "phpstan/phpstan": "^2.0"
-    },
-    "suggest": {
-        "pigeonexpress/php-sdk": "The Pigeon Express API client. A copy is bundled in lib/, so this is only needed if you prefer to manage it with Composer."
     }
 }

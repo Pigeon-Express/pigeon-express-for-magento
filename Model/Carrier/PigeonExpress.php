@@ -22,6 +22,7 @@ use Magento\Shipping\Model\Rate\ResultFactory;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\FreeShippingInterface;
 use PigeonExpress\Shipping\Exception\UnshippableException;
+use PigeonExpress\Shipping\Model\Magento\TrackingInfo;
 use PigeonExpress\Shipping\Model\Rate\RateCollector;
 use Psr\Log\LoggerInterface;
 
@@ -66,6 +67,11 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
     private $freeShipping;
 
     /**
+     * @var TrackingInfo
+     */
+    private $trackingInfo;
+
+    /**
      * @param \Magento\Framework\App\Config\ScopeConfigInterface $scopeConfig
      * @param ErrorFactory $rateErrorFactory
      * @param LoggerInterface $logger
@@ -74,6 +80,7 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
      * @param ConfigInterface $config
      * @param RateCollector $rateCollector
      * @param FreeShippingInterface $freeShipping
+     * @param TrackingInfo $trackingInfo
      * @param array $data
      */
     public function __construct(
@@ -85,8 +92,10 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
         ConfigInterface $config,
         RateCollector $rateCollector,
         FreeShippingInterface $freeShipping,
+        TrackingInfo $trackingInfo,
         array $data = []
     ) {
+        $this->trackingInfo = $trackingInfo;
         $this->rateResultFactory = $rateResultFactory;
         $this->rateMethodFactory = $rateMethodFactory;
         $this->config = $config;
@@ -253,5 +262,31 @@ class PigeonExpress extends AbstractCarrier implements CarrierInterface
         }
 
         return $methods;
+    }
+
+    /**
+     * Waybill numbers are tracked: Magento's tracking popups (the customer's
+     * "Track your order", the shipment email link, the admin) ask
+     * getTrackingInfo() for each one.
+     *
+     * @return bool
+     */
+    public function isTrackingAvailable()
+    {
+        return true;
+    }
+
+    /**
+     * The status last read from Pigeon Express and a link to its tracking page.
+     *
+     * @param string $tracking Waybill number
+     * @return \Magento\Shipping\Model\Tracking\Result\Status
+     */
+    public function getTrackingInfo($tracking)
+    {
+        return $this->trackingInfo->forNumber(
+            (string) $tracking,
+            (string) ($this->getConfigData('title') ?: 'Pigeon Express')
+        );
     }
 }

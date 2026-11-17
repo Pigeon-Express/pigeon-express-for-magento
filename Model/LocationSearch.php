@@ -55,6 +55,26 @@ class LocationSearch implements LocationSearchInterface
      */
     private $environment;
 
+    /**
+     * @var \PigeonExpress\Shipping\Model\Location\WorkingHours
+     */
+    private $workingHours;
+
+    /**
+     * The working hours of a pickup point for the customer, when the
+     * delivery type shows them; an empty string otherwise.
+     *
+     * @param \Magento\Framework\DataObject $item
+     */
+    private function hoursFor($item, string $type, int $storeId): string
+    {
+        if (!$this->config->isShowWorkingHours($type, $storeId)) {
+            return '';
+        }
+
+        return $this->workingHours->summary($item->getData('working_hours'));
+    }
+
     public function __construct(
         OfficeCollectionFactory $officeCollectionFactory,
         ApsCollectionFactory $apsCollectionFactory,
@@ -62,8 +82,10 @@ class LocationSearch implements LocationSearchInterface
         StoreManagerInterface $storeManager,
         ResourceConnection $resource,
         RegionResolver $regionResolver,
-        Environment $environment
+        Environment $environment,
+        ?\PigeonExpress\Shipping\Model\Location\WorkingHours $workingHours = null
     ) {
+        $this->workingHours = $workingHours ?? new \PigeonExpress\Shipping\Model\Location\WorkingHours();
         $this->officeCollectionFactory = $officeCollectionFactory;
         $this->apsCollectionFactory = $apsCollectionFactory;
         $this->config = $config;
@@ -159,6 +181,7 @@ class LocationSearch implements LocationSearchInterface
                 'postcode' => (string) ($item->getData('postcode_resolved') ?? ''),
                 'region_id' => $this->regionFor($item),
                 'type' => ConfigInterface::DELIVERY_TYPE_OFFICE,
+                'hours' => $this->hoursFor($item, ConfigInterface::DELIVERY_TYPE_OFFICE, $storeId),
             ];
         }
         return $items;
@@ -200,6 +223,7 @@ class LocationSearch implements LocationSearchInterface
                 'postcode' => (string) ($item->getData('postcode_resolved') ?? ''),
                 'region_id' => $this->regionFor($item),
                 'type' => ConfigInterface::DELIVERY_TYPE_APS,
+                'hours' => $this->hoursFor($item, ConfigInterface::DELIVERY_TYPE_APS, $storeId),
             ];
         }
         return $items;
@@ -239,6 +263,7 @@ class LocationSearch implements LocationSearchInterface
                 'postcode' => (string) ($item->getData('postcode_resolved') ?? ''),
                 'region_id' => $this->regionFor($item),
                 'type' => $type,
+                'hours' => $this->hoursFor($item, $type, $storeId),
             ];
         }
 

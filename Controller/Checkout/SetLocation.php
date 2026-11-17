@@ -19,13 +19,14 @@ use Magento\Framework\Controller\Result\JsonFactory;
 use Magento\Framework\Controller\ResultInterface;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Model\QuoteAddressLocationPersistor;
+use PigeonExpress\Shipping\Model\Shipment\AddressForm;
 use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
 use Psr\Log\LoggerInterface;
 
 class SetLocation extends Action implements HttpPostActionInterface
 {
-    /** Courier note field is not unbounded free text. */
-    private const MAX_INSTRUCTIONS_LENGTH = 255;
+    /** The longest courier note Pigeon Express accepts. */
+    private const MAX_INSTRUCTIONS_LENGTH = AddressForm::NOTE_MAX_LENGTH;
 
     /** @var JsonFactory */
     private $resultJsonFactory;

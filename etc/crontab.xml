@@ -9,5 +9,19 @@
             <schedule>0 2 * * *</schedule>
             <!-- <schedule>* * * * *</schedule> -->
         </job>
+        <!-- Automatic shipments for orders that reached Processing. Does
+             nothing unless "Create shipments automatically" is on. -->
+        <job name="pigeonexpress_auto_create"
+             instance="PigeonExpress\Shipping\Model\Cron\AutoCreateShipments"
+             method="execute">
+            <schedule>* * * * *</schedule>
+        </job>
+        <!-- Shipment status of every open shipment, twice a day. Does
+             nothing unless "Track shipment status" is on. -->
+        <job name="pigeonexpress_sync_statuses"
+             instance="PigeonExpress\Shipping\Model\Cron\SyncStatuses"
+             method="execute">
+            <schedule>17 */12 * * *</schedule>
+        </job>
     </group>
 </config>

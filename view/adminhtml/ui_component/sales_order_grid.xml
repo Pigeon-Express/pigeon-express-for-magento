@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sales > Orders: the "Pigeon Express" column (waybill and status, with a
+  filter by shipment state) and four mass actions. The column's values are
+  joined in by Plugin\Sales\OrderGridPigeonExpressPlugin.
+-->
+<listing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+    <listingToolbar name="listing_top">
+        <massaction name="listing_massaction">
+            <action name="pigeonexpress_mass_create" class="PigeonExpress\Shipping\Ui\Component\MassAction\AclAction">
+                <argument name="data" xsi:type="array">
+                    <item name="aclResource" xsi:type="string">PigeonExpress_Shipping::send_shipment</item>
+                </argument>
+                <settings>
+                    <url path="pigeonexpress/order/massCreate"/>
+                    <type>pigeonexpress_mass_create</type>
+                    <label translate="true">Create Pigeon Express shipments</label>
+                    <confirm>
+                        <title translate="true">Create Pigeon Express shipments</title>
+                        <message translate="true">A Pigeon Express waybill is created for each selected order that has none yet, from the order's own data. Continue?</message>
+                    </confirm>
+                </settings>
+            </action>
+            <action name="pigeonexpress_mass_refresh" class="PigeonExpress\Shipping\Ui\Component\MassAction\AclAction">
+                <argument name="data" xsi:type="array">
+                    <item name="aclResource" xsi:type="string">PigeonExpress_Shipping::refresh_status</item>
+                </argument>
+                <settings>
+                    <url path="pigeonexpress/order/massRefresh"/>
+                    <type>pigeonexpress_mass_refresh</type>
+                    <label translate="true">Refresh Pigeon Express shipment status</label>
+                </settings>
+            </action>
+            <action name="pigeonexpress_mass_labels" class="PigeonExpress\Shipping\Ui\Component\MassAction\AclAction">
+                <argument name="data" xsi:type="array">
+                    <item name="aclResource" xsi:type="string">PigeonExpress_Shipping::print_label</item>
+                </argument>
+                <settings>
+                    <url path="pigeonexpress/order/massLabels"/>
+                    <type>pigeonexpress_mass_labels</type>
+                    <label translate="true">Download Pigeon Express labels (ZIP)</label>
+                </settings>
+            </action>
+            <action name="pigeonexpress_mass_courier" class="PigeonExpress\Shipping\Ui\Component\MassAction\CourierAction">
+                <argument name="data" xsi:type="array">
+                    <item name="aclResource" xsi:type="string">PigeonExpress_Shipping::courier_request_create</item>
+                </argument>
+                <settings>
+                    <url path="pigeonexpress/courier/massrequest"/>
+                    <type>pigeonexpress_mass_courier</type>
+                    <label translate="true">Request a Pigeon Express courier</label>
+                </settings>
+            </action>
+        </massaction>
+    </listingToolbar>
+    <columns name="sales_order_columns">
+        <column name="pigeonexpress_state"
+                class="PigeonExpress\Shipping\Ui\Component\Listing\Column\PigeonExpress"
+                component="Magento_Ui/js/grid/columns/column">
+            <settings>
+                <label translate="true">Pigeon Express</label>
+                <filter>select</filter>
+                <options class="PigeonExpress\Shipping\Ui\Component\Listing\Column\PigeonExpressState"/>
+                <dataType>select</dataType>
+                <bodyTmpl>ui/grid/cells/html</bodyTmpl>
+                <sortable>false</sortable>
+                <visible>true</visible>
+            </settings>
+        </column>
+    </columns>
+</listing>

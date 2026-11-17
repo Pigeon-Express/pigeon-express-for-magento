@@ -520,6 +520,54 @@ class AddressFormTest extends TestCase
      * @param array<string, string> $overrides
      * @return array<string, string>
      */
+    // -- Review fixes: phone rules and declared value limits -----------------
+
+    public function testANumberThatIsNotBulgarianBlocksTheShipment(): void
+    {
+        // Eight digits passed the old length check; the WooCommerce rules refuse it.
+        $issues = $this->form->validate($this->fields(['contact_phone' => '12345678']), 1)['issues'];
+
+        $this->assertSame(AddressForm::SEVERITY_ERROR, $issues['contact_phone']['severity']);
+    }
+
+    public function testALandlineKeepsItsAreaCodeWithoutTheTrunkZero(): void
+    {
+        $checked = $this->form->validate($this->fields(['contact_phone' => '02 123 4567']), 1);
+
+        $this->assertArrayNotHasKey('contact_phone', $checked['issues']);
+        $this->assertSame('+35921234567', $checked['fields']['contact_phone']);
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: bool}>
+     */
+    public static function declaredAmounts(): array
+    {
+        return [
+            'the minimum'      => ['1', true],
+            'the maximum'      => ['5000', true],
+            'under the minimum' => ['0,50', false],
+            'over the maximum' => ['5000,01', false],
+        ];
+    }
+
+    /**
+     * @dataProvider declaredAmounts
+     */
+    public function testATypedDeclaredValueMustBeWithinTheCarrierLimits(string $amount, bool $accepted): void
+    {
+        $this->officeResolves();
+
+        $issues = $this->form->validate($this->fields([
+            'delivery_type'         => 'office',
+            'location_id'           => '7',
+            'declared_value'        => '1',
+            'declared_value_amount' => $amount,
+        ]), 1)['issues'];
+
+        $this->assertSame($accepted, !isset($issues['declared_value_amount']));
+    }
+
     private function fields(array $overrides = []): array
     {
         return array_merge($this->form->blank(), [
