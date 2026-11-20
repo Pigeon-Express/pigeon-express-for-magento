@@ -27,6 +27,7 @@ use PigeonExpress\Shipping\Model\ResourceModel\Shipment\CollectionFactory as Shi
 use PigeonExpress\Shipping\Model\Config\Source\WhoPays;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
 use PigeonExpress\Shipping\Model\Shipment\HandInText;
+use PigeonExpress\Shipping\Model\Shipment\ReturnDestination;
 use PigeonExpress\Shipping\Model\Shipment\WhoPaysFacts;
 use PigeonExpress\Shipping\Model\AdditionalServiceRepository;
 use Magento\Framework\AuthorizationInterface;
@@ -61,6 +62,9 @@ class Info extends Template
 
     /** @var AdditionalServiceRepository */
     private $serviceRepository;
+
+    /** @var ReturnDestination */
+    private $returnDestination;
 
     /** @var AddressForm */
     private $addressForm;
@@ -150,6 +154,7 @@ class Info extends Template
         WhoPaysFacts $whoPaysFacts,
         HandInText $handInText,
         AdditionalServiceRepository $serviceRepository,
+        ReturnDestination $returnDestination,
         ShipmentEditor $shipmentEditor,
         StatusNames $statusNames,
         AuthorizationInterface $authorization,
@@ -174,6 +179,7 @@ class Info extends Template
         $this->whoPaysFacts = $whoPaysFacts;
         $this->handInText = $handInText;
         $this->serviceRepository = $serviceRepository;
+        $this->returnDestination = $returnDestination;
     }
 
     /**
@@ -470,6 +476,9 @@ class Info extends Template
         }
         $collection = $this->shipmentCollectionFactory->create();
         $collection->addFieldToFilter('order_id', (int) $order->getId());
+        // A redirected waybill is history: the order follows the newer row of
+        // the shipment that replaced it.
+        $collection->addFieldToFilter('status', ['neq' => \PigeonExpress\Shipping\Model\Shipment::STATUS_REDIRECTED]);
         // Newest first. An order can hold several rows once a cancelled waybill
         // has been replaced, and the current one is what the admin must act on.
         $collection->setOrder('entity_id', 'DESC');
@@ -497,6 +506,33 @@ class Info extends Template
             'checked' => $shipment !== null ? $this->formatUtc((string) $shipment->getStatusCheckedAt()) : '',
             'tone'    => $code !== '' ? StatusCodes::tone($code) : '',
         ];
+    }
+
+    /**
+     * Where the live shipment returns to, as it was sent (from its stored
+     * body), label => text: "Return to" and, while the shop can choose it,
+     * "Return documents to". Empty without a live shipment or a stored body.
+     *
+     * @return array<string, string>
+     */
+    public function getReturnDestinationLines(): array
+    {
+        $order = $this->getOrder();
+        $shipment = $this->getExistingShipment();
+        if ($order === null || $shipment === null || !$this->hasActiveShipment()) {
+            return [];
+        }
+
+        $payload = json_decode((string) $shipment->getPayload(), true);
+        if (!is_array($payload) || $payload === []) {
+            return [];
+        }
+
+        try {
+            return $this->returnDestination->lines($payload, (int) $order->getStoreId());
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     /**
@@ -813,13 +849,43 @@ class Info extends Template
     }
 
     /**
-     * Whether the shipment is still early enough for Pigeon Express to cancel it.
+     * Whether the shipment is still early enough for Pigeon Express to cancel
+     * it, and one the sender may cancel at all (not a return or a redirect).
      */
     public function isShipmentCancellable(): bool
     {
         $shipment = $this->getExistingShipment();
 
         return $shipment !== null && $this->shipmentCanceller->isCancellable($shipment);
+    }
+
+    /**
+     * Whether the live shipment, as last read, is a return or a redirect of
+     * another one (its details name an `original`): Pigeon Express does not
+     * let the sender cancel it, so the panel says so instead of Cancel.
+     */
+    public function isDerived(): bool
+    {
+        return \PigeonExpress\Shipping\Model\Status\ShipmentDetailsStore::isDerived($this->getExistingShipment());
+    }
+
+    /** Said instead of the Cancel button for a return or a redirect. */
+    public function getDerivedCancelMessage(): string
+    {
+        return \PigeonExpress\Shipping\Model\ShipmentCanceller::derivedCancelMessage();
+    }
+
+    /**
+     * Endpoint of the free boxes of the parcel locker picked in the shipment
+     * form (Controller Order/LockerBoxes), '' when not allowed.
+     */
+    public function getLockerBoxesUrl(): string
+    {
+        $order = $this->getOrder();
+
+        return $order && $order->getId() && $this->isAllowed(SendController::ADMIN_RESOURCE)
+            ? $this->getUrl('pigeonexpress/order/lockerboxes', ['order_id' => $order->getId()])
+            : '';
     }
 
     /**
@@ -879,6 +945,17 @@ class Info extends Template
     }
 
     /**
+     * Whether a shipment row is a waybill Pigeon Express replaced with a new
+     * one (a redirect): history, like a cancelled one.
+     *
+     * @param \PigeonExpress\Shipping\Model\Shipment $shipment
+     */
+    public function isRedirected($shipment): bool
+    {
+        return (string) $shipment->getStatus() === \PigeonExpress\Shipping\Model\Shipment::STATUS_REDIRECTED;
+    }
+
+    /**
      * A shipment status in words rather than in the carrier's own vocabulary.
      *
      * An unknown status is shown rather than hidden: a new one from the carrier
@@ -893,6 +970,9 @@ class Info extends Template
         // The carrier's status once it has been read, unless the waybill was
         // cancelled here.
         $code = (string) $shipment->getStatusCode();
+        if ($status === \PigeonExpress\Shipping\Model\Shipment::STATUS_REDIRECTED) {
+            return (string) __('Redirected to a new shipment');
+        }
         if ($code !== '' && $status !== \PigeonExpress\Shipping\Model\ShipmentCanceller::STATUS_CANCELLED) {
             return $this->statusNames->label($code, (string) $shipment->getStatusName());
         }

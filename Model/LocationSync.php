@@ -343,5 +343,12 @@ class LocationSync implements LocationSyncInterface
                 ? json_encode(array_values($row['working_hours']))
                 : null
         );
+
+        // A locker's free boxes are looked up by its code, never its id. Only
+        // the locker table has the column.
+        if ($model instanceof Aps) {
+            $code = isset($row['code']) && is_scalar($row['code']) ? trim((string) $row['code']) : '';
+            $model->setCode($code !== '' ? $code : null);
+        }
     }
 }

@@ -11,13 +11,17 @@ use Magento\Framework\TestFramework\Unit\Helper\ObjectManager;
 use Magento\Sales\Api\Data\OrderInterface;
 use PHPUnit\Framework\TestCase;
 use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Api\LocationSearchInterface;
 use PigeonExpress\Shipping\Api\RateClientInterface;
+use PigeonExpress\Shipping\Logger\Logger;
+use PigeonExpress\Shipping\Model\Account\SavedAddresses;
 use PigeonExpress\Shipping\Model\Package\PackageBuilder;
 use PigeonExpress\Shipping\Model\Pickup\PickupPayload;
 use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
 use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
 use PigeonExpress\Shipping\Model\Shipment\LabelContents;
+use PigeonExpress\Shipping\Model\Shipment\ReturnDestination;
 use PigeonExpress\Shipping\Model\ShipmentSender;
 
 /**
@@ -34,7 +38,7 @@ class ShipmentSenderPayloadTest extends TestCase
 
         $this->assertSame(
             ['return_at_my_expense' => true, 'return_office_id' => 149],
-            $this->call($this->sender(['config' => $config]), 'returnFields', 1)
+            $this->returnFields($config, [])
         );
     }
 
@@ -42,8 +46,71 @@ class ShipmentSenderPayloadTest extends TestCase
     {
         $config = $this->createMock(ConfigInterface::class);
         $config->method('getReturnOfficeId')->willReturn(null);
+        $config->method('getReturnAddressId')->willReturn(null);
 
-        $this->assertSame([], $this->call($this->sender(['config' => $config]), 'returnFields', 1));
+        $this->assertSame([], $this->returnFields($config, ['service_return_documents' => true]));
+    }
+
+    public function testASavedAddressTheAccountListsIsSent(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('getReturnAddressId')->willReturn(130);
+
+        $this->assertSame(['return_address_id' => 130], $this->returnFields($config, [], [130]));
+    }
+
+    public function testASavedAddressTheAccountNoLongerListsIsLeftOut(): void
+    {
+        // The carrier would refuse the whole shipment; the account decides instead.
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('getReturnAddressId')->willReturn(131);
+
+        $this->assertSame([], $this->returnFields($config, [], [130]));
+    }
+
+    public function testAnOfficeWinsOverAnAddressNeverBoth(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('getReturnOfficeId')->willReturn(149);
+        $config->method('getReturnAddressId')->willReturn(130);
+
+        $this->assertSame(['return_office_id' => 149], $this->returnFields($config, [], [130]));
+    }
+
+    public function testTheDocumentsDestinationGoesOnlyWithADocumentsService(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('getReturnOfficeId')->willReturn(149);
+        $config->method('getReturnDocumentsOfficeId')->willReturn(77);
+
+        $this->assertSame(['return_office_id' => 149], $this->returnFields($config, ['cod_amount' => 12.5]));
+        $this->assertSame(
+            ['return_office_id' => 149],
+            $this->returnFields($config, ['service_return_documents' => false]),
+            'a service switched off does not count'
+        );
+        foreach (ReturnDestination::DOCUMENT_SERVICE_CODES as $code) {
+            $this->assertSame(
+                ['return_office_id' => 149, 'return_documents_office_id' => 77],
+                $this->returnFields($config, [$code => true]),
+                $code
+            );
+        }
+    }
+
+    public function testADocumentsAddressIsCheckedAgainstTheAccountToo(): void
+    {
+        $config = $this->createMock(ConfigInterface::class);
+        $config->method('getReturnDocumentsAddressId')->willReturn(131);
+
+        $this->assertSame([], $this->returnFields($config, ['paper_return_receipt' => true], [130]));
+    }
+
+    public function testTheReturnDocumentsChoiceStaysSwitchedOff(): void
+    {
+        // The test environment refuses it, so the shop cannot choose it yet
+        // and the settings getters never give a documents destination.
+        $this->assertFalse(ConfigInterface::RETURN_DOCUMENTS_CHOICE);
     }
 
     public function testTheFormServiceKeysBecomeOverrides(): void
@@ -129,6 +196,35 @@ class ShipmentSenderPayloadTest extends TestCase
     }
 
     // -----------------------------------------------------------------------
+
+    /**
+     * returnFields() of a sender whose return destinations come from these
+     * settings and an account that lists these saved addresses.
+     *
+     * @param array<string, mixed> $serviceCodes
+     * @param int[] $savedAddressIds
+     * @return array<string, mixed>
+     */
+    private function returnFields(ConfigInterface $config, array $serviceCodes, array $savedAddressIds = []): array
+    {
+        $addresses = $this->createMock(SavedAddresses::class);
+        $addresses->method('find')->willReturnCallback(static function (int $id) use ($savedAddressIds): ?array {
+            return in_array($id, $savedAddressIds, true) ? ['id' => $id, 'label' => 'Address ' . $id] : null;
+        });
+        $destination = new ReturnDestination(
+            $config,
+            $addresses,
+            $this->createMock(LocationSearchInterface::class),
+            $this->createMock(Logger::class)
+        );
+
+        return $this->call(
+            $this->sender(['config' => $config, 'returnDestination' => $destination]),
+            'returnFields',
+            1,
+            $serviceCodes
+        );
+    }
 
     /**
      * @param array<string, mixed> $args

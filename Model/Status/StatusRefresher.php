@@ -11,6 +11,13 @@
  * Used by the background check (Model\Cron\SyncStatuses), the order panel's
  * "Refresh" and the orders grid mass action alike.
  *
+ * A shipment whose own status is shipment_redirected was replaced by a new
+ * waybill: the order moves to it first (Model\Shipment\RedirectFollower),
+ * which brings the new shipment's own status, at most MAX_REDIRECT_ADOPTIONS
+ * per call. An order left on the old shipment (the move found nothing, the
+ * order was busy, over the allowance) gets the status read for it, as before,
+ * and is asked again next time.
+ *
  * @copyright Copyright (c). All rights reserved.
  */
 
@@ -24,6 +31,7 @@ use PigeonExpress\Shipping\Exception\RateLimitedException;
 use PigeonExpress\Shipping\Model\Api\ShipmentClient;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment\CollectionFactory;
 use PigeonExpress\Shipping\Model\Shipment;
+use PigeonExpress\Shipping\Model\Shipment\RedirectFollower;
 use PigeonExpress\Shipping\Model\ShipmentCanceller;
 use Psr\Log\LoggerInterface;
 
@@ -68,6 +76,22 @@ class StatusRefresher
     /** Most details (GET /shipments/{ref}) one run reads after status changes. */
     public const DETAILS_PER_RUN = 20;
 
+    /**
+     * Orders one call moves to a redirected shipment. Each move reads the
+     * shipment chain and the new shipment (GETs), so a run keeps the rest,
+     * still open and still redirected, for the next run.
+     */
+    public const MAX_REDIRECT_ADOPTIONS = 5;
+
+    /** Lifecycles of rows that are no longer followed. */
+    private const CLOSED_LIFECYCLES = [ShipmentCanceller::STATUS_CANCELLED, Shipment::STATUS_REDIRECTED];
+
+    /** @var RedirectFollower|null */
+    private $follower;
+
+    /** @var int */
+    private $adoptionsLeft = self::MAX_REDIRECT_ADOPTIONS;
+
     public function __construct(
         ShipmentClientInterface $client,
         CollectionFactory $collectionFactory,
@@ -76,8 +100,10 @@ class StatusRefresher
         ShipmentDetailsStore $details,
         ConfigInterface $config,
         LoggerInterface $logger,
-        int $batchSize = ShipmentClient::TRACK_BULK_MAX
+        int $batchSize = ShipmentClient::TRACK_BULK_MAX,
+        ?RedirectFollower $follower = null
     ) {
+        $this->follower = $follower;
         $this->client = $client;
         $this->collectionFactory = $collectionFactory;
         $this->interpreter = $interpreter;
@@ -96,18 +122,19 @@ class StatusRefresher
      * counted in `left_out`, as WooCommerce's bulk refresh does.
      *
      * @param int[] $orderIds
-     * @return array{updated:int, unchanged:int, failed:int, left_out:int}
+     * @return array{updated:int, unchanged:int, failed:int, left_out:int, moved:array<int, string>}
+     *         moved: order id => the new shipment number, for the orders moved after a redirect
      */
     public function refreshOrders(array $orderIds, int $limit = 0): array
     {
         $ids = array_values(array_unique(array_filter(array_map('intval', $orderIds))));
         if ($ids === []) {
-            return ['updated' => 0, 'unchanged' => 0, 'failed' => 0, 'left_out' => 0];
+            return ['updated' => 0, 'unchanged' => 0, 'failed' => 0, 'left_out' => 0, 'moved' => []];
         }
 
         $collection = $this->collectionFactory->create();
         $collection->addFieldToFilter('order_id', ['in' => $ids]);
-        $collection->addFieldToFilter('status', ['neq' => ShipmentCanceller::STATUS_CANCELLED]);
+        $collection->addFieldToFilter('status', ['nin' => self::CLOSED_LIFECYCLES]);
         $collection->addFieldToFilter('reference_number', ['notnull' => true]);
         $collection->setOrder('entity_id', 'DESC');
 
@@ -134,6 +161,7 @@ class StatusRefresher
             'unchanged' => $result['unchanged'],
             'failed'    => $result['failed'] + $result['not_found'],
             'left_out'  => $leftOut,
+            'moved'     => $result['moved'],
         ];
     }
 
@@ -145,17 +173,26 @@ class StatusRefresher
      * follow (a return adds its fees). See wantsDetails().
      *
      * @param Shipment[] $rows
-     * @return array{updated:int, unchanged:int, failed:int, not_found:int, rate_limited:bool}
+     * @return array{updated:int, unchanged:int, failed:int, not_found:int, rate_limited:bool, moved:array<int, string>}
+     *         moved: order id => the new shipment number; a move counts as updated
      */
     public function refreshShipments(array $rows): array
     {
-        $summary = ['updated' => 0, 'unchanged' => 0, 'failed' => 0, 'not_found' => 0, 'rate_limited' => false];
+        $summary = [
+            'updated'      => 0,
+            'unchanged'    => 0,
+            'failed'       => 0,
+            'not_found'    => 0,
+            'rate_limited' => false,
+            'moved'        => [],
+        ];
         $this->detailsLeft = self::DETAILS_PER_RUN;
+        $this->adoptionsLeft = self::MAX_REDIRECT_ADOPTIONS;
 
         $byReference = [];
         foreach ($rows as $row) {
             $reference = trim((string) $row->getReferenceNumber());
-            if ($reference !== '' && $row->getStatus() !== ShipmentCanceller::STATUS_CANCELLED) {
+            if ($reference !== '' && !in_array($row->getStatus(), self::CLOSED_LIFECYCLES, true)) {
                 $byReference[$reference][] = $row;
             }
         }
@@ -183,13 +220,25 @@ class StatusRefresher
 
             foreach ($references as $reference) {
                 $entry = $entries[$reference] ?? null;
+
+                // Redirected, here or elsewhere: each order moves to the
+                // shipment that carries the parcel now, before the chain is
+                // read as this shipment's status.
+                $left = $byReference[$reference];
+                if (is_array($entry) && $this->interpreter->rootCode($entry) === StatusCodes::REDIRECTED) {
+                    $left = $this->adoptRedirects($reference, $left, $summary);
+                    if ($left === []) {
+                        continue;
+                    }
+                }
+
                 $status = is_array($entry) ? $this->interpreter->interpret($entry) : null;
 
                 if ($status !== null && isset($status['confirm'])) {
-                    $status = $this->confirmReturn($status, $reference, $byReference[$reference]);
+                    $status = $this->confirmReturn($status, $reference, $left);
                 }
 
-                foreach ($byReference[$reference] as $row) {
+                foreach ($left as $row) {
                     if ($status === null) {
                         $summary['not_found']++;
                         continue;
@@ -226,15 +275,60 @@ class StatusRefresher
     }
 
     /**
-     * Every shipment still being followed: created here, not cancelled, not
-     * in a final status, and younger than TRACK_DAYS. Oldest first.
+     * Move each order holding a redirected shipment to the one that replaced
+     * it, within this call's allowance.
+     *
+     * @param Shipment[] $rows The rows holding $reference
+     * @param array<string, mixed> $summary Counted in
+     * @return Shipment[] The rows left on the old shipment
+     */
+    private function adoptRedirects(string $reference, array $rows, array &$summary): array
+    {
+        if ($this->follower === null) {
+            return $rows;
+        }
+
+        $left = [];
+        foreach ($rows as $row) {
+            // Over the allowance: left for the next run, recorded below as
+            // redirected, which keeps it open.
+            if ($this->adoptionsLeft <= 0) {
+                $left[] = $row;
+                continue;
+            }
+
+            try {
+                $moved = $this->follower->follow($row->getOrderId(), $reference, [], 0);
+            } catch (\Throwable $e) {
+                $this->logger->warning('[PigeonExpress] Redirect of ' . $reference . ' not followed: '
+                    . $e->getMessage());
+                $moved = '';
+            }
+
+            if ($moved === '') {
+                $left[] = $row;
+                continue;
+            }
+
+            $this->adoptionsLeft--;
+            $summary['updated']++;
+            $summary['moved'][$row->getOrderId()] = $moved;
+        }
+
+        return $left;
+    }
+
+    /**
+     * Every shipment still being followed: created here, not cancelled or
+     * redirected, not in a final status, and younger than TRACK_DAYS. Oldest
+     * first.
      *
      * @return Shipment[]
      */
     public function openShipments(): array
     {
         $collection = $this->collectionFactory->create();
-        $collection->addFieldToFilter('status', ['neq' => ShipmentCanceller::STATUS_CANCELLED]);
+        $collection->addFieldToFilter('status', ['nin' => self::CLOSED_LIFECYCLES]);
         $collection->addFieldToFilter('reference_number', ['notnull' => true]);
         $collection->addFieldToFilter(
             'status_code',

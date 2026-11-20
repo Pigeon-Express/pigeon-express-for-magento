@@ -112,9 +112,11 @@ class StatusRecorder
             $fresh = $this->shipmentFactory->create();
             $this->resource->load($fresh, (int) $row->getId());
 
-            // Cancelled or replaced since the status was read.
+            // Cancelled or replaced since the status was read. A redirected
+            // row is history: the order follows the shipment that replaced it.
             if (!$fresh->getId() || (string) $fresh->getReferenceNumber() !== $reference
                 || $fresh->getStatus() === ShipmentCanceller::STATUS_CANCELLED
+                || $fresh->getStatus() === Shipment::STATUS_REDIRECTED
             ) {
                 return false;
             }

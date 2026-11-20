@@ -4,6 +4,25 @@ Magento 2 shipping carrier integration for [Pigeon Express](https://pigeonexpres
 
 ---
 
+## Features
+
+- Delivery to an address, an office or a parcel locker, with fixed or dynamic
+  (API-based) pricing.
+- Cities, streets, offices and lockers chosen from the carrier's lists at
+  checkout, with working hours.
+- Optional nearest offices and lockers at checkout, and an optional map to
+  choose from.
+- Shipments created from the order screen, automatically, or from the orders
+  grid, with labels, edits, cancels, returns and courier requests.
+- Quick changes after the courier has the parcel (delivery place, services,
+  cash on delivery, declared value) with the price shown before you confirm.
+  When Pigeon Express answers with a new waybill, the order moves to it and the
+  customer is emailed the new number.
+- Parcel locker free boxes shown in the order form.
+- Status, charges and tracking in the order and the orders grid.
+
+---
+
 ## Requirements
 
 - Magento 2.4.x
@@ -116,6 +135,16 @@ applies to the whole carrier.
 | Parcel weight and dimensions | Attribute mapping, defaults, fragile packages, package description |
 | Sync and diagnostics | Manual sync trigger, logging |
 
+The Checkout and cash on delivery section has two optional settings, both off
+by default:
+
+- **Nearest office**: when a customer chooses office or parcel locker
+  delivery, the browser asks to share their location and the five nearest
+  offices or lockers are listed first. A customer who declines sees the usual
+  list.
+- **Map of offices and lockers**: adds a "Choose on the map" button to the
+  list. See External services below.
+
 Only additional services included in your Pigeon Express account are shown. A
 service your account does not have is hidden rather than offered as a switch that
 does nothing.
@@ -210,6 +239,26 @@ To sync locations immediately without waiting for the daily cron:
 If a sync is already pending, clicking the button shows a notice instead of creating a duplicate.
 
 After a successful sync, the **Pickup office** dropdown will be populated and offices/APS lockers will appear in checkout autocomplete.
+
+---
+
+## External services
+
+Besides the Pigeon Express API, two optional checkout features involve other
+parties. Both are off until you switch them on.
+
+- **Map (OpenStreetMap)**: when a customer opens "Choose on the map", their
+  browser loads the map images from tile.openstreetmap.org. Their browser
+  address and the area they look at are visible to that service, as for any
+  OpenStreetMap map. The shop sends nothing about the customer or the order.
+  The office and locker positions come from the shop's own data. With both
+  Nearest office and the map on, the map opens on the customer's area (when
+  they allowed their location), so the map image requests show that area to
+  openstreetmap.org.
+- **Nearest office**: the customer's browser shares their location only after
+  they allow it. The location is rounded to about 100 metres and sent to
+  Pigeon Express to find the nearest offices or lockers. It is not stored with
+  the order or the cart and is not written to the logs.
 
 ---
 

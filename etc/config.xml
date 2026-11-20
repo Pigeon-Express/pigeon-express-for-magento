@@ -89,6 +89,13 @@
                      checkout every customer sees, so a merchant turns it on once
                      they have watched it work on their own store. -->
                 <override_address_fields>0</override_address_fields>
+                <!-- Off, as in WooCommerce: the browser asks the shopper's
+                     permission for their location, which no shop should start
+                     doing because of an update. -->
+                <nearest_office>0</nearest_office>
+                <!-- Off, as in WooCommerce: the map loads its images from
+                     openstreetmap.org, an outside service the shop opts into. -->
+                <location_map>0</location_map>
                 <!-- Locker compartment in cm, w x h x d. The API never checks this,
                      so the module does. Zero on any side turns the check off. -->
                 <locker_max_width>61</locker_max_width>
@@ -133,6 +140,9 @@
                 <!-- Returns: as in WooCommerce, the account decides until told otherwise. -->
                 <return_at_my_expense>0</return_at_my_expense>
                 <return_to>profile</return_to>
+                <!-- Return documents: the account decides. Not shown while
+                     ConfigInterface::RETURN_DOCUMENTS_CHOICE is false. -->
+                <return_documents_to>profile</return_documents_to>
                 <!-- A shipment costs money: never created by itself unless asked. -->
                 <auto_create>0</auto_create>
                 <status_sync>1</status_sync>

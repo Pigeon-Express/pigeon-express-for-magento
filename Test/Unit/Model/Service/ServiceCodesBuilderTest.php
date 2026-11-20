@@ -185,6 +185,23 @@ class ServiceCodesBuilderTest extends TestCase
         $this->assertSame(250.0, $codes['declared_value']);
     }
 
+    public function testLockerDeliveryDropsTheDeclaredValue(): void
+    {
+        // Pigeon Express refuses a locker shipment that carries a declared
+        // value, so a merchant with insurance on by default must still be able
+        // to send to a locker.
+        $this->config = $this->configWithInsurance();
+
+        $this->assertArrayNotHasKey('declared_value', $this->build('aps', 'locker', 0.0, true, 250.0));
+        $this->assertArrayNotHasKey(
+            'declared_value',
+            $this->buildWith($this->catalogue(self::CATALOGUE), 'aps', 'locker', 0.0, true, 250.0, [
+                ServiceCodesBuilder::OVERRIDE_DECLARED_VALUE => true,
+                ServiceCodesBuilder::OVERRIDE_DECLARED_VALUE_AMOUNT => '100',
+            ])
+        );
+    }
+
     public function testFreeGoodsAreInsuredForTheMinimum(): void
     {
         // As in WooCommerce: the carrier refuses less than 1 EUR, so free

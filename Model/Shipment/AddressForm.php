@@ -545,8 +545,11 @@ class AddressForm
             $fields[$field] = '';
         }
 
+        // The customer's own postcode, taken before resolveCity() fills a blank
+        // one from the city: only theirs can tell apart two streets of one name.
+        $customerPostcode = trim((string) $fields['postal_code']);
         $cityId = $this->resolveCity($fields, $issues);
-        $this->resolveStreet($fields, $issues, $cityId, $storeId);
+        $this->resolveStreet($fields, $issues, $cityId, $storeId, $customerPostcode);
 
         if ($fields['street_number'] === '' && !isset($issues['street'])) {
             $issues['street_number'] = $this->issue(
@@ -1078,9 +1081,15 @@ class AddressForm
     /**
      * @param array<string, string> $fields
      * @param array<string, array{severity:string, message:string}> $issues
+     * @param string $postalCode The postcode as given, before the city filled a blank one
      */
-    private function resolveStreet(array &$fields, array &$issues, ?int $cityId, int $storeId): void
-    {
+    private function resolveStreet(
+        array &$fields,
+        array &$issues,
+        ?int $cityId,
+        int $storeId,
+        string $postalCode = ''
+    ): void {
         $preferredType = '';
 
         if ($fields['street_id'] === '') {
@@ -1122,7 +1131,7 @@ class AddressForm
             return;
         }
 
-        $match = $this->resolver->matchStreet($cityId, $fields['street'], $storeId, $preferredType);
+        $match = $this->resolver->matchStreet($cityId, $fields['street'], $storeId, $preferredType, $postalCode);
         if ($match !== null) {
             $fields['street'] = $match['name'];
             $fields['street_id'] = (string) $match['id'];

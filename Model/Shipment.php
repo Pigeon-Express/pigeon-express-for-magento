@@ -14,6 +14,19 @@ use PigeonExpress\Shipping\Model\ResourceModel\Shipment as ShipmentResource;
 
 class Shipment extends AbstractModel
 {
+    /**
+     * Module lifecycle values of the `status` column (not the carrier status,
+     * see getStatusCode()). A row created here holds the status the create
+     * answered with (shipment_registered, or sent when none came); cancelled
+     * is ShipmentCanceller::STATUS_CANCELLED.
+     *
+     * Redirected: Pigeon Express replaced this waybill with a new one (a
+     * change of delivery place after shipment_registered). The order moved to
+     * a newer row whose redirected_from is this row's reference; this row is
+     * history and is never cancelled, edited or followed again.
+     */
+    public const STATUS_REDIRECTED = 'redirected';
+
     protected function _construct()
     {
         $this->_init(ShipmentResource::class);
@@ -150,5 +163,38 @@ class Shipment extends AbstractModel
         $decoded = json_decode((string) $this->getData('details_json'), true);
 
         return is_array($decoded) && isset($decoded['fetched_at']) ? $decoded : null;
+    }
+
+    /**
+     * The reference of the shipment this one replaced by a redirect, or null
+     * for a shipment created here.
+     */
+    public function getRedirectedFrom(): ?string
+    {
+        $value = $this->getData('redirected_from');
+
+        return $value !== null && trim((string) $value) !== '' ? trim((string) $value) : null;
+    }
+
+    public function setRedirectedFrom(?string $reference): self
+    {
+        return $this->setData('redirected_from', $reference);
+    }
+
+    /**
+     * When the customer was emailed this shipment's tracking number after a
+     * redirect, UTC "Y-m-d H:i:s", or null when not yet. Set once; whoever
+     * sets it first sends the email, nobody after (replay, Refresh, cron).
+     */
+    public function getCustomerNotifiedAt(): ?string
+    {
+        $value = $this->getData('customer_notified_at');
+
+        return $value !== null && $value !== '' ? (string) $value : null;
+    }
+
+    public function setCustomerNotifiedAt(?string $utc): self
+    {
+        return $this->setData('customer_notified_at', $utc);
     }
 }

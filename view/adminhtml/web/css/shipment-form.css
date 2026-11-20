@@ -78,6 +78,9 @@
 }
 
 .pe-shipment-actions {
+    /* Buttons keep their own height beside a wrapped hint or the quick
+       changes box. */
+    align-items: flex-start;
     display: flex;
     flex: 0 1 auto;
     flex-wrap: wrap;
@@ -751,8 +754,9 @@
     margin-bottom: .6rem;
 }
 
-/* A locker takes neither inspection nor a return receipt. */
+/* A locker takes no declared value, inspection or return receipt. */
 .pigeonexpress-shipment-form[data-pe-type="aps"] [data-pe-handover],
+.pigeonexpress-shipment-form[data-pe-type="aps"] [data-pe-not-locker],
 .pigeonexpress-shipment-form:not([data-pe-type="aps"]) [data-pe-locker-only] {
     display: none;
 }
@@ -873,4 +877,269 @@
     height: auto;
     margin: 1.2rem 0 0;
     width: auto;
+}
+
+/* -- Redirects and derived shipments --------------------------------------- */
+
+/* A waybill Pigeon Express replaced with a new one: history, greyed out but
+   not struck through, since it was not cancelled. */
+.pe-shipment-table tr.pe-redirected td {
+    color: #a3a3a3;
+}
+
+/* -- Quick changes ----------------------------------------------------------
+ * The box first lists the four changes; "Open" swaps the list for one form
+ * per change Pigeon Express allows now. A change it does not allow is one line
+ * with its reason, not a form. Each form is closed until opened, so the box
+ * stays short on a shipment where nothing needs changing.
+ * ------------------------------------------------------------------------- */
+.pe-shipment-actions .pe-quick {
+    box-sizing: border-box;
+    flex-basis: 100%;
+    max-width: 38rem;
+    margin-left: auto;
+    padding: 12px 14px;
+    border: 1px solid #e3e3e3;
+    background: #fafafa;
+    font-size: 12px;
+    text-align: left;
+}
+.pe-quick__title {
+    margin: 0 0 6px;
+    font-size: 14px;
+    font-weight: 600;
+}
+.pe-quick__intro,
+.pe-quick__note,
+.pe-quick__unavailable {
+    margin: 0 0 10px;
+    color: #666;
+    line-height: 1.5;
+}
+.pe-quick__list {
+    margin: 0 0 12px 18px;
+    padding: 0;
+    list-style: disc;
+}
+.pe-quick__list li {
+    margin: 0 0 2px;
+}
+.pe-quick__body._busy {
+    opacity: .5;
+}
+.pe-quick__error,
+.pe-quick__message {
+    margin: 0 0 10px;
+    color: #e22626;
+}
+.pe-quick__error[hidden],
+.pe-quick__message[hidden],
+.pe-quick__open[hidden],
+.pe-quick [hidden] {
+    display: none;
+}
+.pe-quick__action {
+    margin: 0 0 8px;
+    padding: 8px 10px;
+    border: 1px solid #dcdcde;
+    border-radius: 3px;
+    background: #fff;
+}
+.pe-quick__action > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #303030;
+}
+.pe-quick__action[open] > summary {
+    margin-bottom: 10px;
+}
+.pe-quick__action.is-unavailable {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 8px;
+    background: #f6f6f6;
+}
+.pe-quick__action.is-unavailable .pe-quick__name {
+    font-weight: 600;
+    color: #666;
+}
+.pe-quick__reason {
+    color: #666;
+}
+.pe-quick__field {
+    margin: 0 0 10px;
+}
+.pe-quick__label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+.pe-quick__field .admin__control-text,
+.pe-quick__field .admin__control-select {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+.pe-quick__field .pe-quick__amount {
+    width: 16rem;
+}
+.pe-quick__hint {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    color: #666;
+}
+.pe-quick__group {
+    margin: 0 0 10px;
+    padding: 0;
+    border: 0;
+}
+.pe-quick__group > legend {
+    margin-bottom: 4px;
+    padding: 0;
+    font-weight: 600;
+}
+.pe-quick__check {
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+    margin: 3px 0 10px;
+}
+.pe-quick__price {
+    min-width: 0;
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    border: 1px solid #dcdcde;
+    background: #f6f6f6;
+}
+.pe-quick__price[hidden] {
+    display: none;
+}
+.pe-quick__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* -- Shipment form: free boxes of the chosen parcel locker ------------------
+ * A forecast, so it reads as information under the picker, never as a form
+ * error.
+ * ------------------------------------------------------------------------- */
+.pe-locker-boxes {
+    font-size: 12px;
+}
+.pe-locker-boxes[hidden] {
+    display: none;
+}
+.pe-locker-boxes._busy {
+    opacity: .5;
+}
+.pe-locker-boxes__box {
+    max-width: 520px;
+    padding: 8px 12px;
+    border-left: 4px solid #c3c4c7;
+    background: #f6f7f7;
+}
+.pe-locker-boxes__box--ok {
+    border-color: #00a32a;
+    background: #edfaef;
+}
+.pe-locker-boxes__box--bad {
+    border-color: #d63638;
+    background: #fcf0f1;
+}
+.pe-locker-boxes .pe-locker-boxes__verdict {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1d2327;
+}
+.pe-locker-boxes__icon {
+    flex: none;
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+}
+.pe-locker-boxes__box--ok .pe-locker-boxes__icon {
+    background: #00a32a;
+}
+.pe-locker-boxes__box--ok .pe-locker-boxes__icon:before {
+    content: '\2713';
+}
+.pe-locker-boxes__box--bad .pe-locker-boxes__icon {
+    background: #d63638;
+}
+.pe-locker-boxes__box--bad .pe-locker-boxes__icon:before {
+    content: '!';
+    font-weight: 700;
+}
+.pe-locker-boxes .pe-locker-boxes__detail {
+    margin: 2px 0 0 24px;
+    color: #3c434a;
+}
+.pe-locker-boxes__box--plain .pe-locker-boxes__detail {
+    margin-left: 0;
+}
+.pe-locker-boxes__forecast {
+    color: #646970;
+}
+.pe-locker-boxes__all {
+    margin: 4px 0 0 24px;
+}
+.pe-locker-boxes__box--plain .pe-locker-boxes__all {
+    margin-left: 0;
+}
+.pe-locker-boxes__all > summary {
+    display: inline-block;
+    cursor: pointer;
+    color: #007bdb;
+}
+.pe-locker-boxes__all > summary:hover,
+.pe-locker-boxes__all > summary:focus {
+    text-decoration: underline;
+}
+.pe-locker-boxes__all > summary::-webkit-details-marker {
+    display: none;
+}
+.pe-locker-boxes__all > summary:after {
+    content: ' \25BE';
+}
+.pe-locker-boxes__all[open] > summary:after {
+    content: ' \25B4';
+}
+.pe-locker-boxes__table {
+    width: 100%;
+    margin-top: 4px;
+    border-collapse: collapse;
+}
+.pe-locker-boxes__table th,
+.pe-locker-boxes__table td {
+    padding: 3px 8px 3px 0;
+    border-bottom: 1px solid rgba(0, 0, 0, .06);
+    text-align: left;
+    font-weight: 400;
+}
+.pe-locker-boxes__table th {
+    color: #666;
+}
+.pe-locker-boxes__table tr.is-fitting td {
+    font-weight: 600;
+    color: #1d2327;
+}
+.pe-locker-boxes__table tr.is-not-fitting td {
+    color: #a7aaad;
+}
+.pe-locker-boxes__note {
+    margin: 4px 0 0;
+    font-size: 11px;
+    font-style: italic;
+    color: #646970;
 }

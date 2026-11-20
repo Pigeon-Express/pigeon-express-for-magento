@@ -84,6 +84,8 @@ $peFormKey = $block->getFormKey();
                           "PigeonExpress_Shipping/js/confirm-submit" => [
                               "title" => (string) __("Cancel this return shipment?"),
                               "message" => (string) __("Return shipment %1 will be cancelled with Pigeon Express.", (string) $peReturn['reference_number']),
+                              "confirmText" => (string) __("Yes, cancel the return shipment"),
+                              "keepText" => (string) __("No, keep it"),
                           ],
                       ])) ?>'>
                     <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($peFormKey) ?>"/>

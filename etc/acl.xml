@@ -31,6 +31,10 @@
                                   title="Edit Pigeon Express Shipment"
                                   translate="title"
                                   sortOrder="130" />
+                        <resource id="PigeonExpress_Shipping::quick_change"
+                                  title="Make Quick Changes to a Pigeon Express Shipment"
+                                  translate="title"
+                                  sortOrder="135" />
                         <resource id="PigeonExpress_Shipping::refresh_status"
                                   title="Refresh Pigeon Express Shipment Status"
                                   translate="title"

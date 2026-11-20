@@ -122,4 +122,20 @@ class Aps extends AbstractModel
     {
         return $this->setData('is_active', $isActive ? 1 : 0);
     }
+
+    /**
+     * The locker's Pigeon Express code, what its free boxes are looked up by
+     * (GET /lockers/{code}/availability), or null before a sync filled it.
+     */
+    public function getCode(): ?string
+    {
+        $value = $this->getData('code');
+
+        return $value !== null && trim((string) $value) !== '' ? trim((string) $value) : null;
+    }
+
+    public function setCode(?string $code): self
+    {
+        return $this->setData('code', $code);
+    }
 }

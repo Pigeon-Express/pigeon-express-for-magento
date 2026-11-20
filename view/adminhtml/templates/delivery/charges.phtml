@@ -34,6 +34,12 @@ $peCharges = $block->getDisplay();
     </details>
     <?php endif; ?>
     <dl class="pe-summary pe-charges-list">
+        <?php if ($peCharges['receiver'] !== '') : ?>
+        <div class="pe-summary-row pe-charges-receiver">
+            <dt><?= $escaper->escapeHtml(__('Receiver')) ?></dt>
+            <dd><?= $escaper->escapeHtml($peCharges['receiver']) ?></dd>
+        </div>
+        <?php endif; ?>
         <div class="pe-summary-row">
             <dt><?= $escaper->escapeHtml(__('Cash on delivery')) ?></dt>
             <dd><?php if ($peCharges['cod_amount'] !== '') : ?>

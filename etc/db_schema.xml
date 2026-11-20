@@ -49,6 +49,7 @@
         <column xsi:type="decimal" name="latitude" scale="8" precision="10" nullable="true" comment="Latitude"/>
         <column xsi:type="decimal" name="longitude" scale="8" precision="11" nullable="true" comment="Longitude"/>
         <column xsi:type="text" name="working_hours" nullable="true" comment="Working hours as JSON: list of {day, open, close}"/>
+        <column xsi:type="varchar" name="code" length="50" nullable="true" comment="Pigeon Express locker code, the key of GET /lockers/{code}/availability"/>
         <column xsi:type="smallint" name="is_active" unsigned="true" nullable="false" default="1" comment="Is Active"/>
         <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
@@ -170,7 +171,7 @@
         <column xsi:type="int" name="order_id" unsigned="true" nullable="false" comment="Order ID (sales_order.entity_id)"/>
         <column xsi:type="varchar" name="reference_number" length="100" nullable="true" comment="PE Reference Number (e.g. PGN-2026-00012345)"/>
         <column xsi:type="varchar" name="tracking_number" length="100" nullable="true" comment="Tracking Number"/>
-        <column xsi:type="varchar" name="status" length="32" nullable="false" default="sent" comment="Shipment Status"/>
+        <column xsi:type="varchar" name="status" length="32" nullable="false" default="sent" comment="Module lifecycle: sent, cancelled or redirected"/>
         <column xsi:type="decimal" name="delivery_price" precision="12" scale="4" nullable="true" comment="Delivery Price"/>
         <column xsi:type="text" name="payload" nullable="true" comment="JSON of request sent to API"/>
         <column xsi:type="text" name="response" nullable="true" comment="JSON of API response"/>
@@ -181,6 +182,8 @@
         <column xsi:type="datetime" name="status_checked_at" nullable="true" comment="Last successful status read (UTC)"/>
         <column xsi:type="mediumtext" name="details_json" nullable="true" comment="Last GET /shipments/{ref} answer, trimmed, with fetched_at"/>
         <column xsi:type="int" name="magento_shipment_id" unsigned="true" nullable="true" comment="Native Magento shipment (sales_shipment.entity_id)"/>
+        <column xsi:type="varchar" name="redirected_from" length="100" nullable="true" comment="Reference of the shipment this one replaced by a redirect (change of delivery place)"/>
+        <column xsi:type="datetime" name="customer_notified_at" nullable="true" comment="When the customer was emailed this shipment's tracking number after a redirect (UTC); set once, never repeated"/>
         <column xsi:type="timestamp" name="sent_at" on_update="false" nullable="true" default="CURRENT_TIMESTAMP" comment="Sent At"/>
         <column xsi:type="timestamp" name="updated_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Updated At"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">

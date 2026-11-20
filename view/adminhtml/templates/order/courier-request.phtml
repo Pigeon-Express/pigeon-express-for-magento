@@ -28,6 +28,8 @@ $peRequest = $peState['request'];
                   "PigeonExpress_Shipping/js/confirm-submit" => [
                       "title" => (string) __("Cancel courier request %1?", (string) $peRequest['request_number']),
                       "message" => (string) __("Pigeon Express will not send the courier for this request. The shipments stay as they are and can be put in a new request."),
+                      "confirmText" => (string) __("Yes, cancel the request"),
+                      "keepText" => (string) __("No, keep it"),
                   ],
               ])) ?>'>
             <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>

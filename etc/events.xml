@@ -20,6 +20,11 @@
     <event name="pigeonexpress_shipment_cancelled">
         <observer name="pigeonexpress_remove_magento_track" instance="PigeonExpress\Shipping\Observer\Shipment\RemoveMagentoTrack" />
     </event>
+    <!-- A redirect moved the order to a new waybill (Model\Shipment\RedirectFollower):
+         the old tracking number on the Magento shipment becomes the new one. -->
+    <event name="pigeonexpress_shipment_redirected">
+        <observer name="pigeonexpress_replace_magento_track" instance="PigeonExpress\Shipping\Observer\Shipment\ReplaceMagentoTrack" />
+    </event>
     <event name="pigeonexpress_shipment_status_changed">
         <observer name="pigeonexpress_complete_order_on_delivery" instance="PigeonExpress\Shipping\Observer\Shipment\CompleteOrderOnDelivery" />
     </event>

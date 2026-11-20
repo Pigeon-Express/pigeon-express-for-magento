@@ -8,6 +8,11 @@
  * order's history, and deleting it would let the same order be sent twice with
  * no trace of the first attempt.
  *
+ * A return or a redirect of another shipment (its details name an `original`)
+ * cannot be cancelled by the sender: the panel says so instead of offering
+ * Cancel, and a 422 for such a shipment is said in the same words. A cancel
+ * holds the order's lock, as create and edit do.
+ *
  * @copyright Copyright (c). All rights reserved.
  */
 
@@ -23,6 +28,8 @@ use PigeonExpress\Shipping\Api\ShipmentClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment as ShipmentResource;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment\CollectionFactory as ShipmentCollectionFactory;
+use PigeonExpress\Shipping\Model\Shipment\OrderLock;
+use PigeonExpress\Shipping\Model\Status\ShipmentDetailsStore;
 use PigeonExpress\Shipping\Model\Status\StatusCodes;
 use PigeonExpress\Shipping\Model\Status\StatusRecorder;
 use Psr\Log\LoggerInterface;
@@ -64,6 +71,12 @@ class ShipmentCanceller
     /** @var OrderRepositoryInterface|null */
     private $orderRepository;
 
+    /** @var OrderLock|null */
+    private $lock;
+
+    /** @var ShipmentDetailsStore|null */
+    private $details;
+
     public function __construct(
         ShipmentClientInterface $shipmentClient,
         ShipmentCollectionFactory $shipmentCollectionFactory,
@@ -71,10 +84,14 @@ class ShipmentCanceller
         ConfigInterface $config,
         LoggerInterface $logger,
         ?EventManager $eventManager = null,
-        ?OrderRepositoryInterface $orderRepository = null
+        ?OrderRepositoryInterface $orderRepository = null,
+        ?OrderLock $lock = null,
+        ?ShipmentDetailsStore $details = null
     ) {
         $this->eventManager = $eventManager;
         $this->orderRepository = $orderRepository;
+        $this->lock = $lock;
+        $this->details = $details;
         $this->shipmentClient = $shipmentClient;
         $this->shipmentCollectionFactory = $shipmentCollectionFactory;
         $this->shipmentResource = $shipmentResource;
@@ -90,6 +107,39 @@ class ShipmentCanceller
      */
     public function cancelForOrder(int $orderId, int $storeId): Shipment
     {
+        // The claim of create and edit: a cancel racing either of them, or a
+        // quick change, would send two requests about one shipment.
+        if ($this->lock !== null && !$this->lock->acquire($orderId)) {
+            throw new LocalizedException(__(
+                'The Pigeon Express shipment of this order is being created or changed right now. '
+                . 'Reload the order in a moment.'
+            ));
+        }
+
+        try {
+            return $this->cancelLocked($orderId, $storeId);
+        } finally {
+            if ($this->lock !== null) {
+                $this->lock->release($orderId);
+            }
+        }
+    }
+
+    /**
+     * Said instead of the carrier's refusal, and instead of the Cancel button,
+     * for a return or a redirect of another shipment.
+     */
+    public static function derivedCancelMessage(): string
+    {
+        return (string) __('This shipment is a return or a redirect. Pigeon Express does not allow cancelling it.');
+    }
+
+    /**
+     * @throws LocalizedException
+     * @throws ApiException
+     */
+    private function cancelLocked(int $orderId, int $storeId): Shipment
+    {
         $shipment = $this->findShipment($orderId);
 
         if ($shipment === null) {
@@ -98,6 +148,10 @@ class ShipmentCanceller
 
         if ($shipment->getStatus() === self::STATUS_CANCELLED) {
             throw new LocalizedException(__('This shipment has already been cancelled.'));
+        }
+
+        if (ShipmentDetailsStore::isDerived($shipment)) {
+            throw new LocalizedException(new \Magento\Framework\Phrase('%1', [self::derivedCancelMessage()]));
         }
 
         if (!$this->isCancellable($shipment)) {
@@ -114,7 +168,15 @@ class ShipmentCanceller
             throw new LocalizedException(__('This shipment has no reference number, so it cannot be cancelled.'));
         }
 
-        $this->shipmentClient->cancel($reference, $storeId);
+        try {
+            $this->shipmentClient->cancel($reference, $storeId);
+        } catch (ApiException $e) {
+            if ($e->getHttpStatus() === 422 && $this->refusedAsDerived($shipment, $storeId)) {
+                throw new LocalizedException(new \Magento\Framework\Phrase('%1', [self::derivedCancelMessage()]), $e);
+            }
+
+            throw $e;
+        }
 
         $shipment->setStatus(self::STATUS_CANCELLED);
         $shipment->setData('status_code', StatusCodes::CANCELLED);
@@ -135,14 +197,38 @@ class ShipmentCanceller
     }
 
     /**
-     * Whether a shipment is still early enough in its life to be cancelled.
+     * Whether a cancel refused with 422 was refused because the shipment is
+     * made from another one (a return or a redirect). The carrier's answer has
+     * no code for this, and its text is not a contract, so the shipment's own
+     * links decide, read fresh and kept on the row so the panel stops offering
+     * Cancel. False for any other shipment, or when it cannot be read.
+     */
+    private function refusedAsDerived(Shipment $shipment, int $storeId): bool
+    {
+        if ($this->details === null) {
+            return false;
+        }
+
+        try {
+            $this->details->fetch($shipment, $storeId);
+        } catch (\Throwable $e) {
+            return false;
+        }
+
+        return ShipmentDetailsStore::isDerived($shipment);
+    }
+
+    /**
+     * Whether a shipment is still early enough in its life to be cancelled,
+     * and one the sender may cancel at all (not a return or a redirect).
      */
     public function isCancellable(Shipment $shipment): bool
     {
         // The carrier status as last read decides once there is one: Pigeon
         // Express cancels only while the shipment is newly registered.
         return in_array((string) $shipment->getStatus(), self::CANCELLABLE_STATUSES, true)
-            && StatusCodes::isStillRegistered($shipment->getStatusCode());
+            && StatusCodes::isStillRegistered($shipment->getStatusCode())
+            && !ShipmentDetailsStore::isDerived($shipment);
     }
 
     private function statusText(Shipment $shipment): string
@@ -174,11 +260,16 @@ class ShipmentCanceller
 
     /**
      * Most recent shipment for an order, or null when none was ever created.
+     *
+     * A row Pigeon Express redirected (lifecycle `redirected`) is history: the
+     * order follows the newer row of the shipment that replaced it, so it is
+     * never returned here, also not by the label, cancel and details paths.
      */
     public function findShipment(int $orderId): ?Shipment
     {
         $collection = $this->shipmentCollectionFactory->create();
         $collection->addFieldToFilter('order_id', $orderId);
+        $collection->addFieldToFilter('status', ['neq' => Shipment::STATUS_REDIRECTED]);
         $collection->setOrder('entity_id', 'DESC');
         $collection->setPageSize(1);
 

@@ -16,10 +16,13 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model\Api;
 
+use PigeonExpress\Exceptions\RateLimitException as SdkRateLimitException;
 use PigeonExpress\PigeonExpress;
+use PigeonExpress\Resources\Offices;
 use PigeonExpress\Shipping\Api\ConfigInterface;
 use PigeonExpress\Shipping\Api\LocationsClientInterface;
 use PigeonExpress\Shipping\Exception\ApiException;
+use PigeonExpress\Shipping\Exception\RateLimitedException;
 use PigeonExpress\Shipping\Model\Location\WorkingHours;
 use Psr\Log\LoggerInterface;
 
@@ -27,6 +30,15 @@ class LocationsClient implements LocationsClientInterface
 {
     /** Bulk syncs are not latency sensitive, so allow a generous timeout. */
     private const TIMEOUT = 120;
+
+    /**
+     * Seconds for a nearest search. It runs while a shopper waits at
+     * checkout, and the normal list is always there to fall back on.
+     */
+    public const NEAREST_TIMEOUT = 5;
+
+    /** Most locations one nearest search returns. */
+    public const NEAREST_LIMIT_MAX = Offices::NEAREST_LIMIT_MAX;
 
     /** @var ConfigInterface */
     private $config;
@@ -118,6 +130,86 @@ class LocationsClient implements LocationsClientInterface
     }
 
     /**
+     * @inheritdoc
+     */
+    public function nearest(float $latitude, float $longitude, string $type, int $limit = self::NEAREST_LIMIT_MAX): array
+    {
+        $apiType = $this->nearestType($type);
+        if ($apiType === '') {
+            throw new ApiException(__('Unknown location type.'));
+        }
+
+        if (!is_finite($latitude) || !is_finite($longitude)
+            || $latitude < -90 || $latitude > 90 || $longitude < -180 || $longitude > 180
+        ) {
+            throw new ApiException(__('The location could not be read.'));
+        }
+
+        try {
+            $offices = $this->clientFactory->create(self::NEAREST_TIMEOUT)
+                ->offices()
+                ->nearest($latitude, $longitude, $apiType, $limit);
+        } catch (ApiException $e) {
+            throw $e;
+        } catch (SdkRateLimitException $e) {
+            // Never the point itself: coordinates are not logged.
+            $this->logNearestFailure('rate limited', $e);
+            throw new RateLimitedException(__('Pigeon Express asked to slow down. Try again later.'), $e);
+        } catch (\Exception $e) {
+            $this->logNearestFailure('failed', $e);
+            throw new ApiException(__('The nearest offices could not be found just now.'), $e);
+        }
+
+        $rows = [];
+        foreach ($offices as $office) {
+            $id = (int) $office->getId();
+            if ($id <= 0) {
+                continue;
+            }
+            $rows[] = [
+                'id'          => $id,
+                'code'        => trim((string) $office->getCode()),
+                'type'        => (string) $office->getType(),
+                'name'        => (string) $office->getName(),
+                'distance_km' => $office->getDistanceKm(),
+                'latitude'    => $office->getLatitude(),
+                'longitude'   => $office->getLongitude(),
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * The API's nearest type for a module delivery type, or '' for one it
+     * does not have.
+     */
+    private function nearestType(string $type): string
+    {
+        switch (strtolower(trim($type))) {
+            case ConfigInterface::DELIVERY_TYPE_OFFICE:
+                return Offices::NEAREST_OFFICE;
+            case ConfigInterface::DELIVERY_TYPE_APS:
+            case Offices::NEAREST_LOCKER:
+                return Offices::NEAREST_LOCKER;
+            case Offices::NEAREST_ALL:
+                return Offices::NEAREST_ALL;
+            default:
+                return '';
+        }
+    }
+
+    private function logNearestFailure(string $what, \Throwable $e): void
+    {
+        if ($this->config->isLoggingEnabled()) {
+            // A transport error names the URL it failed on, and its query
+            // holds the shopper's point: never log a query string here.
+            $message = (string) preg_replace('/\?\S*/', '', $e->getMessage());
+            $this->logger->warning('[PigeonExpress] Nearest offices ' . $what . ': ' . $message);
+        }
+    }
+
+    /**
      * Build a configured SDK client.
      *
      * @throws ApiException
@@ -131,12 +223,16 @@ class LocationsClient implements LocationsClientInterface
      * Map an office or locker onto the row shape LocationSync expects.
      *
      * @param \PigeonExpress\DTO\Response\Office $office
-     * @return array{id:?int, name:string, city_id:?int, address:string, type:string, latitude:?float, longitude:?float, working_hours:?array}
+     * @return array{id:?int, code:?string, name:string, city_id:?int, address:string, type:string, latitude:?float, longitude:?float, working_hours:?array}
      */
     private function normalizeOffice($office): array
     {
+        $code = trim((string) $office->getCode());
+
         return [
             'id'            => $office->getId() ?: null,
+            // A locker's free boxes are looked up by it, never by the id.
+            'code'          => $code !== '' ? $code : null,
             'name'          => (string) $office->getName(),
             'city_id'       => $office->getCityId(),
             'address'       => (string) $office->getAddress(),

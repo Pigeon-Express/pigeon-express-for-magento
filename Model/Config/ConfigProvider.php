@@ -813,18 +813,96 @@ class ConfigProvider implements ConfigInterface
      */
     public function getReturnOfficeId(?int $storeId = null): ?int
     {
-        $to = (string) $this->scopeConfig->getValue(
-            self::XML_PATH_CARRIER . 'return_to',
-            ScopeInterface::SCOPE_STORE,
-            $storeId
-        );
-        if ($to !== self::RETURN_TO_OFFICE) {
+        if ($this->getReturnTo($storeId) !== self::RETURN_TO_OFFICE) {
             return null;
         }
 
         // An office chosen with none given falls back to the account, as in
         // WooCommerce, rather than sending an empty destination.
         return $this->getPositiveInt('return_office_id', $storeId);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getReturnTo(?int $storeId = null): string
+    {
+        return $this->getReturnMode(self::XML_PATH_RETURN_TO, $storeId);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getReturnAddressId(?int $storeId = null): ?int
+    {
+        if ($this->getReturnTo($storeId) !== self::RETURN_TO_ADDRESS) {
+            return null;
+        }
+
+        return $this->getPositiveInt('return_address_id', $storeId);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getReturnDocumentsTo(?int $storeId = null): string
+    {
+        if (!self::RETURN_DOCUMENTS_CHOICE) {
+            return self::RETURN_TO_PROFILE;
+        }
+
+        return $this->getReturnMode(self::XML_PATH_RETURN_DOCUMENTS_TO, $storeId);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getReturnDocumentsOfficeId(?int $storeId = null): ?int
+    {
+        if ($this->getReturnDocumentsTo($storeId) !== self::RETURN_TO_OFFICE) {
+            return null;
+        }
+
+        return $this->getPositiveInt('return_documents_office_id', $storeId);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getReturnDocumentsAddressId(?int $storeId = null): ?int
+    {
+        if ($this->getReturnDocumentsTo($storeId) !== self::RETURN_TO_ADDRESS) {
+            return null;
+        }
+
+        return $this->getPositiveInt('return_documents_address_id', $storeId);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function isNearestOfficeEnabled(?int $storeId = null): bool
+    {
+        return $this->scopeConfig->isSetFlag(self::XML_PATH_NEAREST_OFFICE, ScopeInterface::SCOPE_STORE, $storeId);
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function isLocationMapEnabled(?int $storeId = null): bool
+    {
+        return $this->scopeConfig->isSetFlag(self::XML_PATH_LOCATION_MAP, ScopeInterface::SCOPE_STORE, $storeId);
+    }
+
+    /**
+     * A return destination mode stored at a path: one of RETURN_TO_MODES,
+     * RETURN_TO_PROFILE for anything else.
+     */
+    private function getReturnMode(string $path, ?int $storeId): string
+    {
+        $value = trim((string) $this->scopeConfig->getValue($path, ScopeInterface::SCOPE_STORE, $storeId));
+
+        return in_array($value, self::RETURN_TO_MODES, true) ? $value : self::RETURN_TO_PROFILE;
     }
 
     /**

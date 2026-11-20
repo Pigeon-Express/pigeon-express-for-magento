@@ -63,6 +63,9 @@ define(['jquery', 'mage/translate'], function ($, $t) {
             // over. Hidden by the CSS for a locker, and disabled so that a
             // choice made for a door is not sent with a locker waybill.
             $form.find('[data-pe-handover] select').prop('disabled', type === 'aps');
+            // Pigeon Express refuses a declared value for a locker: hidden by
+            // the CSS and disabled, so it is not sent with a locker waybill.
+            $form.find('[data-pe-not-locker]').find('input, select').prop('disabled', type === 'aps');
         }
 
         // A message describes the value that was checked, so the moment somebody
@@ -399,10 +402,13 @@ define(['jquery', 'mage/translate'], function ($, $t) {
                 });
             },
             function (item) {
-                $locationId.val(item.id);
+                // A change event, so the locker's free boxes follow the pick.
+                $locationId.val(item.id).trigger('change');
             },
             function () {
-                $locationId.val('');
+                if ($locationId.val() !== '') {
+                    $locationId.val('').trigger('change');
+                }
             }
         );
 

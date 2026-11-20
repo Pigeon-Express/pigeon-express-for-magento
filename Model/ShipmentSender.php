@@ -21,6 +21,7 @@ use PigeonExpress\Shipping\Exception\OrderLockedException;
 use PigeonExpress\Shipping\Exception\ReplayedShipmentException;
 use PigeonExpress\Shipping\Model\Api\ShipmentClient;
 use PigeonExpress\Shipping\Model\Shipment\OrderLock;
+use PigeonExpress\Shipping\Model\Shipment\ReturnDestination;
 use PigeonExpress\Shipping\Model\Shipment\WhoPaysFacts;
 use PigeonExpress\Shipping\Model\Status\ShipmentDetailsStore;
 use PigeonExpress\Shipping\Model\Status\StatusCodes;
@@ -92,6 +93,9 @@ class ShipmentSender implements ShipmentSenderInterface
     /** @var WhoPaysFacts|null */
     private $whoPaysFacts;
 
+    /** @var ReturnDestination */
+    private $returnDestination;
+
     /** Dispatched once a new shipment is stored, whichever way it was created. */
     public const EVENT_CREATED = 'pigeonexpress_shipment_created';
 
@@ -117,8 +121,10 @@ class ShipmentSender implements ShipmentSenderInterface
         PickupPayload $pickupPayload,
         EventManager $eventManager,
         ShipmentDetailsStore $detailsStore,
+        ReturnDestination $returnDestination,
         ?WhoPaysFacts $whoPaysFacts = null
     ) {
+        $this->returnDestination = $returnDestination;
         $this->whoPaysFacts = $whoPaysFacts;
         $this->eventManager = $eventManager;
         $this->detailsStore = $detailsStore;
@@ -409,7 +415,7 @@ class ShipmentSender implements ShipmentSenderInterface
         // depends on the packages and services just decided.
         $pickupPayload = $this->pickupPayload->build($storeId, $packages, $serviceCodes);
 
-        $payload += $this->returnFields($storeId);
+        $payload += $this->returnFields($storeId, $serviceCodes);
 
         // The order number, which Pigeon Express keeps with the shipment and
         // echoes back, so a waybill can be traced to its order. Shown nowhere
@@ -799,11 +805,18 @@ class ShipmentSender implements ShipmentSenderInterface
     /**
      * What happens to a shipment that cannot be delivered, from the Returns
      * settings. Nothing when the account decides, which is what every
-     * shipment sent before these settings did. Create only.
+     * shipment sent before these settings did. Create and change only: the
+     * price endpoint has no use for them.
      *
+     * The destination (an office or a saved address, and where return
+     * documents go) is ReturnDestination's. A change of an existing shipment
+     * sends the destination it was recorded with instead (ShipmentEditor);
+     * return_at_my_expense follows the setting, as in WooCommerce.
+     *
+     * @param array<string, mixed> $serviceCodes The services the body carries, keyed by API code
      * @return array<string, mixed>
      */
-    private function returnFields(int $storeId): array
+    private function returnFields(int $storeId, array $serviceCodes = []): array
     {
         $out = [];
 
@@ -811,12 +824,7 @@ class ShipmentSender implements ShipmentSenderInterface
             $out['return_at_my_expense'] = true;
         }
 
-        $officeId = $this->config->getReturnOfficeId($storeId);
-        if ($officeId !== null) {
-            $out['return_office_id'] = $officeId;
-        }
-
-        return $out;
+        return $out + $this->returnDestination->fromSettings($storeId, $serviceCodes);
     }
 
     /**

@@ -1,7 +1,8 @@
 <?php
 /**
  * What Pigeon Express holds about a shipment, as last read: what it charged
- * and to whom, every fee, the cash on delivery and the linked shipments.
+ * and to whom, every fee, the cash on delivery, the linked shipments and who
+ * it will hand the parcel to.
  *
  * Copied from the WooCommerce plugin (Labels/ShipmentDetails.php). Read with
  * GET /shipments/{ref} when the shipment is created, changed or refreshed, and
@@ -98,6 +99,7 @@ class ShipmentDetailsStore
         $pricing = isset($data['pricing']) && is_array($data['pricing']) ? $data['pricing'] : [];
         $cod = isset($data['cod']) && is_array($data['cod']) ? $data['cod'] : [];
         $status = isset($data['status']) && is_array($data['status']) ? $data['status'] : [];
+        $receiver = isset($data['receiver']) && is_array($data['receiver']) ? $data['receiver'] : [];
         $fees = [];
         $related = [];
 
@@ -144,7 +146,60 @@ class ShipmentDetailsStore
                 'payment_status' => $this->code($cod['payment_status'] ?? ''),
             ],
             'related'         => $related,
+            // Who the carrier will hand the parcel to: the delivery contact,
+            // else its customer record for the phone (for a locker, never the
+            // name the shop sent). Either may be missing.
+            'receiver'        => [
+                'name'  => $this->text($receiver['name'] ?? ''),
+                'phone' => $this->text($receiver['phone'] ?? ''),
+            ],
         ];
+    }
+
+    /**
+     * Whether a list of linked shipments names one this shipment was made
+     * from (`original`): then it is a return or a redirect, which Pigeon
+     * Express does not let the sender cancel. Takes the trimmed `related`
+     * rows or the carrier's own `related_shipments`.
+     *
+     * @param mixed $related
+     */
+    public static function hasOriginal($related): bool
+    {
+        foreach ((array) $related as $link) {
+            if (is_array($link) && (string) ($link['relation'] ?? '') === 'original') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether the shipment, as last read, is a return or a redirect of
+     * another one. False when the details were never read.
+     */
+    public static function isDerived(?Shipment $row): bool
+    {
+        $stored = $row !== null ? $row->getDetails() : null;
+
+        return $stored !== null && self::hasOriginal($stored['related'] ?? []);
+    }
+
+    /**
+     * The receiver as one line, "name, phone", or '' when the carrier gave
+     * neither.
+     *
+     * @param array<string, mixed>|null $stored The trimmed copy
+     */
+    public static function receiverLine(?array $stored): string
+    {
+        $receiver = is_array($stored['receiver'] ?? null) ? $stored['receiver'] : [];
+
+        return implode(', ', array_filter([
+            trim((string) ($receiver['name'] ?? '')),
+            trim((string) ($receiver['phone'] ?? '')),
+        ], 'strlen'));
     }
 
     /**
@@ -222,6 +277,16 @@ class ShipmentDetailsStore
     private function number($value): ?float
     {
         return is_numeric($value) ? (float) $value : null;
+    }
+
+    /**
+     * Plain text from the carrier: tags and surrounding space removed.
+     *
+     * @param mixed $value
+     */
+    private function text($value): string
+    {
+        return is_scalar($value) ? trim(strip_tags((string) $value)) : '';
     }
 
     /**

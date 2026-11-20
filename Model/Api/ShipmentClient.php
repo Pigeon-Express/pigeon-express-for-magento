@@ -12,10 +12,14 @@ declare(strict_types=1);
 
 namespace PigeonExpress\Shipping\Model\Api;
 
+use Magento\Framework\Phrase;
 use PigeonExpress\DTO\Request\CreateShipmentRequest;
+use PigeonExpress\DTO\Response\LockerAvailability;
+use PigeonExpress\DTO\Response\ShipmentActions;
 use PigeonExpress\DTO\Response\ShipmentDetails;
 use PigeonExpress\Exceptions\ConflictException as SdkConflictException;
 use PigeonExpress\Exceptions\ConnectionException as SdkConnectionException;
+use PigeonExpress\Exceptions\PigeonExpressException as SdkException;
 use PigeonExpress\Exceptions\RateLimitException as SdkRateLimitException;
 use PigeonExpress\Exceptions\ServerException as SdkServerException;
 use PigeonExpress\Exceptions\ValidationException as SdkValidationException;
@@ -52,6 +56,21 @@ class ShipmentClient implements ShipmentClientInterface
 
     /** Longest external reference the API accepts. */
     public const EXTERNAL_REFERENCE_MAX = 100;
+
+    /**
+     * The quick actions of runAction(), as Pigeon Express names them in
+     * GET /actions. The path spelling (change-delivery) is accepted too.
+     */
+    public const ACTION_CHANGE_DELIVERY = ShipmentActions::CHANGE_DELIVERY;
+    public const ACTION_SERVICES = ShipmentActions::SERVICES;
+    public const ACTION_COD = ShipmentActions::COD;
+    public const ACTION_DECLARED_VALUE = ShipmentActions::DECLARED_VALUE;
+
+    /** Seconds for GET /actions and for a priced (dry run) action: the merchant waits. */
+    public const ACTIONS_TIMEOUT = 15;
+
+    /** Seconds for a locker's free boxes, read while the shipment form is open. */
+    public const AVAILABILITY_TIMEOUT = 10;
 
     /** @var ConfigInterface */
     private $config;
@@ -474,7 +493,13 @@ class ShipmentClient implements ShipmentClientInterface
                     'reference_number' => $referenceNumber,
                 ]);
             }
-            throw new ApiException(__('Failed to cancel Pigeon Express shipment: %1', $message));
+            // The cause is kept: the HTTP status and the API's code tell a
+            // refusal (422, e.g. a return or redirect that cannot be
+            // cancelled) from a failure to reach Pigeon Express.
+            throw new ApiException(
+                __('Failed to cancel Pigeon Express shipment: %1', $message),
+                $e instanceof \Exception ? $e : null
+            );
         }
 
         return $result;
@@ -508,6 +533,237 @@ class ShipmentClient implements ShipmentClientInterface
         }
 
         return $label;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function actions(string $referenceNumber, int $storeId): array
+    {
+        $referenceNumber = trim($referenceNumber);
+        if ($referenceNumber === '') {
+            throw new ApiException(__('The shipment has no Pigeon Express number.'));
+        }
+
+        try {
+            $actions = $this->clientFactory->create(self::ACTIONS_TIMEOUT)->shipments()->actions($referenceNumber);
+        } catch (ApiException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            $this->logFailure('actions read failed', $e, $storeId, $this->errorContext($e, $referenceNumber));
+            throw $this->refusal($e, false);
+        }
+
+        return $actions->toArray();
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function runAction(
+        string $referenceNumber,
+        string $action,
+        array $body,
+        bool $dryRun,
+        int $storeId
+    ): array {
+        $referenceNumber = trim($referenceNumber);
+        if ($referenceNumber === '') {
+            throw new ApiException(__('The shipment has no Pigeon Express number.'));
+        }
+        if (ShipmentActions::segmentOf($action) === '') {
+            throw new ApiException(__('Pigeon Express does not offer this change.'));
+        }
+
+        if ($this->config->isLoggingEnabled($storeId)) {
+            $this->logger->info('[PigeonExpress] API request: shipments()->runAction', [
+                'storeId' => $storeId,
+                'reference_number' => $referenceNumber,
+                'action' => ShipmentActions::nameOf($action),
+                'dry_run' => $dryRun,
+                'request' => $body,
+            ]);
+        }
+
+        $shipments = $this->clientFactory->create($dryRun ? self::ACTIONS_TIMEOUT : null)->shipments();
+        $shipments->setConflictRetries($this->conflictRetries);
+
+        try {
+            $result = $shipments->runAction($referenceNumber, $action, $body, $dryRun);
+        } catch (ApiException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            $this->logFailure(
+                ($dryRun ? 'action price' : 'action') . ' refused',
+                $e,
+                $storeId,
+                $this->errorContext($e, $referenceNumber)
+            );
+            throw $this->refusal($e, !$dryRun);
+        }
+
+        $out = [
+            'data'                 => $result->toArray(),
+            'message'              => $result->getMessage(),
+            'replay'               => $dryRun ? self::REPLAY_NONE : (string) $shipments->getLastReplay(),
+            'new_reference_number' => $dryRun ? '' : $result->getNewReferenceNumber(),
+        ];
+
+        if (!$dryRun && $this->config->isLoggingEnabled($storeId)) {
+            $this->logger->info('[PigeonExpress] ShipmentClient::runAction success', [
+                'storeId' => $storeId,
+                'reference_number' => $referenceNumber,
+                'result' => $out,
+            ]);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function lockerAvailability(string $code, int $storeId): array
+    {
+        $code = trim($code);
+        if ($code === '') {
+            throw new ApiException(__('This parcel locker has no code to look it up by.'));
+        }
+
+        try {
+            $locker = $this->clientFactory->create(self::AVAILABILITY_TIMEOUT)->lockers()->availability($code);
+        } catch (ApiException $e) {
+            throw $e;
+        } catch (\Exception $e) {
+            $this->logFailure('locker availability failed', $e, $storeId, ['code' => $code]);
+            throw $this->refusal($e, false);
+        }
+
+        return self::lockerView($locker);
+    }
+
+    /**
+     * A locker's boxes and forecast in the fixed shape lockerAvailability()
+     * returns.
+     *
+     * @return array{code: string, name: string, is_blocked: bool, blocked_until: string, box_sizes: array<int, array{size: string, length: int, width: int, height: int, max_weight: float|null, total: int}>, today: array<string, int>, tomorrow: array<string, int>, today_date: string, tomorrow_date: string}
+     */
+    public static function lockerView(LockerAvailability $locker): array
+    {
+        $sizes = [];
+        foreach ($locker->getBoxSizes() as $box) {
+            $sizes[] = $box->toArray();
+        }
+
+        return [
+            'code'          => $locker->getCode(),
+            'name'          => $locker->getName(),
+            'is_blocked'    => $locker->isBlocked(),
+            'blocked_until' => $locker->getBlockedUntil(),
+            'box_sizes'     => $sizes,
+            'today'         => $locker->getFreeBoxes(LockerAvailability::DAY_TODAY),
+            'tomorrow'      => $locker->getFreeBoxes(LockerAvailability::DAY_TOMORROW),
+            'today_date'    => $locker->getForecastDate(LockerAvailability::DAY_TODAY),
+            'tomorrow_date' => $locker->getForecastDate(LockerAvailability::DAY_TOMORROW),
+        ];
+    }
+
+    /**
+     * The module exception for a failed quick action or read, with the SDK
+     * exception kept as its cause (HTTP status, API code, error body).
+     *
+     * A refusal carries Pigeon Express's own reason, ready to show. When a
+     * real change may have been made after all (no answer, or a 409 that
+     * outlasted the repeats) it is an OutcomeUnknownException.
+     *
+     * @param bool $changes Whether the request could have changed the shipment
+     */
+    private function refusal(\Exception $e, bool $changes): ApiException
+    {
+        if ($e instanceof SdkRateLimitException) {
+            return new RateLimitedException(__('Pigeon Express asked to slow down. Try again later.'), $e);
+        }
+
+        if ($e instanceof SdkConflictException) {
+            if ($changes) {
+                return new OutcomeUnknownException(
+                    __(
+                        'Pigeon Express is still processing the same change, so it is not known yet whether it '
+                        . 'was made. Reload the order in a minute and check before trying again.'
+                    ),
+                    $e
+                );
+            }
+
+            return new ApiException(
+                __('Pigeon Express is still processing the same request. Wait a few seconds and try again.'),
+                $e
+            );
+        }
+
+        if ($e instanceof SdkConnectionException) {
+            if ($changes && !$this->neverLeft($e)) {
+                return new OutcomeUnknownException(
+                    __(
+                        'Pigeon Express did not confirm the change, so it may or may not have been made. '
+                        . 'Reload the order and check before trying again.'
+                    ),
+                    $e
+                );
+            }
+
+            return new ApiException(__('Could not reach Pigeon Express. Nothing was changed. Try again.'), $e);
+        }
+
+        if ($e instanceof \InvalidArgumentException) {
+            return new ApiException(__('Pigeon Express does not offer this change.'), $e);
+        }
+
+        return new ApiException(new Phrase('%1', [$this->reasonOf($e)]), $e);
+    }
+
+    /**
+     * Pigeon Express's reason for a refusal as one line: the field messages
+     * when it gave them (its sentences are written to stand alone), else its
+     * message.
+     */
+    private function reasonOf(\Throwable $e): string
+    {
+        if ($e instanceof SdkValidationException && $e->hasErrors()) {
+            $pieces = [];
+            foreach ($e->getErrors() as $messages) {
+                $text = is_array($messages)
+                    ? implode(' ', array_map('strval', array_filter($messages, 'is_scalar')))
+                    : (is_scalar($messages) ? (string) $messages : '');
+                if (trim($text) !== '') {
+                    $pieces[] = trim($text);
+                }
+            }
+            if ($pieces !== []) {
+                return implode('; ', $pieces);
+            }
+        }
+
+        $message = trim($e->getMessage());
+
+        return $message !== '' ? $message : (string) __('Unknown Pigeon Express API error.');
+    }
+
+    /**
+     * What a failed call logs: the reference and, for an API answer, its
+     * status and code.
+     *
+     * @return array<string, mixed>
+     */
+    private function errorContext(\Throwable $e, string $referenceNumber): array
+    {
+        $context = ['reference_number' => $referenceNumber];
+        if ($e instanceof SdkException) {
+            $context['status'] = $e->getHttpStatusCode();
+            $context['code'] = $e->getErrorCode();
+        }
+
+        return $context;
     }
 
     /**

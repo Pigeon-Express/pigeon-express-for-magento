@@ -12,8 +12,10 @@ define([
     'Magento_Checkout/js/action/create-shipping-address',
     'uiComponent',
     'mage/translate',
-    'uiRegistry'
-], function (ko, $, url, quote, rateRegistry, newAddressProcessor, createShippingAddressAction, Component, $t, registry) {
+    'uiRegistry',
+    'PigeonExpress_Shipping/js/model/location-extras'
+], function (ko, $, url, quote, rateRegistry, newAddressProcessor, createShippingAddressAction, Component, $t, registry,
+    extras) {
     'use strict';
 
     return Component.extend({
@@ -23,7 +25,14 @@ define([
             officeMethod: 'office',
             apsMethod: 'aps',
             minChars: 2,
-            searchDelay: 300
+            searchDelay: 300,
+            // "Nearest office" and "Map of offices and lockers", with their
+            // routes and texts, from LayoutProcessorPlugin.
+            nearest: false,
+            map: false,
+            nearestUrl: '',
+            mapLocationsUrl: '',
+            texts: {}
         },
 
         /** @type {string} */
@@ -79,12 +88,33 @@ define([
                 });
             }, this);
 
+            // The nearest locations on top of the picker, and the map button.
+            // Both stay empty while their setting is off.
+            this.nearestRows = ko.observableArray([]);
+            this.mapAvailable = ko.observable(false);
+            this.mapBusy = ko.observable(false);
+            this.mapFailed = ko.observable(false);
+            this.texts = this.texts || {};
+            this._extrasType = null;
+            extras.configure({
+                nearest: this.nearest,
+                map: this.map,
+                nearestUrl: this.nearestUrl,
+                mapLocationsUrl: this.mapLocationsUrl,
+                texts: this.texts
+            });
+
             window.pigeonexpressCheckoutPayload = window.pigeonexpressCheckoutPayload || {};
 
             var self = this;
-            var previousMethodCode = null;
+            var codeOf = function (method) {
+                return method ? (method.carrier_code + '_' + method.method_code) : null;
+            };
+            // A method already chosen when the page opens never reaches the
+            // subscription below, so its extras are loaded here.
+            var previousMethodCode = codeOf(quote.shippingMethod());
             quote.shippingMethod.subscribe(function (method) {
-                var newCode = method ? (method.carrier_code + '_' + method.method_code) : null;
+                var newCode = codeOf(method);
                 if (newCode !== previousMethodCode) {
                     previousMethodCode = newCode;
                     self.selectedLocation(null);
@@ -95,10 +125,125 @@ define([
                     // under one method cannot carry over to the other.
                     self.clearCity();
                     self.updateCheckoutPayload();
+                    self.loadExtras();
                 }
             });
 
+            this.loadExtras();
+
             return this;
+        },
+
+        /**
+         * Fetch what the extras need for the method now chosen: the map's
+         * locations (the button shows only when some have a position) and the
+         * nearest list, which asks the browser for the location. Nothing at
+         * all while both settings are off or the method is not ours.
+         */
+        loadExtras: function () {
+            var self = this,
+                type;
+
+            this.nearestRows([]);
+            this.mapAvailable(false);
+            this.mapFailed(false);
+            this._extrasType = null;
+
+            if ((!this.nearest && !this.map) || !this.isVisible()) {
+                return;
+            }
+
+            type = this.getSearchType();
+            this._extrasType = type;
+
+            if (this.map) {
+                extras.mapLocations(type).then(function (rows) {
+                    // Only if the method has not changed in the meantime.
+                    if (self._extrasType === type) {
+                        self.mapAvailable(rows.length > 0);
+                    }
+                });
+            }
+
+            this.showNearest();
+        },
+
+        /**
+         * The nearest list. The browser is asked for the location only while
+         * the search is shown (nothing chosen yet, or after Change); the answer
+         * is kept for the page, so Change shows the list again at once.
+         */
+        showNearest: function () {
+            var self = this,
+                type;
+
+            if (!this.nearest || !this.isVisible() || this.selectedLocation()) {
+                return;
+            }
+
+            type = this.getSearchType();
+
+            extras.nearest(type).then(function (rows) {
+                if (self._extrasType === type) {
+                    self.nearestRows(Array.isArray(rows) ? rows : []);
+                }
+            });
+        },
+
+        /**
+         * Where a nearest or map location is. Its address already names the
+         * town and the postcode, which matter here: the nearest one may well
+         * be in the next town.
+         */
+        locationMeta: function (location) {
+            if (!location) {
+                return '';
+            }
+
+            return location.address || [location.city, location.postcode].filter(Boolean).join(', ');
+        },
+
+        mapButtonText: function () {
+            return this.mapBusy() ? (this.texts.mapLoading || '') : (this.texts.chooseOnMap || '');
+        },
+
+        /**
+         * Open the map. A pin's Choose is exactly what a pick from the list does.
+         */
+        openMap: function () {
+            var self = this,
+                type = this.getSearchType(),
+                current = this.selectedLocation();
+
+            if (this.mapBusy()) {
+                return;
+            }
+
+            this.mapBusy(true);
+            this.mapFailed(false);
+
+            extras.mapLocations(type).then(function (rows) {
+                if (!rows.length) {
+                    throw new Error('empty');
+                }
+
+                return extras.openMap({
+                    type: type,
+                    locations: rows,
+                    selectedId: current ? String(current.id) : '',
+                    onChoose: function (row) {
+                        self.selectLocation(row);
+                        setTimeout(function () {
+                            $('.pigeonexpress-location-autocomplete .pigeonexpress-change:visible').first().trigger('focus');
+                        }, 0);
+                    }
+                });
+            }).then(function () {
+                self.mapBusy(false);
+            }, function () {
+                self.mapBusy(false);
+                self.mapFailed(true);
+            });
         },
 
         /**
@@ -464,6 +609,8 @@ define([
             this.resultsVisible(false);
             this.updateCheckoutPayload();
             this.updateQuoteAddressStreet('');
+            // The search is back, so is the nearest list (kept for the page).
+            this.showNearest();
         },
 
         /**

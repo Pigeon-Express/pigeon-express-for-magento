@@ -61,6 +61,12 @@ class NativeShipmentTest extends TestCase
     /** @var NativeShipment */
     private $service;
 
+    /** @var array<string, array<int, Track>>|null Tracks by number, when a test tells them apart */
+    private $tracksByNumber;
+
+    /** @var string */
+    private $askedNumber = '';
+
     protected function setUp(): void
     {
         $this->settings = $this->createMock(Settings::class);
@@ -76,9 +82,17 @@ class NativeShipmentTest extends TestCase
         $this->shipmentRepository->method('get')->willReturn($shipment);
 
         $collection = $this->createMock(TrackCollection::class);
-        $collection->method('addFieldToFilter')->willReturnSelf();
+        $collection->method('addFieldToFilter')->willReturnCallback(function ($field, $value) use ($collection) {
+            if ($field === 'track_number') {
+                $this->askedNumber = (string) $value;
+            }
+
+            return $collection;
+        });
         $collection->method('getItems')->willReturnCallback(function () {
-            return $this->existingTracks;
+            return $this->tracksByNumber !== null
+                ? ($this->tracksByNumber[$this->askedNumber] ?? [])
+                : $this->existingTracks;
         });
         $this->trackCollectionFactory = $this->getMockBuilder(TrackCollectionFactory::class)
             ->disableOriginalConstructor()->onlyMethods(['create'])->getMock();
@@ -325,6 +339,55 @@ class NativeShipmentTest extends TestCase
         $this->trackRepository->expects($this->never())->method('delete');
 
         $this->assertSame(0, $this->service->removeTrackFor($this->order(), $this->row()));
+        $this->assertSame([], $this->comments);
+    }
+
+    public function testARedirectPutsTheNewNumberInPlaceOfTheOldOne(): void
+    {
+        $track = $this->createMock(Track::class);
+        $track->method('getParentId')->willReturn(11);
+        $track->expects($this->once())->method('setTrackNumber')->with('460350099999');
+        $this->tracksByNumber = ['460338382811' => [$track]];
+        $this->trackRepository->expects($this->once())->method('save')->with($track);
+        $this->trackRepository->expects($this->never())->method('delete');
+        $this->link->expects($this->once())->method('link')->with(8, 11);
+
+        $replaced = $this->service->replaceTrackFor(
+            $this->order(),
+            $this->row(),
+            ['entity_id' => 8, 'reference_number' => '460350099999']
+        );
+
+        $this->assertSame(1, $replaced);
+        $this->assertStringContainsString('was redirected to 460350099999', $this->comments[0]);
+        $this->assertStringContainsString('000000099', $this->comments[0]);
+    }
+
+    public function testARedirectReplayedOnlyLinksTheNewRow(): void
+    {
+        $old = $this->createMock(Track::class);
+        $old->method('getParentId')->willReturn(11);
+        $new = $this->createMock(Track::class);
+        $new->method('getParentId')->willReturn(11);
+        $this->tracksByNumber = ['460338382811' => [$old], '460350099999' => [$new]];
+        $this->trackRepository->expects($this->never())->method('save');
+        $this->trackRepository->expects($this->once())->method('delete')->with($old);
+        $this->link->expects($this->once())->method('link')->with(8, 11);
+
+        $this->service->replaceTrackFor($this->order(), $this->row(), ['entity_id' => 8, 'reference_number' => '460350099999']);
+    }
+
+    public function testARedirectWithoutAMagentoShipmentAddsNothing(): void
+    {
+        $this->tracksByNumber = [];
+        $this->trackRepository->expects($this->never())->method('save');
+        $this->link->expects($this->never())->method('link');
+
+        $this->assertSame(0, $this->service->replaceTrackFor(
+            $this->order(),
+            $this->row(),
+            ['entity_id' => 8, 'reference_number' => '460350099999']
+        ));
         $this->assertSame([], $this->comments);
     }
 

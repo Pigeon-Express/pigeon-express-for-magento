@@ -191,6 +191,59 @@ class LayoutProcessorPluginTest extends TestCase
         $this->assertArrayNotHasKey('pigeonexpressLogoDark', $config);
     }
 
+    public function testThePickerGetsNoExtrasWhileNearestAndMapAreOff(): void
+    {
+        $this->config->method('isNearestOfficeEnabled')->willReturn(false);
+        $this->config->method('isLocationMapEnabled')->willReturn(false);
+
+        $config = $this->locationConfig();
+
+        $this->assertFalse($config['nearest']);
+        $this->assertFalse($config['map']);
+        $this->assertArrayNotHasKey('nearestUrl', $config);
+        $this->assertArrayNotHasKey('mapLocationsUrl', $config);
+        $this->assertArrayNotHasKey('texts', $config);
+        // What the picker always had is still there.
+        $this->assertSame('office', $config['officeMethod']);
+        $this->assertSame('aps', $config['apsMethod']);
+    }
+
+    public function testThePickerGetsItsRoutesAndFinishedTextsWhenAnExtraIsOn(): void
+    {
+        // Translated server side, like the Free label, so the picker does not
+        // depend on js-translation.json having been rebuilt.
+        $this->config->method('isNearestOfficeEnabled')->willReturn(true);
+        $this->config->method('isLocationMapEnabled')->willReturn(false);
+
+        $config = $this->locationConfig();
+
+        $this->assertTrue($config['nearest']);
+        $this->assertFalse($config['map']);
+        $this->assertSame('pigeonexpress/checkout/nearest', $config['nearestUrl']);
+        $this->assertSame('pigeonexpress/checkout/mapLocations', $config['mapLocationsUrl']);
+
+        foreach (
+            [
+                'nearestHeading', 'chooseOnMap', 'mapTitleOffice', 'mapTitleAps', 'close', 'mapSearch',
+                'noResults', 'choose', 'youAreHere', 'mapFailed', 'mapLoading', 'zoomIn', 'zoomOut',
+            ] as $key
+        ) {
+            $this->assertIsString($config['texts'][$key] ?? null, $key);
+            $this->assertNotSame('', $config['texts'][$key], $key);
+        }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function locationConfig(): array
+    {
+        $out = $this->plugin->afterProcess($this->createMock(LayoutProcessor::class), $this->layout());
+
+        return $out['components']['checkout']['children']['steps']['children']['shipping-step']
+            ['children']['shippingAddress']['children']['pigeonexpress-location']['config'];
+    }
+
     /**
      * @return array<string, mixed>
      */

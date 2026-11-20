@@ -15,6 +15,33 @@
 <div class="pe-panel pigeonexpress-location-autocomplete" data-bind="visible: isVisible(), if: isVisible()">
     <div class="pe-grid">
 
+        <!-- "Nearest office": the five nearest the shopper, when they shared
+             their location. Nothing is chosen for them; a click is the same
+             pick as one from the list below. Gone once a location is chosen,
+             back after Change. -->
+        <!-- ko if: !selectedLocation() && nearestRows().length -->
+        <div class="field pe-span-12 pe-nearest">
+            <span class="pe-label-row">
+                <span class="label pe-nearest-heading"
+                      data-bind="attr: { id: uid + '-nearest' }, text: texts.nearestHeading"></span>
+            </span>
+            <ul class="pe-nearest-list" data-bind="attr: { 'aria-labelledby': uid + '-nearest' }, foreach: nearestRows">
+                <li>
+                    <button type="button"
+                            class="pe-nearest-item"
+                            data-bind="click: $parent.selectLocation.bind($parent, $data)">
+                        <span class="pe-nearest-top">
+                            <span class="pigeonexpress-suggest-name" data-bind="text: $data.name"></span>
+                            <span class="pe-nearest-distance"
+                                  data-bind="visible: $data.distance, text: $data.distance"></span>
+                        </span>
+                        <span class="pigeonexpress-suggest-meta" data-bind="text: $parent.locationMeta($data)"></span>
+                    </button>
+                </li>
+            </ul>
+        </div>
+        <!-- /ko -->
+
         <!-- Once a pickup point is chosen the city has done its work and only
              gets in the way of the answer. Hidden rather than torn down, so
              Change puts it back with what was typed in it still there. -->
@@ -53,6 +80,17 @@
                    data-bind="visible: cityResultsVisible() && cityResults().length === 0, text: cityNoResultsText()"></p>
             </div>
         </div>
+
+        <!-- "Map of offices and lockers": only when some location of this
+             type has a position (no locker has one in the test environment). -->
+        <!-- ko if: !selectedLocation() && mapAvailable() -->
+        <div class="field pe-span-12 pe-map-row">
+            <button type="button"
+                    class="action secondary pe-map-button"
+                    data-bind="click: openMap, text: mapButtonText(), attr: { 'aria-busy': mapBusy() ? 'true' : 'false' }"></button>
+            <p class="pe-message _error" role="alert" data-bind="visible: mapFailed(), text: texts.mapFailed"></p>
+        </div>
+        <!-- /ko -->
 
         <div class="field required pe-span-12">
             <span class="pe-label-row">

@@ -339,6 +339,24 @@
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
                     </field>
+                    <field id="nearest_office" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="134" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/nearest_office</config_path>
+                        <label>Nearest office</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[When a customer chooses office or parcel locker delivery, their browser asks them to share their location, and the five nearest offices or lockers are listed first. The location is used only to find them through Pigeon Express and is not stored with the order. A customer who declines sees the usual list.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="location_map" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="136" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/location_map</config_path>
+                        <label>Map of offices and lockers</label>
+                        <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                        <comment><![CDATA[Adds a "Choose on the map" button to the office and parcel locker list at checkout. The map is from OpenStreetMap: when a customer opens it, the map images load from openstreetmap.org.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
                     <field id="checkout_logo" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="140" translate="label comment" type="select">
                         <config_path>carriers/pigeonexpress/checkout_logo</config_path>
                         <label>Checkout Logo</label>
@@ -729,7 +747,7 @@
                         <config_path>carriers/pigeonexpress/return_to</config_path>
                         <label>Where undelivered shipments return</label>
                         <source_model>PigeonExpress\Shipping\Model\Config\Source\ReturnTo</source_model>
-                        <comment><![CDATA[Leave on your Pigeon Express account to keep what it says. A chosen office with no office picked also follows the account.]]></comment>
+                        <comment><![CDATA[Leave on your Pigeon Express account to keep what it says. A chosen office or saved address with none picked also follows the account.]]></comment>
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                         </depends>
@@ -743,6 +761,50 @@
                         <depends>
                             <field id="carriers/pigeonexpress/active">1</field>
                             <field id="return_to">office</field>
+                        </depends>
+                    </field>
+                    <field id="return_address_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="31" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/return_address_id</config_path>
+                        <label>Return address</label>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\SavedAddress</source_model>
+                        <comment><![CDATA[One of the addresses saved in your Pigeon Express account. Add or change them in your account; the list here is refreshed with the location sync.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="return_to">address</field>
+                        </depends>
+                    </field>
+                    <!-- Return documents: not drawn (and so not saved over) while
+                         ConfigInterface::RETURN_DOCUMENTS_CHOICE is false. -->
+                    <field id="return_documents_to" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="35" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/return_documents_to</config_path>
+                        <label>Where return documents go</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ReturnDocumentsField</frontend_model>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\ReturnDocumentsTo</source_model>
+                        <comment><![CDATA[Applies only to shipments with a return receipt or return documents.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                        </depends>
+                    </field>
+                    <field id="return_documents_office_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="36" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/return_documents_office_id</config_path>
+                        <label>Office for return documents</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ReturnDocumentsOfficePicker</frontend_model>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\PickupOffice</source_model>
+                        <comment><![CDATA[A Pigeon Express office, not a parcel locker. The list is populated from the most recent sync.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="return_documents_to">office</field>
+                        </depends>
+                    </field>
+                    <field id="return_documents_address_id" showInDefault="1" showInStore="1" showInWebsite="1" sortOrder="37" translate="label comment" type="select">
+                        <config_path>carriers/pigeonexpress/return_documents_address_id</config_path>
+                        <label>Address for return documents</label>
+                        <frontend_model>PigeonExpress\Shipping\Block\Adminhtml\System\Config\ReturnDocumentsField</frontend_model>
+                        <source_model>PigeonExpress\Shipping\Model\Config\Source\SavedAddress</source_model>
+                        <comment><![CDATA[One of the addresses saved in your Pigeon Express account. Add or change them in your account; the list here is refreshed with the location sync.]]></comment>
+                        <depends>
+                            <field id="carriers/pigeonexpress/active">1</field>
+                            <field id="return_documents_to">address</field>
                         </depends>
                     </field>
                     <field id="reverse_shipments" showInDefault="1" showInStore="0" showInWebsite="0" sortOrder="40" translate="label comment" type="select">

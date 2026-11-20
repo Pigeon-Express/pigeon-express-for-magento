@@ -1,0 +1,42 @@
+<?php
+/**
+ * The "Quick changes" box of the order panel. Once the courier has the
+ * shipment, Edit is over; Pigeon Express still takes these four changes one
+ * at a time. Which of them it allows now is asked only when the merchant opens
+ * them (one request), and each is priced before it is confirmed
+ * (js/quick-actions.js; Controller Order/QuickOptions and Order/QuickChange).
+ *
+ * @var \PigeonExpress\Shipping\Block\Adminhtml\Order\QuickActions $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<?php if ($block->isOffered()) : ?>
+<section class="pe-quick" data-role="pe-quick"
+         data-mage-init='<?= $escaper->escapeHtmlAttr((string) json_encode([
+             "PigeonExpress_Shipping/js/quick-actions" => [
+                 "optionsUrl"    => $block->getOptionsUrl(),
+                 "changeUrl"     => $block->getChangeUrl(),
+                 "requestFailed" => (string) __("Could not reach Pigeon Express."),
+                 "noResults"     => (string) __("No matches found."),
+             ],
+         ])) ?>'>
+    <h4 class="pe-quick__title"><?= $escaper->escapeHtml(__('Quick changes')) ?></h4>
+    <p class="pe-quick__intro"><?= $escaper->escapeHtml(__(
+        'The courier has the shipment, so it can no longer be edited as a whole. Pigeon Express still takes these '
+        . 'changes one at a time: open them to see which are possible now, check the price, then confirm.'
+    )) ?></p>
+    <div class="pe-quick__body" data-role="pe-quick-body">
+        <ul class="pe-quick__list">
+            <?php foreach ($block->getLabels() as $peLabel) : ?>
+            <li><?= $escaper->escapeHtml($peLabel) ?></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <p class="pe-quick__error" data-role="pe-quick-error" hidden></p>
+    <div class="pe-quick__open" data-role="pe-quick-open-row">
+        <button type="button" class="action-default scalable" data-role="pe-quick-open">
+            <span><?= $escaper->escapeHtml(__('Open quick changes')) ?></span>
+        </button>
+    </div>
+</section>
+<?php endif; ?>

@@ -23,6 +23,11 @@ define([
                 dataType: 'json',
                 data: {form_key: window.FORM_KEY}
             }).done(function (response) {
+                // The order moved to another shipment: the whole panel changed.
+                if (response && response.reload) {
+                    window.location.reload();
+                    return;
+                }
                 if (response && response.html) {
                     $box.replaceWith(response.html);
                     return;

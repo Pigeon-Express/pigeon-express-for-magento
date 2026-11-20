@@ -41,9 +41,31 @@ interface ConfigInterface
     public const REVIEW_VIEW = 'view';
     public const REVIEW_VIEW_TEST = 'view_test';
 
-    /** Where undelivered shipments go: as the Pigeon Express account says, or a chosen office. */
+    /**
+     * Where undelivered shipments (and return documents) go: as the Pigeon
+     * Express account says, a chosen office, or an address saved in the
+     * account. Only the id of the mode in force is ever sent: Pigeon Express
+     * refuses an office and an address together.
+     */
     public const RETURN_TO_PROFILE = 'profile';
     public const RETURN_TO_OFFICE = 'office';
+    public const RETURN_TO_ADDRESS = 'address';
+
+    /** Every return destination mode, in the order the settings offer them. */
+    public const RETURN_TO_MODES = [self::RETURN_TO_PROFILE, self::RETURN_TO_OFFICE, self::RETURN_TO_ADDRESS];
+
+    /**
+     * Whether the shop can choose where return documents go. Off: the three
+     * return documents settings are not shown, getReturnDocumentsTo() is
+     * RETURN_TO_PROFILE and neither return_documents_office_id nor
+     * return_documents_address_id is ever sent. The test environment refuses
+     * both fields (422) with each of the three services that bring documents
+     * back (service_return_documents, paper_return_receipt,
+     * ID_verification_and_document_signature), on office and address delivery
+     * alike (WooCommerce, last checked 2026-11-19). Turn on once Pigeon
+     * Express confirms how the fields work; the saved values are kept.
+     */
+    public const RETURN_DOCUMENTS_CHOICE = false;
 
     /** Pigeon Express bills the merchant for the shipping. */
     public const WHO_PAYS_SENDER = 'sender';
@@ -91,6 +113,30 @@ interface ConfigInterface
 
     /** Yes/No: create the shipment in the background when the order reaches Processing. */
     public const XML_PATH_AUTO_CREATE = 'carriers/pigeonexpress/auto_create';
+
+    /** Yes/No: ask the shopper's location at checkout and list the nearest offices or lockers first. */
+    public const XML_PATH_NEAREST_OFFICE = 'carriers/pigeonexpress/nearest_office';
+
+    /** Yes/No: offer a map of the offices and lockers at checkout (OpenStreetMap tiles). */
+    public const XML_PATH_LOCATION_MAP = 'carriers/pigeonexpress/location_map';
+
+    /** Where undelivered shipments return: one of RETURN_TO_MODES. */
+    public const XML_PATH_RETURN_TO = 'carriers/pigeonexpress/return_to';
+
+    /** The chosen return office (Pigeon Express office id), used with RETURN_TO_OFFICE. */
+    public const XML_PATH_RETURN_OFFICE_ID = 'carriers/pigeonexpress/return_office_id';
+
+    /** The chosen return address (saved address id in the account), used with RETURN_TO_ADDRESS. */
+    public const XML_PATH_RETURN_ADDRESS_ID = 'carriers/pigeonexpress/return_address_id';
+
+    /** Where return documents go: one of RETURN_TO_MODES. Read only while RETURN_DOCUMENTS_CHOICE. */
+    public const XML_PATH_RETURN_DOCUMENTS_TO = 'carriers/pigeonexpress/return_documents_to';
+
+    /** The office return documents go to, with RETURN_TO_OFFICE. Read only while RETURN_DOCUMENTS_CHOICE. */
+    public const XML_PATH_RETURN_DOCUMENTS_OFFICE_ID = 'carriers/pigeonexpress/return_documents_office_id';
+
+    /** The saved address return documents go to, with RETURN_TO_ADDRESS. Read only while RETURN_DOCUMENTS_CHOICE. */
+    public const XML_PATH_RETURN_DOCUMENTS_ADDRESS_ID = 'carriers/pigeonexpress/return_documents_address_id';
 
     /**
      * API key of the active environment (test or live), decrypted.
@@ -548,6 +594,72 @@ interface ConfigInterface
      * @return int|null
      */
     public function getReturnOfficeId(?int $storeId = null): ?int;
+
+    /**
+     * Where refused or uncollected shipments go back to: one of
+     * RETURN_TO_MODES, RETURN_TO_PROFILE for anything unknown.
+     *
+     * @param int|null $storeId
+     * @return string
+     */
+    public function getReturnTo(?int $storeId = null): string;
+
+    /**
+     * The saved address (its id in the Pigeon Express account) refused or
+     * uncollected shipments go back to, or null unless return_to is
+     * RETURN_TO_ADDRESS and an address is chosen. Whether the account still
+     * has it is for the caller to check (SavedAddresses::find()).
+     *
+     * @param int|null $storeId
+     * @return int|null
+     */
+    public function getReturnAddressId(?int $storeId = null): ?int;
+
+    /**
+     * Where return documents go: one of RETURN_TO_MODES, always
+     * RETURN_TO_PROFILE while RETURN_DOCUMENTS_CHOICE is off.
+     *
+     * @param int|null $storeId
+     * @return string
+     */
+    public function getReturnDocumentsTo(?int $storeId = null): string;
+
+    /**
+     * The office return documents go to, or null unless
+     * getReturnDocumentsTo() is RETURN_TO_OFFICE and an office is chosen.
+     *
+     * @param int|null $storeId
+     * @return int|null
+     */
+    public function getReturnDocumentsOfficeId(?int $storeId = null): ?int;
+
+    /**
+     * The saved address return documents go to, or null unless
+     * getReturnDocumentsTo() is RETURN_TO_ADDRESS and an address is chosen.
+     *
+     * @param int|null $storeId
+     * @return int|null
+     */
+    public function getReturnDocumentsAddressId(?int $storeId = null): ?int;
+
+    /**
+     * Whether checkout asks the shopper's location when office or locker
+     * delivery is chosen and lists the nearest locations first. Off by
+     * default: the browser asks the shopper's permission.
+     *
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isNearestOfficeEnabled(?int $storeId = null): bool;
+
+    /**
+     * Whether checkout offers a map of the offices and lockers to choose
+     * from. Off by default: it loads map tiles from openstreetmap.org.
+     *
+     * @param int|null $storeId
+     * @return bool
+     */
+    public function isLocationMapEnabled(?int $storeId = null): bool;
 
     /**
      * The parcel locker shipments are handed in at (pickup type locker).

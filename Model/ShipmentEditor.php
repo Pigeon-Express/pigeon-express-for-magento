@@ -17,6 +17,12 @@
  *   less than 30 seconds earlier is not recorded: the shipment is read again
  *   and the merchant is asked to save again in 30 seconds
  *   (refuseReplayedChange(), from ApiClient::refuse_replayed_change).
+ * - The return destination (return office or saved address, and where
+ *   return documents go) is the one recorded with the shipment, not the
+ *   current Returns settings: a setting changed since does not move a parcel
+ *   already on its way. A recorded saved address the account no longer has
+ *   is left out (the carrier would refuse the change) and the order comment
+ *   says so (LabelService::update_shipment_for_order(), $return_dropped).
  * - After it: the new payload and form are stored, the details are kept from
  *   the carrier's answer, and the order gets a comment saying the waybill
  *   number stays and the label must be printed again.
@@ -38,6 +44,7 @@ use PigeonExpress\Shipping\Model\Api\ShipmentClient;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment as ShipmentResource;
 use PigeonExpress\Shipping\Model\Shipment\HandInResolver;
 use PigeonExpress\Shipping\Model\Shipment\OrderLock;
+use PigeonExpress\Shipping\Model\Shipment\ReturnDestination;
 use PigeonExpress\Shipping\Model\Status\ShipmentDetailsStore;
 use PigeonExpress\Shipping\Model\Status\StatusCodes;
 use PigeonExpress\Shipping\Model\Status\StatusRefresher;
@@ -95,6 +102,9 @@ class ShipmentEditor
     /** @var HandInResolver */
     private $handIn;
 
+    /** @var ReturnDestination */
+    private $returnDestination;
+
     public function __construct(
         ShipmentSender $sender,
         ShipmentClientInterface $client,
@@ -106,9 +116,11 @@ class ShipmentEditor
         StatusRefresher $refresher,
         OrderRepositoryInterface $orderRepository,
         LoggerInterface $logger,
-        HandInResolver $handIn
+        HandInResolver $handIn,
+        ReturnDestination $returnDestination
     ) {
         $this->handIn = $handIn;
+        $this->returnDestination = $returnDestination;
         $this->sender = $sender;
         $this->client = $client;
         $this->canceller = $canceller;
@@ -188,6 +200,7 @@ class ShipmentEditor
         foreach (self::UPDATE_IGNORED_KEYS as $key) {
             unset($payload[$key]);
         }
+        $returnDropped = $this->keepRecordedReturn($payload, $oldPayload, $storeId);
 
         $this->refuseLockerMisfit($oldPayload, $payload, $storeId);
 
@@ -239,9 +252,43 @@ class ShipmentEditor
             }
         }
 
-        $this->comment($orderId, $reference, $this->describeChanges($oldPayload, $stored));
+        $lines = $this->describeChanges($oldPayload, $stored);
+        if ($returnDropped) {
+            $lines[] = (string) __(
+                'The return address saved for this shipment is no longer in your Pigeon Express account, '
+                . 'so undelivered shipments now return as set in your account.'
+            );
+        }
+        $this->comment($orderId, $reference, $lines);
 
         return $fresh;
+    }
+
+    /**
+     * Put the return destination the shipment was recorded with into the
+     * change, in place of the one the current settings gave it. The carrier
+     * clears whatever a change leaves out, so it is sent again; the documents
+     * destination only while the change still carries a service that brings
+     * documents back. A shipment with no stored body (none recorded) keeps
+     * what the settings gave.
+     *
+     * @param array<string, mixed> $payload The body of the change, rewritten in place
+     * @param array<string, mixed> $recorded The stored body of the shipment
+     * @return bool Whether a recorded saved address had to be left out
+     */
+    public function keepRecordedReturn(array &$payload, array $recorded, int $storeId): bool
+    {
+        if ($recorded === []) {
+            return false;
+        }
+
+        foreach (ReturnDestination::KEYS as $key) {
+            unset($payload[$key]);
+        }
+        $services = is_array($payload['service_codes'] ?? null) ? $payload['service_codes'] : [];
+        $payload += $this->returnDestination->fromRecord($recorded, $services, $storeId);
+
+        return ReturnDestination::addressDropped($recorded, $payload);
     }
 
     /**

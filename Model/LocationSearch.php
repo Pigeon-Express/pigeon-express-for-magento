@@ -381,6 +381,160 @@ class LocationSearch implements LocationSearchInterface
     }
 
     /**
+     * @inheritdoc
+     */
+    public function listWithCoordinates(string $type, int $storeId = 0): array
+    {
+        $collection = $this->collectionFor($type);
+        if ($collection === null) {
+            return [];
+        }
+
+        $collection->addFieldToFilter('is_active', 1);
+        $collection->addFieldToFilter('main_table.latitude', ['notnull' => true]);
+        $collection->addFieldToFilter('main_table.longitude', ['notnull' => true]);
+        $this->joinCityData($collection);
+        $collection->getSelect()->order(['city_resolved ASC', 'main_table.name ASC']);
+
+        // Unpaged, like listByCity(): a map that drops pins is wrong.
+        $items = [];
+        foreach ($collection as $item) {
+            $point = self::coordinatesOf($item->getData('latitude'), $item->getData('longitude'));
+            if ($point === null) {
+                continue;
+            }
+            $items[] = $this->pickerRow($item, $type, $storeId) + $point;
+        }
+
+        return $items;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function rowsByApiIds(string $type, array $apiIds, int $storeId = 0): array
+    {
+        $ids = [];
+        foreach ($apiIds as $apiId) {
+            if (is_scalar($apiId) && ctype_digit(trim((string) $apiId)) && (int) $apiId > 0) {
+                $ids[(int) $apiId] = (int) $apiId;
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+
+        $collection = $this->collectionFor($type);
+        if ($collection === null) {
+            return [];
+        }
+
+        $collection->addFieldToFilter('is_active', 1);
+        $collection->addFieldToFilter('main_table.api_id', ['in' => array_values($ids)]);
+        $this->joinCityData($collection);
+
+        $found = [];
+        foreach ($collection as $item) {
+            $point = self::coordinatesOf($item->getData('latitude'), $item->getData('longitude'));
+            $found[(int) $item->getData('api_id')] = $this->pickerRow($item, $type, $storeId)
+                + ['api_id' => (int) $item->getData('api_id')]
+                + ($point ?? ['latitude' => null, 'longitude' => null]);
+        }
+
+        // In the order asked for: nearest first stays nearest first.
+        $rows = [];
+        foreach ($ids as $apiId) {
+            if (isset($found[$apiId])) {
+                $rows[] = $found[$apiId];
+            }
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function getApsCode(int $entityId): ?string
+    {
+        if ($entityId <= 0) {
+            return null;
+        }
+
+        $collection = $this->apsCollectionFactory->create();
+        $collection->addFieldToFilter('main_table.entity_id', $entityId);
+        $collection->setPageSize(1);
+
+        $item = $collection->getFirstItem();
+        if (!$item instanceof Aps || !$item->getId()) {
+            return null;
+        }
+
+        return $item->getCode();
+    }
+
+    /**
+     * A usable map point, or null when the location has none. 0,0 is open sea
+     * off Africa: an unfilled pair, not a place.
+     *
+     * @param mixed $latitude
+     * @param mixed $longitude
+     * @return array{latitude: float, longitude: float}|null
+     */
+    public static function coordinatesOf($latitude, $longitude): ?array
+    {
+        if (!is_numeric($latitude) || !is_numeric($longitude)) {
+            return null;
+        }
+
+        $lat = (float) $latitude;
+        $lng = (float) $longitude;
+
+        if ($lat < -90 || $lat > 90 || $lng < -180 || $lng > 180 || ($lat === 0.0 && $lng === 0.0)) {
+            return null;
+        }
+
+        return ['latitude' => $lat, 'longitude' => $lng];
+    }
+
+    /**
+     * The collection of a location type, or null for an unknown type.
+     *
+     * @return \Magento\Framework\Model\ResourceModel\Db\Collection\AbstractCollection|null
+     */
+    private function collectionFor(string $type)
+    {
+        if ($type === ConfigInterface::DELIVERY_TYPE_OFFICE) {
+            return $this->officeCollectionFactory->create();
+        }
+        if ($type === ConfigInterface::DELIVERY_TYPE_APS) {
+            return $this->apsCollectionFactory->create();
+        }
+
+        return null;
+    }
+
+    /**
+     * One location in the row shape the checkout picker uses.
+     *
+     * @param \Magento\Framework\DataObject $item A row joined with joinCityData()
+     * @return array{id: int, name: string, address: string, city: string, postcode: string, region_id: int|null, type: string, hours: string}
+     */
+    private function pickerRow($item, string $type, int $storeId): array
+    {
+        return [
+            'id' => (int) $item->getId(),
+            'name' => (string) $item->getData('name'),
+            'address' => (string) $item->getData('address'),
+            'city' => (string) ($item->getData('city_resolved') ?? ''),
+            'postcode' => (string) ($item->getData('postcode_resolved') ?? ''),
+            'region_id' => $this->regionFor($item),
+            'type' => $type,
+            'hours' => $this->hoursFor($item, $type, $storeId),
+        ];
+    }
+
+    /**
      * Get configured autocomplete result limit.
      *
      * @param int $storeId

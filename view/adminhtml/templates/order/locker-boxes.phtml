@@ -1,0 +1,59 @@
+<?php
+/**
+ * Free boxes of the parcel locker picked in the shipment form: the verdict for
+ * this parcel in one line, which boxes take it, and every box size behind
+ * "All boxes". A forecast, and said to be one.
+ *
+ * Drawn by Controller Order/LockerBoxes under the locker picker
+ * (js/locker-boxes.js puts it in place).
+ *
+ * @var \PigeonExpress\Shipping\Block\Adminhtml\Order\LockerBoxes $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+$peView = $block->getView();
+$peTone = $block->getTone();
+$peSized = $block->isSized();
+?>
+<div class="pe-locker-boxes__box pe-locker-boxes__box--<?= $escaper->escapeHtmlAttr($peTone) ?>">
+    <?php if ($peView['message'] !== '') : ?>
+    <p class="pe-locker-boxes__verdict">
+        <span class="pe-locker-boxes__icon" aria-hidden="true"></span>
+        <span><?= $escaper->escapeHtml($peView['message']) ?></span>
+    </p>
+    <?php endif; ?>
+
+    <p class="pe-locker-boxes__detail">
+        <?php if ($peView['detail'] !== '') : ?>
+            <?= $escaper->escapeHtml($peView['detail']) ?>
+            <span class="pe-locker-boxes__forecast">&middot; <?= $escaper->escapeHtml(__('forecast')) ?></span>
+        <?php else : ?>
+            <span class="pe-locker-boxes__forecast"><?= $escaper->escapeHtml(__('Forecast from Pigeon Express')) ?></span>
+        <?php endif; ?>
+    </p>
+
+    <?php if (!empty($peView['rows'])) : ?>
+    <?php /* Open from the start when there is no verdict: the list is all there is. */ ?>
+    <details class="pe-locker-boxes__all"<?= $peView['message'] === '' ? ' open' : '' ?>>
+        <summary><?= $escaper->escapeHtml(__('All boxes')) ?></summary>
+        <table class="pe-locker-boxes__table">
+            <thead>
+                <tr>
+                    <th scope="col"><?= $escaper->escapeHtml(__('Box')) ?></th>
+                    <th scope="col"><?= $escaper->escapeHtml(__('Inner size')) ?></th>
+                    <th scope="col"><?= $escaper->escapeHtml(__('Free tomorrow')) ?></th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php foreach ($peView['rows'] as $peRow) : ?>
+                <?php $peClass = $peSized ? (!empty($peRow['fits']) ? 'is-fitting' : 'is-not-fitting') : ''; ?>
+                <tr<?= $peClass !== '' ? ' class="' . $escaper->escapeHtmlAttr($peClass) . '"' : '' ?>>
+                    <td><?= $escaper->escapeHtml((string) $peRow['size']) ?></td>
+                    <td><?= $escaper->escapeHtml((string) $peRow['inside']) ?></td>
+                    <td><?= (int) $peRow['tomorrow'] ?></td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </details>
+    <?php endif; ?>
+</div>

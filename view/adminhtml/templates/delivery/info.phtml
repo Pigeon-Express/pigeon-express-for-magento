@@ -113,7 +113,10 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                     <tbody>
                     <?php foreach ($shipments as $shipment) : ?>
                         <?php $tracking = (string) $shipment->getTrackingNumber(); ?>
-                        <tr<?= $block->isCancelled($shipment) ? ' class="pe-cancelled"' : '' ?>>
+                        <?php $peRowClass = $block->isCancelled($shipment)
+                            ? 'pe-cancelled'
+                            : ($block->isRedirected($shipment) ? 'pe-redirected' : ''); ?>
+                        <tr<?= $peRowClass !== '' ? ' class="' . $escaper->escapeHtmlAttr($peRowClass) . '"' : '' ?>>
                             <td><?= $escaper->escapeHtml($shipment->getReferenceNumber()) ?></td>
                             <td><?= $tracking !== '' ? $escaper->escapeHtml($tracking) : '&mdash;' ?></td>
                             <td><?= $escaper->escapeHtml($block->getStatusLabel($shipment)) ?></td>
@@ -151,6 +154,13 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                         ? __('Last checked: %1', $peStatus['checked'])
                         : __('Not checked yet')) ?></span>
                 </div>
+
+                <?php foreach ($block->getReturnDestinationLines() as $peReturnLabel => $peReturnText) : ?>
+                <div class="pe-status-row pe-return-row" data-role="pe-return-row">
+                    <span class="pe-status-label"><?= $escaper->escapeHtml($peReturnLabel) ?>:</span>
+                    <span class="pe-return-text"><?= $escaper->escapeHtml($peReturnText) ?></span>
+                </div>
+                <?php endforeach; ?>
 
                 <?php if ($block->hasCharges()) : ?>
                     <?= /* @noEscape: rendered and escaped by its own template */ $block->getChargesHtml() ?>
@@ -231,6 +241,8 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                               "PigeonExpress_Shipping/js/confirm-submit" => [
                                   "title" => (string) __("Cancel shipment"),
                                   "message" => (string) __("Cancel this shipment with Pigeon Express? This cannot be undone."),
+                                  "confirmText" => (string) __("Yes, cancel the shipment"),
+                                  "keepText" => (string) __("No, keep it"),
                               ],
                           ])) ?>'>
                         <input type="hidden" name="form_key" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>"/>
@@ -239,6 +251,10 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                             <span><?= $escaper->escapeHtml(__('Cancel Shipment')) ?></span>
                         </button>
                     </form>
+                    <?php elseif ($block->isDerived()) : ?>
+                    <?php /* A return or a redirect (the details name the shipment it was
+                            made from): Pigeon Express refuses to cancel it. */ ?>
+                    <p class="pe-hint pe-derived-note"><?= $escaper->escapeHtml($block->getDerivedCancelMessage()) ?></p>
                     <?php else : ?>
                     <p class="pe-hint">
                         <?= $escaper->escapeHtml(__(
@@ -246,6 +262,9 @@ $peSubField = function (string $name, string $label) use ($block, $escaper) {
                         )) ?>
                     </p>
                     <?php endif; ?>
+
+                    <?= /* @noEscape: rendered and escaped by its own template */
+                        $block->getChildHtml('pigeonexpress.quick.actions') ?>
                 <?php else : ?>
                     <p class="pe-hint">
                         <?= $escaper->escapeHtml(__('Cancelled')) ?>
@@ -401,6 +420,19 @@ $pePackageRow = function (string $index, array $row) use ($escaper, $peFragileCo
                         ],
                     ]
                 ) ?>
+
+                <?php if ($block->getLockerBoxesUrl() !== '') : ?>
+                <?php /* Free boxes of the locker picked above, for this parcel's size
+                        and weight: filled by js/locker-boxes.js on a locker delivery,
+                        again when the packages change. Never blocks the shipment. */ ?>
+                <div class="pe-span-12 pe-locker-boxes" data-role="pe-locker-boxes" aria-live="polite" hidden
+                     data-mage-init='<?= $escaper->escapeHtmlAttr((string) json_encode([
+                         "PigeonExpress_Shipping/js/locker-boxes" => [
+                             "url" => $block->getLockerBoxesUrl(),
+                             "unreachable" => (string) __("Could not reach Pigeon Express."),
+                         ],
+                     ])) ?>'></div>
+                <?php endif; ?>
 
                 <?= /* @noEscape */ $peField(
                     'city',
@@ -634,7 +666,8 @@ $pePackageRow = function (string $index, array $row) use ($escaper, $peFragileCo
                 <h3 class="pe-box-title"><?= $escaper->escapeHtml(__('Additional services')) ?></h3>
 
                 <?php if ($block->isDeclaredValueOffered()) : ?>
-                <div class="admin__field pe-service<?= $block->isFieldInvalid('declared_value_amount') ? ' _error' : '' ?>">
+                <?php /* Pigeon Express refuses a declared value for a locker shipment. */ ?>
+                <div class="admin__field pe-service<?= $block->isFieldInvalid('declared_value_amount') ? ' _error' : '' ?>" data-pe-not-locker="1">
                     <div class="admin__field-control pe-service-check">
                         <input type="hidden" name="pe[declared_value]" value="0"/>
                         <input type="checkbox" class="pe-checkbox" id="pe_declared_value"
@@ -705,7 +738,7 @@ $pePackageRow = function (string $index, array $row) use ($escaper, $peFragileCo
                 <?php endif; ?>
 
                 <p class="pe-hint pe-locker-hint" data-pe-locker-only="1"><?= $escaper->escapeHtml(__(
-                    'A parcel locker takes no inspection and no return receipt.'
+                    'A parcel locker takes no declared value, no inspection and no return receipt.'
                 )) ?></p>
             </section>
 

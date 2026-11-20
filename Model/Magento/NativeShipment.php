@@ -320,6 +320,80 @@ class NativeShipment
     }
 
     /**
+     * Put the new number of a redirected waybill in place of the old one on
+     * its Magento shipment, and link the new row to that shipment.
+     *
+     * Done whatever "Create the Magento shipment" says, like removeTrackFor():
+     * the old number no longer follows the parcel, and the customer's "Track
+     * your order" must show the one that does. When the order has no Magento
+     * shipment with the old number, nothing is added: there was none to keep
+     * up to date.
+     *
+     * @param array<string, mixed> $oldRow The redirected pigeonexpress_shipment row
+     * @param array<string, mixed> $newRow The row of the shipment that replaced it
+     * @return int How many tracking numbers were replaced
+     */
+    public function replaceTrackFor(OrderInterface $order, array $oldRow, array $newRow): int
+    {
+        $old = trim((string) ($oldRow['reference_number'] ?? ''));
+        $new = trim((string) ($newRow['reference_number'] ?? ''));
+        $newRowId = (int) ($newRow['entity_id'] ?? 0);
+        $orderId = (int) $order->getEntityId();
+        if ($old === '' || $new === '' || $old === $new || $orderId <= 0) {
+            return 0;
+        }
+
+        $replaced = 0;
+        $shipments = [];
+        try {
+            // Already done (the event dispatched twice): only the link is kept.
+            $done = $this->findTracks($orderId, $new);
+            foreach ($this->findTracks($orderId, $old) as $track) {
+                $shipmentId = (int) $track->getParentId();
+                if ($done !== []) {
+                    $this->trackRepository->delete($track);
+                } else {
+                    $track->setTrackNumber($new);
+                    $this->trackRepository->save($track);
+                    $done[] = $track;
+                }
+                $shipments[] = $this->shipmentNumber($shipmentId);
+                $replaced++;
+            }
+            if ($done !== []) {
+                $this->link->link($newRowId, (int) $done[0]->getParentId());
+            }
+        } catch (\Throwable $e) {
+            $this->logger->error('[PigeonExpress] Tracking number not replaced: ' . $e->getMessage(), [
+                'order_id' => $orderId,
+                'reference_number' => $old,
+                'new_reference_number' => $new,
+            ]);
+            $this->comment->add($order, (string) __(
+                'Pigeon Express waybill %1 was redirected to %2, but the tracking number on the Magento shipment '
+                . 'could not be replaced: %3. Change it by hand on the shipment page.',
+                $old,
+                $new,
+                $e->getMessage()
+            ));
+
+            return $replaced;
+        }
+
+        if ($replaced > 0) {
+            $this->comment->add($order, (string) __(
+                'Pigeon Express waybill %1 was redirected to %2, so the tracking number on Magento shipment #%3 '
+                . 'was replaced with the new one.',
+                $old,
+                $new,
+                implode(', #', array_unique($shipments))
+            ));
+        }
+
+        return $replaced;
+    }
+
+    /**
      * Why Magento would refuse to ship the order, or null when it can.
      */
     public function skipReason(OrderInterface $order): ?string

@@ -15,6 +15,9 @@
                        name="pigeonexpress.return.shipment"/>
                 <block class="PigeonExpress\Shipping\Block\Adminhtml\Order\CourierRequest"
                        name="pigeonexpress.courier.request"/>
+                <!-- The "Quick changes" box, once Edit is over (Model\QuickActions). -->
+                <block class="PigeonExpress\Shipping\Block\Adminhtml\Order\QuickActions"
+                       name="pigeonexpress.quick.actions"/>
             </block>
         </referenceContainer>
     </body>

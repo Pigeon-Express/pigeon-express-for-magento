@@ -10,6 +10,12 @@
         <css src="PigeonExpress_Shipping::css/checkout/location-autocomplete.css"/>
         <css src="PigeonExpress_Shipping::css/checkout/address-fields.css"/>
         <css src="PigeonExpress_Shipping::css/checkout/carrier-logo.css"/>
+        <!-- "Map of offices and lockers": Leaflet 1.9.4 (bundled) and the map
+             dialog. Styles only; the scripts load on the first "Choose on the
+             map". Declared here so Magento's CSS merging and minification
+             handle them like every other stylesheet of the page. -->
+        <css src="PigeonExpress_Shipping::js/lib/leaflet/leaflet.css"/>
+        <css src="PigeonExpress_Shipping::css/checkout/location-map.css"/>
     </head>
     <body>
         <!-- Renders nothing: it puts a class on the body early enough that the

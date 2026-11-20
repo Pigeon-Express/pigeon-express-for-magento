@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Pigeon Express Shipping: hosts the checkout may load from.
+
+  The map of offices and lockers at checkout ("Map of offices and lockers",
+  off by default) draws OpenStreetMap tiles, which are images from
+  tile.openstreetmap.org. Leaflet itself, its styles and its icons are bundled
+  with the module and load from the store. The map is searched over the
+  store's own list, so nothing else is fetched from outside.
+-->
+<csp_whitelist xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Csp:etc/csp_whitelist.xsd">
+    <policies>
+        <policy id="img-src">
+            <values>
+                <value id="pigeonexpress_osm_tiles" type="host">tile.openstreetmap.org</value>
+            </values>
+        </policy>
+    </policies>
+</csp_whitelist>

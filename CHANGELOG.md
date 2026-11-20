@@ -53,6 +53,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Orders grid mass actions: create shipments, refresh status, download labels
   and request a courier.
 - Return shipments created from the order.
+- Nearest office and parcel locker at checkout, found from the customer's
+  location (optional, off by default).
+- "Choose on the map" at checkout: offices and lockers on an OpenStreetMap
+  map (optional).
+- Quick changes after the courier has the parcel: delivery place, services,
+  cash on delivery and declared value, with the price shown first.
+- A redirect moves the order to the new waybill, replaces the tracking number
+  on the Magento shipment and emails the customer the new number.
+- Parcel locker free boxes shown in the order form.
+- Receiver name and phone can be changed from the order form.
+- Returns and redirects say why they cannot be cancelled.
+- Return to a saved address, and a separate place for return documents.
+- Editing a shipment keeps the recorded return destination.
+- Streets are matched by postcode when the city has several streets with the
+  same name.
 - Request a courier from an order or the orders grid, and manage requests
   under Sales > Operations > Pigeon Express courier requests. The orders grid
   shows "Courier requested" and filters orders waiting for the courier.

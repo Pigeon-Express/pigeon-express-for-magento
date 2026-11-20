@@ -49,6 +49,15 @@ class SavedAddresses
     /** @var array<int, array<string, mixed>>|null */
     private $loaded;
 
+    /**
+     * Whether $loaded is a list that was read (from the API, or the last one
+     * fetched, kept in the cache), not the empty stand-in for "nothing could
+     * be read".
+     *
+     * @var bool
+     */
+    private $listRead = false;
+
     public function __construct(
         ClientFactory $clientFactory,
         CacheInterface $cache,
@@ -74,10 +83,16 @@ class SavedAddresses
 
         $cached = $this->read();
         if ($cached !== null && $cached['fetched_at'] > time() - self::LIFETIME) {
+            $this->listRead = true;
+
             return $this->loaded = $cached['rows'];
         }
 
-        return $this->loaded = $this->refresh($cached['rows'] ?? []);
+        $rows = $this->refresh($cached['rows'] ?? []);
+        // A failed fetch still has the last list fetched, if there is one.
+        $this->listRead = $this->listRead || $cached !== null;
+
+        return $this->loaded = $rows;
     }
 
     /**
@@ -96,6 +111,22 @@ class SavedAddresses
     public function find(int $id): ?array
     {
         return $this->all()[$id] ?? null;
+    }
+
+    /**
+     * Whether the account lists this saved address, or null when that cannot
+     * be told: no list could be read (no credentials, or the API failed and
+     * nothing was fetched before). An empty list that was read is an account
+     * without saved addresses, and answers false.
+     */
+    public function isKnown(int $id): ?bool
+    {
+        $rows = $this->all();
+        if (isset($rows[$id])) {
+            return true;
+        }
+
+        return $this->listRead ? false : null;
     }
 
     /**
@@ -130,6 +161,7 @@ class SavedAddresses
             self::LIFETIME * 24
         );
         $this->loaded = $rows;
+        $this->listRead = true;
 
         return $rows;
     }

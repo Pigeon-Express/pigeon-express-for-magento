@@ -136,6 +136,49 @@ class LayoutProcessorPlugin
     }
 
     /**
+     * "Nearest office" and "Map of offices and lockers" for the office and
+     * locker picker: whether each is on, the routes it calls, and its texts.
+     *
+     * Translated here rather than with $t in the script, like the Free label,
+     * so the texts do not depend on js-translation.json having been rebuilt.
+     * Both off: the picker is exactly what it was, and nothing about the map
+     * is ever loaded.
+     *
+     * @return array<string, mixed>
+     */
+    private function locationExtrasConfig(): array
+    {
+        $nearest = $this->config->isNearestOfficeEnabled();
+        $map = $this->config->isLocationMapEnabled();
+
+        if (!$nearest && !$map) {
+            return ['nearest' => false, 'map' => false];
+        }
+
+        return [
+            'nearest' => $nearest,
+            'map' => $map,
+            'nearestUrl' => 'pigeonexpress/checkout/nearest',
+            'mapLocationsUrl' => 'pigeonexpress/checkout/mapLocations',
+            'texts' => [
+                'nearestHeading' => (string) __('Nearest to you'),
+                'chooseOnMap' => (string) __('Choose on the map'),
+                'mapTitleOffice' => (string) __('Choose a Pigeon Express office'),
+                'mapTitleAps' => (string) __('Choose a Pigeon Express parcel locker'),
+                'close' => (string) __('Close'),
+                'mapSearch' => (string) __('Search by city, name or address'),
+                'noResults' => (string) __('No locations match that search.'),
+                'choose' => (string) __('Choose'),
+                'youAreHere' => (string) __('You are here'),
+                'mapFailed' => (string) __('The map could not be loaded. Please choose from the list.'),
+                'mapLoading' => (string) __('Loading the map...'),
+                'zoomIn' => (string) __('Zoom in'),
+                'zoomOut' => (string) __('Zoom out'),
+            ],
+        ];
+    }
+
+    /**
      * Add location autocomplete to shipping step (shippingAdditional region).
      * Only allow selection from backend results (no free text).
      *
@@ -169,7 +212,7 @@ class LayoutProcessorPlugin
                 'carrierCode' => ConfigInterface::CARRIER_CODE,
                 'officeMethod' => ConfigInterface::DELIVERY_TYPE_OFFICE,
                 'apsMethod' => ConfigInterface::DELIVERY_TYPE_APS,
-            ],
+            ] + $this->locationExtrasConfig(),
             'dataScope' => 'pigeonexpress_location',
             'displayArea' => 'shippingAdditional',
             'label' => (string) __('Select delivery location'),

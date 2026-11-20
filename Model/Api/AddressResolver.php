@@ -33,6 +33,10 @@ class AddressResolver
     /** The API requires at least this many characters for a name search. */
     public const MIN_SEARCH_LENGTH = 2;
 
+    /** The postcode filter the API accepts: 2 to 10 characters. */
+    public const POSTCODE_MIN_LENGTH = 2;
+    public const POSTCODE_MAX_LENGTH = 10;
+
     private const CACHE_PREFIX = 'pigeonexpress_streets_';
 
     /** Own tag so street lists can be dropped without flushing everything. */
@@ -266,13 +270,29 @@ class AddressResolver
      * type settles it, it is used; when it does not, the row comes back marked
      * ambiguous so the admin is asked rather than a coin being tossed.
      *
+     * The customer's postcode, when given, is asked first: in a town with two
+     * streets of one name it is often the postcode that tells which. As in
+     * WooCommerce (ShipmentDefaults), see matchStreetByPostcode(). Nothing
+     * found that way, or a failed search, and the name alone decides.
+     *
+     * @param string $postalCode The customer's own postcode, '' for none
      * @return array{id:int, name:string, name_en:string, type:string, label:string, ambiguous:bool}|null
      */
-    public function matchStreet(int $cityId, string $query, int $storeId, string $preferredType = ''): ?array
-    {
+    public function matchStreet(
+        int $cityId,
+        string $query,
+        int $storeId,
+        string $preferredType = '',
+        string $postalCode = ''
+    ): ?array {
         $query = trim($query);
         if ($cityId <= 0 || mb_strlen($query) < self::MIN_SEARCH_LENGTH) {
             return null;
+        }
+
+        $byPostcode = $this->matchStreetByPostcode($cityId, $query, $storeId, $preferredType, trim($postalCode));
+        if ($byPostcode !== null) {
+            return $byPostcode;
         }
 
         $streets = $this->loadStreets($cityId, $query, $storeId);
@@ -310,6 +330,55 @@ class AddressResolver
     }
 
     /**
+     * The one street under exactly the customer's postcode whose name is the
+     * query, or null.
+     *
+     * The carrier's postcode filter is a prefix match ("4000" also returns
+     * "40001") and leaves out every street it has no postcode for, so only a
+     * row with exactly this postcode counts, and the street type the customer
+     * typed must agree: the "ул." they meant may be the one without a
+     * postcode. Only an exact name: the postcode narrows the list, which
+     * would otherwise let a single loose hit through.
+     *
+     * @return array{id:int, name:string, name_en:string, type:string, label:string, ambiguous:bool}|null
+     */
+    private function matchStreetByPostcode(
+        int $cityId,
+        string $query,
+        int $storeId,
+        string $preferredType,
+        string $postalCode
+    ): ?array {
+        if (!self::isPostcodeQuery($postalCode)) {
+            return null;
+        }
+
+        $needle = mb_strtolower($query);
+        $type = mb_strtolower(trim($preferredType));
+        $hits = array_values(array_filter(
+            $this->loadStreets($cityId, $query, $storeId, $postalCode),
+            static function (array $street) use ($needle, $type, $postalCode): bool {
+                return (string) ($street['postal_code'] ?? '') === $postalCode
+                    && (mb_strtolower((string) $street['name']) === $needle
+                        || mb_strtolower((string) $street['name_en']) === $needle)
+                    && ($type === '' || mb_strtolower((string) $street['type']) === $type);
+            }
+        ));
+
+        return count($hits) === 1 ? $hits[0] + ['ambiguous' => false] : null;
+    }
+
+    /**
+     * Whether the carrier takes this as a postcode filter (2 to 10 characters).
+     */
+    public static function isPostcodeQuery(string $postalCode): bool
+    {
+        $length = mb_strlen($postalCode);
+
+        return $length >= self::POSTCODE_MIN_LENGTH && $length <= self::POSTCODE_MAX_LENGTH;
+    }
+
+    /**
      * Street id for a name, or null when it cannot be matched.
      */
     public function searchStreetId(int $cityId, string $query, int $storeId): ?int
@@ -335,12 +404,16 @@ class AddressResolver
     }
 
     /**
-     * @return array<int, array{id:int, name:string, name_en:string, type:string, label:string}>
+     * The streets of a city matching a name, and with a postcode only those
+     * the carrier holds under it. A failed search is not cached, so it is
+     * asked again next time rather than taken for "no streets".
+     *
+     * @param string $postalCode '' for the name alone; otherwise a postcode isPostcodeQuery() accepts
+     * @return array<int, array{id:int, name:string, name_en:string, type:string, label:string, postal_code:string}>
      */
-    private function loadStreets(int $cityId, string $query, int $storeId): array
+    private function loadStreets(int $cityId, string $query, int $storeId, string $postalCode = ''): array
     {
-        $cacheKey = self::CACHE_PREFIX . $this->environment->current() . '_' . $cityId
-            . '_' . md5(mb_strtolower($query));
+        $cacheKey = $this->streetsCacheKey($cityId, $query, $postalCode);
 
         $cached = $this->cache->load($cacheKey);
         if (is_string($cached) && $cached !== '') {
@@ -351,7 +424,12 @@ class AddressResolver
         }
 
         try {
-            $streets = $this->client($storeId)->streets()->searchInCity($cityId, $query);
+            $streets = $this->client($storeId)->streets()->searchInCity(
+                $cityId,
+                $query,
+                null,
+                $postalCode !== '' ? $postalCode : null
+            );
         } catch (\Throwable $e) {
             $this->logStreetFailure($e, $storeId);
 
@@ -363,11 +441,12 @@ class AddressResolver
             $name = (string) $street->getName();
             $type = (string) $street->getType();
             $rows[] = [
-                'id'      => (int) $street->getId(),
-                'name'    => $name,
-                'name_en' => (string) $street->getNameEn(),
-                'type'    => $type,
-                'label'   => trim($type . ' ' . $name),
+                'id'          => (int) $street->getId(),
+                'name'        => $name,
+                'name_en'     => (string) $street->getNameEn(),
+                'type'        => $type,
+                'label'       => trim($type . ' ' . $name),
+                'postal_code' => (string) $street->getPostalCode(),
             ];
         }
 
@@ -376,6 +455,21 @@ class AddressResolver
         $this->cache->save(json_encode($rows), $cacheKey, [self::CACHE_TAG], self::CACHE_LIFETIME);
 
         return $rows;
+    }
+
+    /**
+     * Where one street search is cached: per environment, city and name, and
+     * with a postcode per postcode too, so the two searches never answer for
+     * each other.
+     */
+    private function streetsCacheKey(int $cityId, string $query, string $postalCode = ''): string
+    {
+        $key = self::CACHE_PREFIX . $this->environment->current() . '_' . $cityId . '_' . md5(mb_strtolower($query));
+        if ($postalCode !== '') {
+            $key .= '_pc' . (ctype_alnum($postalCode) ? $postalCode : md5($postalCode));
+        }
+
+        return $key;
     }
 
     /**

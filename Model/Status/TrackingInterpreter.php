@@ -103,6 +103,24 @@ class TrackingInterpreter
     }
 
     /**
+     * The entry's own status code, before any chain is followed: what the
+     * shipment itself is now. A redirected shipment says
+     * StatusCodes::REDIRECTED here, while interpret() would describe the
+     * parcel by the shipment it moved to; the caller moves the order first
+     * (Model\Shipment\RedirectFollower).
+     *
+     * @param array<string, mixed> $entry A tracking entry, single or bulk
+     */
+    public function rootCode(array $entry): string
+    {
+        if (array_key_exists('found', $entry) && !$entry['found']) {
+            return '';
+        }
+
+        return $this->statusOf($entry)['code'];
+    }
+
+    /**
      * The status in a shipment details answer (GET or PUT /shipments/{ref}),
      * or null when it cannot stand for the shipment by itself: a shipment
      * with linked shipments after it is described by the last of them, which

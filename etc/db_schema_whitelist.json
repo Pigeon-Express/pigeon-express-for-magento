@@ -44,7 +44,8 @@
             "created_at": true,
             "updated_at": true,
             "environment": true,
-            "working_hours": true
+            "working_hours": true,
+            "code": true
         },
         "index": {
             "PIGEONEXPRESS_APS_NAME": true,
@@ -134,7 +135,9 @@
             "status_at": true,
             "status_checked_at": true,
             "details_json": true,
-            "magento_shipment_id": true
+            "magento_shipment_id": true,
+            "redirected_from": true,
+            "customer_notified_at": true
         },
         "index": {
             "PIGEONEXPRESS_SHIPMENT_ORDER_ID": true,

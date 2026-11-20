@@ -117,10 +117,12 @@ class ServiceCodesBuilder
             self::CODE_REVIEW,
             self::CODE_TEST,
         ],
-        // Locker: no human at the point of delivery.
+        // Locker: no human at the point of delivery. Pigeon Express also
+        // refuses a declared value for a locker shipment (422, "not allowed
+        // for a shipment from/to an APS"), so it is dropped here, as the
+        // WooCommerce plugin does.
         'locker' => [
             self::CODE_COD_AMOUNT,
-            self::CODE_DECLARED_VALUE,
             'cod_card_fee',
             self::CODE_SMS_RECEIVER,
         ],

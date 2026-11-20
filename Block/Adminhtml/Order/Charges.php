@@ -65,7 +65,7 @@ class Charges extends Template
      * Everything the box prints, already worded and formatted, or null when
      * the details were never read.
      *
-     * @return array{updated:string, total:string, payer:string, fees:array<int, array{label:string, amount:string}>, cod_amount:string, cod_status:string, related:array<int, array{label:string, reference:string}>}|null
+     * @return array{updated:string, total:string, payer:string, fees:array<int, array{label:string, amount:string}>, cod_amount:string, cod_status:string, related:array<int, array{label:string, reference:string}>, receiver:string}|null
      */
     public function getDisplay(): ?array
     {
@@ -110,6 +110,8 @@ class Charges extends Template
             'cod_amount' => $cod > 0 ? $this->money($cod, $currency) : '',
             'cod_status' => $cod > 0 ? $this->store->codStatusLabel((string) ($stored['cod']['payment_status'] ?? '')) : '',
             'related'    => $related,
+            // Who Pigeon Express will hand the parcel to, as it last said.
+            'receiver'   => ShipmentDetailsStore::receiverLine($stored),
         ];
     }
 

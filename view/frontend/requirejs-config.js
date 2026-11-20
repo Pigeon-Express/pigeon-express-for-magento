@@ -3,6 +3,13 @@
  * Mixin adds our delivery/location to shipping payload; location-autocomplete sets window.pigeonexpressCheckoutPayload.
  */
 var config = {
+    // Leaflet 1.9.4 (BSD-2-Clause, see js/lib/leaflet/LICENSE), for the checkout
+    // map. Its UMD build calls an anonymous define(), so it is only ever loaded
+    // through RequireJS under this name, never with a plain script tag. Loaded
+    // on the first "Choose on the map", not with the page.
+    paths: {
+        'pigeonexpress/leaflet': 'PigeonExpress_Shipping/js/lib/leaflet/leaflet'
+    },
     config: {
         mixins: {
             'Magento_Checkout/js/model/shipping-rate-registry': {

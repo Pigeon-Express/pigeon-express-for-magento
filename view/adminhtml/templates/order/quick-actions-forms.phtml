@@ -1,0 +1,201 @@
+<?php
+/**
+ * Quick changes of a shipment the courier already has: one form per change
+ * Pigeon Express allows now, filled from its current values. A change it does
+ * not allow is one line with its reason.
+ *
+ * Drawn by Controller Order/QuickOptions into the "Quick changes" box
+ * (order/quick-actions.phtml); js/quick-actions.js sends each form.
+ *
+ * @var \PigeonExpress\Shipping\Block\Adminhtml\Order\QuickActions $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+
+use PigeonExpress\Shipping\Model\QuickActions;
+
+$peView = $block->getView();
+$pePrefill = (array) ($peView['prefill'] ?? []);
+$peType = (string) ($pePrefill['delivery_type'] ?? 'office');
+
+/**
+ * A search box that keeps the picked id in a hidden field (js/place-search.js).
+ */
+$peSearch = function (string $id, string $name, string $label, string $url, string $value, string $text, string $placeholder, string $dependsOn = '') use ($escaper) {
+    $config = ['url' => $url, 'noResults' => (string) __('No matches found.')];
+    if ($dependsOn !== '') {
+        $config['dependsOn'] = $dependsOn;
+    }
+
+    return '<div class="pe-quick__field">'
+        . '<label class="pe-quick__label" for="' . $escaper->escapeHtmlAttr($id) . '">' . $escaper->escapeHtml($label) . '</label>'
+        . '<div class="pe-quick__search" data-role="pe-search" data-pe-search="' . $escaper->escapeHtmlAttr((string) json_encode($config)) . '">'
+        . '<input type="text" class="admin__control-text" id="' . $escaper->escapeHtmlAttr($id) . '"'
+        . ' name="qa[' . $escaper->escapeHtmlAttr($name) . '_label]" value="' . $escaper->escapeHtmlAttr($text) . '"'
+        . ' placeholder="' . $escaper->escapeHtmlAttr($placeholder) . '" autocomplete="off"/>'
+        . '<input type="hidden" id="' . $escaper->escapeHtmlAttr($id) . '_id" name="qa[' . $escaper->escapeHtmlAttr($name) . '_id]"'
+        . ' value="' . $escaper->escapeHtmlAttr($value) . '"/>'
+        . '</div></div>';
+};
+?>
+<?php if ((string) ($peView['active_reference'] ?? '') !== '') : ?>
+    <p class="pe-quick__unavailable"><?= $escaper->escapeHtml(__(
+        'This shipment was redirected; the parcel travels as shipment %1 now. Use "Refresh status" to move the order '
+        . 'to it; the customer is emailed the new number.',
+        (string) $peView['active_reference']
+    )) ?></p>
+<?php else : ?>
+    <?php foreach ((array) ($peView['actions'] ?? []) as $peKey => $peState) : ?>
+        <?php if (empty($peState['allowed'])) : ?>
+        <div class="pe-quick__action is-unavailable">
+            <span class="pe-quick__name"><?= $escaper->escapeHtml((string) $peState['label']) ?></span>
+            <span class="pe-quick__reason"><?= $escaper->escapeHtml((string) $peState['reason'] !== ''
+                ? (string) $peState['reason']
+                : __('Not possible now.')) ?></span>
+        </div>
+        <?php continue; ?>
+        <?php endif; ?>
+
+        <?php $peServicesEmpty = $peKey === QuickActions::SERVICES && empty($peView['add']) && empty($peView['remove']); ?>
+        <details class="pe-quick__action">
+            <summary class="pe-quick__name"><?= $escaper->escapeHtml((string) $peState['label']) ?></summary>
+
+            <div class="pe-quick__form" data-role="pe-quick-form" data-pe-quick-action="<?= $escaper->escapeHtmlAttr((string) $peKey) ?>">
+                <input type="hidden" name="qa_action" value="<?= $escaper->escapeHtmlAttr((string) $peKey) ?>"/>
+                <input type="hidden" name="qa_reference" value="<?= $escaper->escapeHtmlAttr((string) $peView['reference']) ?>"/>
+                <input type="hidden" name="qa_currency" value="<?= $escaper->escapeHtmlAttr((string) $peView['currency']) ?>"/>
+
+                <?php if ($peKey === QuickActions::CHANGE_DELIVERY) : ?>
+                <div class="pe-quick__field">
+                    <label class="pe-quick__label" for="pe_qa_type"><?= $escaper->escapeHtml(__('Delivery type')) ?></label>
+                    <select class="admin__control-select" id="pe_qa_type" name="qa[delivery_type]" data-role="pe-quick-type">
+                        <?php foreach (QuickActions::DELIVERY_TYPES as $peOption) : ?>
+                        <option value="<?= $escaper->escapeHtmlAttr($peOption) ?>"<?= $peType === $peOption ? ' selected' : '' ?>>
+                            <?= $escaper->escapeHtml($block->getTypeLabel($peOption)) ?>
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div data-pe-qa-for="office">
+                    <?= /* @noEscape: built by $peSearch, which escapes every value */ $peSearch(
+                        'pe_qa_office',
+                        'location',
+                        (string) __('Pigeon Express office'),
+                        $block->getLocationSearchUrl('office'),
+                        $peType === 'office' ? (string) $pePrefill['location_id'] : '',
+                        $peType === 'office' ? (string) $pePrefill['location_label'] : '',
+                        (string) __('- Search by city, name, or address -')
+                    ) ?>
+                </div>
+                <div data-pe-qa-for="locker">
+                    <?= /* @noEscape */ $peSearch(
+                        'pe_qa_locker',
+                        'location',
+                        (string) __('Parcel locker'),
+                        $block->getLocationSearchUrl('locker'),
+                        $peType === 'locker' ? (string) $pePrefill['location_id'] : '',
+                        $peType === 'locker' ? (string) $pePrefill['location_label'] : '',
+                        (string) __('- Search by city, name, or address -')
+                    ) ?>
+                </div>
+                <div data-pe-qa-for="address">
+                    <?= /* @noEscape */ $peSearch(
+                        'pe_qa_city',
+                        'city',
+                        (string) __('City'),
+                        $block->getCitySearchUrl(),
+                        (int) $pePrefill['city_id'] > 0 ? (string) (int) $pePrefill['city_id'] : '',
+                        (string) $pePrefill['city_label'] !== '' || (int) $pePrefill['city_id'] <= 0
+                            ? (string) $pePrefill['city_label']
+                            : (string) __('City #%1', (int) $pePrefill['city_id']),
+                        (string) __('- Search for a city -')
+                    ) ?>
+                    <?= /* @noEscape */ $peSearch(
+                        'pe_qa_street',
+                        'street',
+                        (string) __('Street'),
+                        $block->getStreetSearchUrl(),
+                        (int) $pePrefill['street_id'] > 0 ? (string) (int) $pePrefill['street_id'] : '',
+                        (string) $pePrefill['street_label'] !== '' || (int) $pePrefill['street_id'] <= 0
+                            ? (string) $pePrefill['street_label']
+                            : (string) __('Street #%1', (int) $pePrefill['street_id']),
+                        (string) __('- Search for a street -'),
+                        '#pe_qa_city_id'
+                    ) ?>
+                    <div class="pe-quick__field">
+                        <label class="pe-quick__label" for="pe_qa_info"><?= $escaper->escapeHtml(__('House number, building, entrance, floor')) ?></label>
+                        <input type="text" class="admin__control-text" id="pe_qa_info" name="qa[additional_info]"
+                               value="<?= $escaper->escapeHtmlAttr((string) $pePrefill['additional_info']) ?>"
+                               placeholder="<?= $escaper->escapeHtmlAttr(__('e.g. 12, bl. 2, ent. A, ap. 5')) ?>"/>
+                    </div>
+                </div>
+
+                <p class="pe-quick__note"><?= $escaper->escapeHtml(__(
+                    'Once the courier has the shipment, a new delivery place makes a new shipment with a new number. The '
+                    . 'order then follows the new shipment, and the customer is emailed the new tracking number.'
+                )) ?></p>
+
+                <?php elseif ($peKey === QuickActions::SERVICES) : ?>
+                    <?php if ($peServicesEmpty) : ?>
+                    <p class="pe-quick__note"><?= $escaper->escapeHtml(__(
+                        'Pigeon Express offers no service to add to or remove from this shipment.'
+                    )) ?></p>
+                    <?php endif; ?>
+                    <?php foreach (['add' => __('Add'), 'remove' => __('Remove')] as $peGroup => $peGroupLabel) : ?>
+                        <?php if (!empty($peView[$peGroup])) : ?>
+                        <fieldset class="pe-quick__group">
+                            <legend><?= $escaper->escapeHtml($peGroupLabel) ?></legend>
+                            <?php foreach ((array) $peView[$peGroup] as $peService) : ?>
+                            <label class="pe-quick__check">
+                                <input type="checkbox" name="qa[<?= $escaper->escapeHtmlAttr($peGroup) ?>][]"
+                                       value="<?= $escaper->escapeHtmlAttr((string) $peService['code']) ?>"/>
+                                <span><?= $escaper->escapeHtml((string) $peService['name']) ?></span>
+                            </label>
+                            <?php endforeach; ?>
+                        </fieldset>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+
+                <?php elseif ($peKey === QuickActions::COD) : ?>
+                <div class="pe-quick__field">
+                    <label class="pe-quick__label" for="pe_qa_cod"><?= $escaper->escapeHtml(__('COD amount')) ?></label>
+                    <input type="number" class="admin__control-text pe-quick__amount" id="pe_qa_cod" name="qa[cod_amount]"
+                           min="0" max="<?= (int) QuickActions::COD_MAX ?>" step="0.01"
+                           value="<?= $pePrefill['cod_amount'] !== null ? $escaper->escapeHtmlAttr((string) $pePrefill['cod_amount']) : '' ?>"/>
+                    <span class="pe-quick__hint"><?= $escaper->escapeHtml(__('Leave it empty to remove the cash on delivery.')) ?></span>
+                </div>
+                <label class="pe-quick__check">
+                    <input type="checkbox" name="qa[cod_card]" value="1"<?= !empty($pePrefill['cod_card']) ? ' checked' : '' ?>/>
+                    <span><?= $escaper->escapeHtml(__('The receiver may pay the cash on delivery by card')) ?></span>
+                </label>
+
+                <?php elseif ($peKey === QuickActions::DECLARED_VALUE) : ?>
+                <div class="pe-quick__field">
+                    <label class="pe-quick__label" for="pe_qa_declared"><?= $escaper->escapeHtml(__('Declared value (€)')) ?></label>
+                    <input type="number" class="admin__control-text pe-quick__amount" id="pe_qa_declared" name="qa[declared_value]"
+                           min="0" max="5000" step="0.01"
+                           value="<?= $pePrefill['declared_value'] !== null ? $escaper->escapeHtmlAttr((string) $pePrefill['declared_value']) : '' ?>"/>
+                    <span class="pe-quick__hint"><?= $escaper->escapeHtml(__('Leave it empty to remove the declared value.')) ?></span>
+                </div>
+                <?php endif; ?>
+
+                <?php /* The price of exactly what the form says, hidden again the moment
+                        any of it changes; Confirm is offered only beside it. */ ?>
+                <dl class="pe-summary pe-quick__price" data-role="pe-quick-price" hidden></dl>
+                <p class="pe-quick__message" data-role="pe-quick-message" hidden></p>
+
+                <?php if (!$peServicesEmpty) : ?>
+                <div class="pe-quick__buttons">
+                    <button type="button" class="action-default scalable" data-role="pe-quick-run" data-pe-dry-run="1">
+                        <span><?= $escaper->escapeHtml(__('Show price')) ?></span>
+                    </button>
+                    <button type="button" class="action-default scalable action-primary" data-role="pe-quick-run"
+                            data-pe-dry-run="0" disabled>
+                        <span><?= $escaper->escapeHtml(__('Confirm the change')) ?></span>
+                    </button>
+                </div>
+                <?php endif; ?>
+            </div>
+        </details>
+    <?php endforeach; ?>
+<?php endif; ?>

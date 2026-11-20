@@ -25,6 +25,12 @@ class LocationSearch extends Action implements HttpGetActionInterface
 {
     public const ADMIN_RESOURCE = 'PigeonExpress_Shipping::send_shipment';
 
+    /**
+     * A read-only lookup, so the change of delivery place in Quick changes
+     * may use it too.
+     */
+    public const QUICK_CHANGE_RESOURCE = 'PigeonExpress_Shipping::quick_change';
+
     private const LIMIT = 15;
 
     /** @var JsonFactory */
@@ -50,7 +56,8 @@ class LocationSearch extends Action implements HttpGetActionInterface
 
     protected function _isAllowed(): bool
     {
-        return $this->_authorization->isAllowed(self::ADMIN_RESOURCE);
+        return $this->_authorization->isAllowed(self::ADMIN_RESOURCE)
+            || $this->_authorization->isAllowed(self::QUICK_CHANGE_RESOURCE);
     }
 
     public function execute(): Json

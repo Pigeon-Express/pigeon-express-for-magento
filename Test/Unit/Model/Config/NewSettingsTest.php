@@ -39,6 +39,65 @@ class NewSettingsTest extends TestCase
         $this->assertSame(149, $this->config(['return_to' => 'office', 'return_office_id' => '149'])->getReturnOfficeId());
     }
 
+    public function testTheReturnModeIsOneOfThreeAndAnythingElseIsTheAccount(): void
+    {
+        $this->assertSame('profile', $this->config([])->getReturnTo());
+        $this->assertSame('profile', $this->config(['return_to' => 'warehouse'])->getReturnTo());
+        $this->assertSame('office', $this->config(['return_to' => 'office'])->getReturnTo());
+        $this->assertSame('address', $this->config(['return_to' => ' address '])->getReturnTo());
+    }
+
+    public function testOnlyTheIdOfTheModeInForceIsGiven(): void
+    {
+        $both = ['return_office_id' => '149', 'return_address_id' => '7'];
+
+        $address = $this->config(['return_to' => 'address'] + $both);
+        $this->assertSame(7, $address->getReturnAddressId());
+        $this->assertNull($address->getReturnOfficeId(), 'never an office and an address together');
+
+        $office = $this->config(['return_to' => 'office'] + $both);
+        $this->assertSame(149, $office->getReturnOfficeId());
+        $this->assertNull($office->getReturnAddressId());
+
+        $this->assertNull($this->config(['return_to' => 'profile'] + $both)->getReturnAddressId());
+        $this->assertNull($this->config(['return_to' => 'address', 'return_address_id' => ''])->getReturnAddressId());
+        $this->assertNull($this->config(['return_to' => 'address', 'return_address_id' => '-3'])->getReturnAddressId());
+    }
+
+    public function testReturnDocumentsFollowTheAccountWhileTheChoiceIsOff(): void
+    {
+        $this->assertFalse(ConfigInterface::RETURN_DOCUMENTS_CHOICE, 'the sandbox refuses the fields');
+
+        $config = $this->config([
+            'return_documents_to' => 'office',
+            'return_documents_office_id' => '149',
+            'return_documents_address_id' => '7',
+        ]);
+
+        $this->assertSame('profile', $config->getReturnDocumentsTo());
+        $this->assertNull($config->getReturnDocumentsOfficeId());
+        $this->assertNull($this->config(['return_documents_to' => 'address', 'return_documents_address_id' => '7'])->getReturnDocumentsAddressId());
+    }
+
+    public function testNearestOfficeAndMapAreOffUnlessTurnedOn(): void
+    {
+        $this->assertFalse($this->config([])->isNearestOfficeEnabled());
+        $this->assertFalse($this->config([])->isLocationMapEnabled());
+        $this->assertTrue($this->config(['nearest_office' => '1'])->isNearestOfficeEnabled());
+        $this->assertTrue($this->config(['location_map' => '1'])->isLocationMapEnabled());
+    }
+
+    public function testTheModuleDefaultsLeaveTheNewOptionsOff(): void
+    {
+        $xml = simplexml_load_file(dirname(__DIR__, 4) . '/etc/config.xml');
+        $defaults = $xml->default->carriers->pigeonexpress;
+
+        $this->assertSame('0', (string) $defaults->nearest_office);
+        $this->assertSame('0', (string) $defaults->location_map);
+        $this->assertSame('profile', (string) $defaults->return_to);
+        $this->assertSame('profile', (string) $defaults->return_documents_to);
+    }
+
     public function testEveryPickupTypeIsKnownAndAnythingElseIsTheOffice(): void
     {
         foreach (['office', 'address', 'locker', 'saved_address'] as $type) {

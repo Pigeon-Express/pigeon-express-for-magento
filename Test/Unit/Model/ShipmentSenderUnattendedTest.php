@@ -16,6 +16,7 @@ use PigeonExpress\Shipping\Model\Package\PackageBuilder;
 use PigeonExpress\Shipping\Model\Rate\LocationToApiIdResolver;
 use PigeonExpress\Shipping\Model\Service\ServiceCodesBuilder;
 use PigeonExpress\Shipping\Model\Shipment\AddressForm;
+use PigeonExpress\Shipping\Model\Shipment\ReturnDestination;
 use PigeonExpress\Shipping\Model\Shipment\WhoPaysFacts;
 use PigeonExpress\Shipping\Model\ShipmentSender;
 
@@ -31,6 +32,24 @@ class ShipmentSenderUnattendedTest extends TestCase
 
     /** @var float|null */
     private $goodsValue;
+
+    /** @var array<string, mixed> What the services builder answers. */
+    private $serviceCodes = [];
+
+    public function testTheReturnDestinationIsDecidedWithTheServicesOfTheBody(): void
+    {
+        // A documents destination may go only with a service that brings documents back.
+        $this->serviceCodes = ['service_return_documents' => true];
+        $destination = $this->createMock(ReturnDestination::class);
+        $destination->expects($this->once())->method('fromSettings')
+            ->with(1, ['service_return_documents' => true])
+            ->willReturn(['return_office_id' => 149, 'return_documents_office_id' => 77]);
+
+        $payload = $this->sender(['returnDestination' => $destination], 'office')->payloadFor($this->order())['payload'];
+
+        $this->assertSame(149, $payload['return_office_id']);
+        $this->assertSame(77, $payload['return_documents_office_id']);
+    }
 
     public function testAFixedPriceCodOrderIsCheckedAsAFixedPrice(): void
     {
@@ -183,7 +202,7 @@ class ShipmentSenderUnattendedTest extends TestCase
         $services->method('build')->willReturnCallback(function (...$buildArgs): array {
             $this->goodsValue = $buildArgs[5];
 
-            return [];
+            return $this->serviceCodes;
         });
 
         return (new ObjectManager($this))->getObject(ShipmentSender::class, $args + [

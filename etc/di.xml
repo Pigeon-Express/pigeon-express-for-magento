@@ -207,6 +207,16 @@
         <arguments>
             <argument name="eventManager" xsi:type="object">Magento\Framework\Event\ManagerInterface</argument>
             <argument name="orderRepository" xsi:type="object">Magento\Sales\Api\OrderRepositoryInterface</argument>
+            <!-- The cancel lock, and the details read after a 422 (a return or a redirect). -->
+            <argument name="lock" xsi:type="object">PigeonExpress\Shipping\Model\Shipment\OrderLock</argument>
+            <argument name="details" xsi:type="object">PigeonExpress\Shipping\Model\Status\ShipmentDetailsStore\Proxy</argument>
+        </arguments>
+    </type>
+    <!-- A redirected shipment moves the order to the new one before its status
+         is recorded (Model\Shipment\RedirectFollower). Proxy: needed only then. -->
+    <type name="PigeonExpress\Shipping\Model\Status\StatusRefresher">
+        <arguments>
+            <argument name="follower" xsi:type="object">PigeonExpress\Shipping\Model\Shipment\RedirectFollower\Proxy</argument>
         </arguments>
     </type>
     <!-- Sales > Pigeon Express courier requests listing. -->

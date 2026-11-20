@@ -23,7 +23,7 @@ define([
 
             event.preventDefault();
 
-            confirm({
+            var options = {
                 title: config.title || $t('Are you sure?'),
                 content: config.message || $t('This action cannot be undone.'),
                 actions: {
@@ -32,7 +32,27 @@ define([
                         $form.trigger('submit');
                     }
                 }
-            });
+            };
+
+            // "Cancel" / "OK" under a title that says "Cancel ..." reads both
+            // ways, so the buttons can say what each one does.
+            if (config.confirmText && config.keepText) {
+                options.buttons = [{
+                    text: config.keepText,
+                    'class': 'action-secondary action-dismiss',
+                    click: function (clickEvent) {
+                        this.closeModal(clickEvent);
+                    }
+                }, {
+                    text: config.confirmText,
+                    'class': 'action-primary action-accept',
+                    click: function (clickEvent) {
+                        this.closeModal(clickEvent, true);
+                    }
+                }];
+            }
+
+            confirm(options);
 
             return false;
         });

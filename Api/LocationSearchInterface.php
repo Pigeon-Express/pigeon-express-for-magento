@@ -67,4 +67,37 @@ interface LocationSearchInterface
      * @return array<int, array{id: int, name: string, postcode: string, label: string, count: int}>
      */
     public function searchCitiesWithLocations(string $type, string $query, int $limit = 20): array;
+
+    /**
+     * Every active office or locker that has map coordinates, by city then
+     * name, in the picker row shape plus the point. Unpaged. Rows without
+     * coordinates (all lockers in the test environment) or with 0,0 are left
+     * out, so an empty list means there is nothing to put on a map.
+     *
+     * @param string $type 'office' or 'aps'
+     * @return array<int, array{id: int, name: string, address: string, city: string, postcode: string, region_id: int|null, type: string, hours: string, latitude: float, longitude: float}>
+     */
+    public function listWithCoordinates(string $type, int $storeId = 0): array;
+
+    /**
+     * The active locations of a type with these Pigeon Express ids (api_id),
+     * in the current environment, in the order the ids were given (a nearest
+     * search keeps its order). Ids not in the table, inactive or of the other
+     * environment are left out. Picker row shape plus `api_id` and the point
+     * (latitude / longitude null when the row has none).
+     *
+     * @param string $type 'office' or 'aps'
+     * @param array<int, int|string> $apiIds
+     * @return array<int, array{id: int, name: string, address: string, city: string, postcode: string, region_id: int|null, type: string, hours: string, api_id: int, latitude: float|null, longitude: float|null}>
+     */
+    public function rowsByApiIds(string $type, array $apiIds, int $storeId = 0): array;
+
+    /**
+     * The Pigeon Express code of a locker by its entity_id (the id the
+     * checkout and the order store), or null when the current environment has
+     * no such locker or the sync has not filled the code. Inactive lockers
+     * keep their code. Free boxes are looked up by it
+     * (ShipmentClientInterface::lockerAvailability()).
+     */
+    public function getApsCode(int $entityId): ?string;
 }

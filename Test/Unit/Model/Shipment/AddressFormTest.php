@@ -189,6 +189,32 @@ class AddressFormTest extends TestCase
         $this->form->validate($this->fields(['street' => 'бул. Витоша']), 1);
     }
 
+    public function testTheCustomersPostcodeIsPassedToTheLookup(): void
+    {
+        // In a town with two streets of one name the postcode often tells which.
+        $this->cityResolves();
+        $this->resolver->expects($this->once())
+            ->method('matchStreet')
+            ->with(self::SOFIA, 'Витоша', 1, '', '1407')
+            ->willReturn(null);
+
+        $this->form->validate($this->fields(['postal_code' => ' 1407 ']), 1);
+    }
+
+    public function testAPostcodeFilledFromTheCityIsNotTakenForTheCustomers(): void
+    {
+        // The city's own postcode says nothing about which street was meant.
+        $this->cityResolves();
+        $this->resolver->expects($this->once())
+            ->method('matchStreet')
+            ->with(self::SOFIA, 'Витоша', 1, '', '')
+            ->willReturn(null);
+
+        $fields = $this->form->validate($this->fields(['postal_code' => '']), 1)['fields'];
+
+        $this->assertSame('1000', $fields['postal_code'], 'the form still fills it from the city');
+    }
+
     public function testAMissingNumberIsNotReportedTwiceWhenTheStreetIsAlreadyWrong(): void
     {
         // Two red messages for one broken street reads as two problems.

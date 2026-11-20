@@ -9,15 +9,21 @@ namespace PigeonExpress\Shipping\Test\Unit\Model;
 
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\TestFramework\Unit\Helper\ObjectManager;
+use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Sales\Model\Order;
 use PHPUnit\Framework\TestCase;
 use PigeonExpress\DTO\Response\ShipmentDetails;
+use PigeonExpress\Shipping\Api\ConfigInterface;
+use PigeonExpress\Shipping\Api\LocationSearchInterface;
 use PigeonExpress\Shipping\Api\ShipmentClientInterface;
 use PigeonExpress\Shipping\Exception\NotEditableException;
 use PigeonExpress\Shipping\Exception\ReplayedShipmentException;
+use PigeonExpress\Shipping\Logger\Logger;
+use PigeonExpress\Shipping\Model\Account\SavedAddresses;
 use PigeonExpress\Shipping\Model\ResourceModel\Shipment as ShipmentResource;
 use PigeonExpress\Shipping\Model\Shipment;
 use PigeonExpress\Shipping\Model\Shipment\OrderLock;
+use PigeonExpress\Shipping\Model\Shipment\ReturnDestination;
 use PigeonExpress\Shipping\Model\ShipmentCanceller;
 use PigeonExpress\Shipping\Model\ShipmentEditor;
 use PigeonExpress\Shipping\Model\ShipmentFactory;
@@ -143,7 +149,199 @@ class ShipmentEditorTest extends TestCase
             ->update($this->order(), []);
     }
 
-    private function row(string $code, string $status = 'shipment_registered'): Shipment
+    public function testAChangeKeepsTheReturnDestinationTheShipmentWasCreatedWith(): void
+    {
+        // Created with the return office; the settings now say a saved address.
+        $sent = [];
+        $client = $this->createMock(ShipmentClientInterface::class);
+        $client->method('update')->willReturnCallback(static function (string $ref, array $payload) use (&$sent) {
+            $sent = $payload;
+
+            return ['details' => ShipmentDetails::fromArray([]), 'replay' => ''];
+        });
+        $sender = $this->createMock(ShipmentSender::class);
+        $sender->method('payloadFor')->willReturn([
+            'payload' => [
+                'receiver_phone'       => '+359888111222',
+                'return_at_my_expense' => true,
+                'return_address_id'    => 130,
+            ],
+            'fields'  => [],
+        ]);
+        $row = $this->row('shipment_registered', 'shipment_registered', [
+            'pickup_type'      => 'office',
+            'return_office_id' => 149,
+        ]);
+
+        $result = $this->editor($client, $sender, $row, null, null, null, null, [
+            'returnDestination' => $this->returnDestination([130]),
+        ])->update($this->order(), []);
+
+        self::assertSame(149, $sent['return_office_id']);
+        self::assertArrayNotHasKey('return_address_id', $sent, 'an office or an address, never both');
+        self::assertTrue($sent['return_at_my_expense'], 'who pays for a return follows the setting');
+        $stored = json_decode((string) $result->getPayload(), true);
+        self::assertSame(149, $stored['return_office_id']);
+    }
+
+    public function testARecordedAddressThatLeftTheAccountIsDroppedAndTheCommentSaysSo(): void
+    {
+        $sent = null;
+        $client = $this->createMock(ShipmentClientInterface::class);
+        $client->method('update')->willReturnCallback(static function (string $ref, array $payload) use (&$sent) {
+            $sent = $payload;
+
+            return ['details' => ShipmentDetails::fromArray([]), 'replay' => ''];
+        });
+        $sender = $this->createMock(ShipmentSender::class);
+        $sender->method('payloadFor')->willReturn([
+            'payload' => ['receiver_phone' => '+359888111222', 'return_office_id' => 55],
+            'fields'  => [],
+        ]);
+        $row = $this->row('shipment_registered', 'shipment_registered', ['return_address_id' => 131]);
+
+        $comment = '';
+        $order = $this->getMockBuilder(Order::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['addCommentToStatusHistory'])
+            ->getMock();
+        $order->method('addCommentToStatusHistory')->willReturnCallback(
+            static function ($text) use (&$comment, $order) {
+                $comment = (string) $text;
+
+                return $order;
+            }
+        );
+        $orders = $this->createMock(OrderRepositoryInterface::class);
+        $orders->method('get')->with(37)->willReturn($order);
+
+        $this->editor($client, $sender, $row, null, null, null, null, [
+            'returnDestination' => $this->returnDestination([130]),
+            'orderRepository'   => $orders,
+        ])->update($this->order(), []);
+
+        self::assertIsArray($sent);
+        self::assertSame([], array_intersect_key($sent, array_flip(ReturnDestination::KEYS)));
+        self::assertStringContainsString('no longer in your Pigeon Express account', $comment);
+    }
+
+    public function testARecordedAddressIsKeptAndNotReportedWhenTheListCannotBeRead(): void
+    {
+        $sent = null;
+        $client = $this->createMock(ShipmentClientInterface::class);
+        $client->method('update')->willReturnCallback(static function (string $ref, array $payload) use (&$sent) {
+            $sent = $payload;
+
+            return ['details' => ShipmentDetails::fromArray([]), 'replay' => ''];
+        });
+        $sender = $this->createMock(ShipmentSender::class);
+        $sender->method('payloadFor')->willReturn([
+            'payload' => ['receiver_phone' => '+359888111222', 'return_office_id' => 55],
+            'fields'  => [],
+        ]);
+        $row = $this->row('shipment_registered', 'shipment_registered', ['return_address_id' => 131]);
+
+        $comment = '';
+        $order = $this->getMockBuilder(Order::class)
+            ->disableOriginalConstructor()
+            ->onlyMethods(['addCommentToStatusHistory'])
+            ->getMock();
+        $order->method('addCommentToStatusHistory')->willReturnCallback(
+            static function ($text) use (&$comment, $order) {
+                $comment .= (string) $text;
+
+                return $order;
+            }
+        );
+        $orders = $this->createMock(OrderRepositoryInterface::class);
+        $orders->method('get')->willReturn($order);
+
+        // The addresses call failed and nothing was cached.
+        $result = $this->editor($client, $sender, $row, null, null, null, null, [
+            'returnDestination' => $this->returnDestination([], false),
+            'orderRepository'   => $orders,
+        ])->update($this->order(), []);
+
+        self::assertIsArray($sent);
+        self::assertSame(131, $sent['return_address_id']);
+        self::assertArrayNotHasKey('return_office_id', $sent);
+        self::assertStringNotContainsString('no longer in your Pigeon Express account', $comment);
+        $stored = json_decode((string) $result->getPayload(), true);
+        self::assertSame(131, $stored['return_address_id'], 'the record keeps it too');
+    }
+
+    public function testAKeptAddressThatIsStillListedIsNotReported(): void
+    {
+        $payload = ['return_office_id' => 55];
+        $dropped = $this->editor(null, null, null, null, null, null, null, [
+            'returnDestination' => $this->returnDestination([131]),
+        ])->keepRecordedReturn($payload, ['return_address_id' => 131], 1);
+
+        self::assertFalse($dropped);
+        self::assertSame(['return_address_id' => 131], $payload);
+    }
+
+    public function testTheDocumentsDestinationIsKeptOnlyWhileTheChangeCarriesADocumentsService(): void
+    {
+        $editor = $this->editor(null, null, null, null, null, null, null, [
+            'returnDestination' => $this->returnDestination([]),
+        ]);
+        $recorded = ['return_office_id' => 149, 'return_documents_office_id' => 77];
+
+        $with = ['service_codes' => ['service_return_documents' => true]];
+        $editor->keepRecordedReturn($with, $recorded, 1);
+        self::assertSame(77, $with['return_documents_office_id']);
+
+        $without = ['service_codes' => ['cod_amount' => 10.0], 'return_documents_office_id' => 77];
+        $editor->keepRecordedReturn($without, $recorded, 1);
+        self::assertSame(149, $without['return_office_id']);
+        self::assertArrayNotHasKey('return_documents_office_id', $without);
+    }
+
+    public function testAShipmentWithNoStoredBodyKeepsWhatTheSettingsGave(): void
+    {
+        $payload = ['return_office_id' => 55];
+        $dropped = $this->editor(null, null, null, null, null, null, null, [
+            'returnDestination' => $this->returnDestination([]),
+        ])->keepRecordedReturn($payload, [], 1);
+
+        self::assertFalse($dropped);
+        self::assertSame(['return_office_id' => 55], $payload);
+    }
+
+    public function testTheChangeLinesSayNothingAboutAKeptDestination(): void
+    {
+        $before = ['receiver_name' => 'A', 'return_office_id' => 149];
+
+        self::assertSame([], $this->editor()->describeChanges($before, $before));
+    }
+
+    /**
+     * @param int[] $savedAddressIds The saved addresses the account lists
+     * @param bool $readable False when the list could not be read at all
+     */
+    private function returnDestination(array $savedAddressIds, bool $readable = true): ReturnDestination
+    {
+        $addresses = $this->createMock(SavedAddresses::class);
+        $addresses->method('find')->willReturnCallback(static function (int $id) use ($savedAddressIds): ?array {
+            return in_array($id, $savedAddressIds, true) ? ['id' => $id, 'label' => 'Address ' . $id] : null;
+        });
+        $addresses->method('isKnown')->willReturnCallback(static function (int $id) use ($savedAddressIds, $readable): ?bool {
+            return in_array($id, $savedAddressIds, true) ? true : ($readable ? false : null);
+        });
+
+        return new ReturnDestination(
+            $this->createMock(ConfigInterface::class),
+            $addresses,
+            $this->createMock(LocationSearchInterface::class),
+            $this->createMock(Logger::class)
+        );
+    }
+
+    /**
+     * @param array<string, mixed>|null $payload The stored body
+     */
+    private function row(string $code, string $status = 'shipment_registered', ?array $payload = null): Shipment
     {
         $row = $this->getMockBuilder(Shipment::class)
             ->disableOriginalConstructor()
@@ -156,7 +354,7 @@ class ShipmentEditorTest extends TestCase
             'reference_number' => 'PGN-1',
             'status'           => $status,
             'status_code'      => $code !== '' ? $code : null,
-            'payload'          => json_encode(['pickup_type' => 'office', 'pickup_office_id' => 149]),
+            'payload'          => json_encode($payload ?? ['pickup_type' => 'office', 'pickup_office_id' => 149]),
         ]);
 
         return $row;
@@ -181,7 +379,8 @@ class ShipmentEditorTest extends TestCase
         ?OrderLock $lock = null,
         ?ShipmentResource $resource = null,
         ?ShipmentDetailsStore $details = null,
-        ?StatusRefresher $refresher = null
+        ?StatusRefresher $refresher = null,
+        array $extra = []
     ): ShipmentEditor {
         if ($lock === null) {
             $lock = $this->createMock(OrderLock::class);
@@ -196,7 +395,7 @@ class ShipmentEditorTest extends TestCase
             return $row;
         });
 
-        return (new ObjectManager($this))->getObject(ShipmentEditor::class, [
+        return (new ObjectManager($this))->getObject(ShipmentEditor::class, $extra + [
             'sender'          => $sender ?? $this->createMock(ShipmentSender::class),
             'client'          => $client ?? $this->createMock(ShipmentClientInterface::class),
             'canceller'       => $canceller,
