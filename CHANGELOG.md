@@ -62,9 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A redirect moves the order to the new waybill, replaces the tracking number
   on the Magento shipment and emails the customer the new number.
 - Parcel locker free boxes shown in the order form.
-- Receiver name and phone can be changed from the order form.
+- Receiver name and phone in the shipment details.
 - Returns and redirects say why they cannot be cancelled.
-- Return to a saved address, and a separate place for return documents.
+- Return to a saved address.
 - Editing a shipment keeps the recorded return destination.
 - Streets are matched by postcode when the city has several streets with the
   same name.
