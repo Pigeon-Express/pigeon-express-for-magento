@@ -72,11 +72,47 @@ define([
             this.locations = ko.observableArray([]);
             this.locationFilter = ko.observable('');
 
+            // The nearest locations ("Nearest office") and the map button.
+            // Both stay empty while their setting is off.
+            this.nearestRows = ko.observableArray([]);
+
+            // One list: the nearest locations first, each with its distance,
+            // then the city's own list without them, so no location is listed
+            // twice. Before a city is chosen the nearest are the whole list.
+            // Without nearest rows this is the city's list, as it always was.
+            this.nearestIds = ko.pureComputed(function () {
+                var ids = {};
+
+                this.nearestRows().forEach(function (row) {
+                    if (row && row.id !== undefined && row.id !== null) {
+                        ids[String(row.id)] = true;
+                    }
+                });
+
+                return ids;
+            }, this);
+
+            this.pickerRows = ko.pureComputed(function () {
+                var near = this.nearestRows(),
+                    ids;
+
+                if (!near.length) {
+                    return this.locations();
+                }
+
+                ids = this.nearestIds();
+
+                return near.concat(this.locations().filter(function (location) {
+                    return !ids[String(location.id)];
+                }));
+            }, this);
+
             // A city can hold 84 lockers, which is too many to scroll blindly,
-            // so the list stays filterable. Every one of them is still in it.
+            // so the list stays filterable. Every one of them is still in it,
+            // and so are the nearest, with their distance.
             this.filteredLocations = ko.computed(function () {
                 var needle = (this.locationFilter() || '').toLowerCase().trim(),
-                    all = this.locations();
+                    all = this.pickerRows();
 
                 if (!needle) {
                     return all;
@@ -88,9 +124,6 @@ define([
                 });
             }, this);
 
-            // The nearest locations on top of the picker, and the map button.
-            // Both stay empty while their setting is off.
-            this.nearestRows = ko.observableArray([]);
             this.mapAvailable = ko.observable(false);
             this.mapBusy = ko.observable(false);
             this.mapFailed = ko.observable(false);
@@ -137,7 +170,7 @@ define([
         /**
          * Fetch what the extras need for the method now chosen: the map's
          * locations (the button shows only when some have a position) and the
-         * nearest list, which asks the browser for the location. Nothing at
+         * nearest rows, which ask the browser for the location. Nothing at
          * all while both settings are off or the method is not ours.
          */
         loadExtras: function () {
@@ -169,9 +202,10 @@ define([
         },
 
         /**
-         * The nearest list. The browser is asked for the location only while
-         * the search is shown (nothing chosen yet, or after Change); the answer
-         * is kept for the page, so Change shows the list again at once.
+         * The nearest rows at the top of the list. The browser is asked for the
+         * location only while the list is shown (nothing chosen yet, or after
+         * Change); the answer is kept for the page, so Change shows them again
+         * at once.
          */
         showNearest: function () {
             var self = this,
@@ -188,6 +222,26 @@ define([
                     self.nearestRows(Array.isArray(rows) ? rows : []);
                 }
             });
+        },
+
+        /**
+         * Whether a row of the list is one of the nearest. Only these carry a
+         * distance; a nearest location that is also in the city's list is
+         * shown once, as a nearest row.
+         */
+        isNearestRow: function (location) {
+            return !!location && location.id !== undefined && location.id !== null &&
+                !!this.nearestIds()[String(location.id)];
+        },
+
+        /**
+         * The last nearest row with the rest of the list after it: a thin line
+         * under it is where the city's own list begins.
+         */
+        endsNearest: function (index) {
+            var rows = this.filteredLocations();
+
+            return this.isNearestRow(rows[index]) && index + 1 < rows.length && !this.isNearestRow(rows[index + 1]);
         },
 
         /**
@@ -416,7 +470,7 @@ define([
          */
         resultCountLabel: function () {
             var shown = this.filteredLocations().length,
-                all = this.locations().length;
+                all = this.pickerRows().length;
 
             if (shown === all) {
                 return $t('%1 to choose from').replace('%1', all);
@@ -609,7 +663,8 @@ define([
             this.resultsVisible(false);
             this.updateCheckoutPayload();
             this.updateQuoteAddressStreet('');
-            // The search is back, so is the nearest list (kept for the page).
+            // The list is back, and so are the nearest rows on top of it
+            // (kept for the page).
             this.showNearest();
         },
 

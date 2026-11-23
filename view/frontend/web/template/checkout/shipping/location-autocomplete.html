@@ -11,36 +11,14 @@
   start: the second says what it is waiting for rather than appearing once the
   first is answered, because a form that grows under the cursor is hard to judge
   the length of.
+
+  "Nearest office": when the shopper shared their location, the five nearest
+  lead the same list, each with its distance, and the city's own list follows
+  without them. Before a city is chosen they are the whole list, so the shopper
+  can pick without choosing one. Nothing is chosen for them.
 -->
 <div class="pe-panel pigeonexpress-location-autocomplete" data-bind="visible: isVisible(), if: isVisible()">
     <div class="pe-grid">
-
-        <!-- "Nearest office": the five nearest the shopper, when they shared
-             their location. Nothing is chosen for them; a click is the same
-             pick as one from the list below. Gone once a location is chosen,
-             back after Change. -->
-        <!-- ko if: !selectedLocation() && nearestRows().length -->
-        <div class="field pe-span-12 pe-nearest">
-            <span class="pe-label-row">
-                <span class="label pe-nearest-heading"
-                      data-bind="attr: { id: uid + '-nearest' }, text: texts.nearestHeading"></span>
-            </span>
-            <ul class="pe-nearest-list" data-bind="attr: { 'aria-labelledby': uid + '-nearest' }, foreach: nearestRows">
-                <li>
-                    <button type="button"
-                            class="pe-nearest-item"
-                            data-bind="click: $parent.selectLocation.bind($parent, $data)">
-                        <span class="pe-nearest-top">
-                            <span class="pigeonexpress-suggest-name" data-bind="text: $data.name"></span>
-                            <span class="pe-nearest-distance"
-                                  data-bind="visible: $data.distance, text: $data.distance"></span>
-                        </span>
-                        <span class="pigeonexpress-suggest-meta" data-bind="text: $parent.locationMeta($data)"></span>
-                    </button>
-                </li>
-            </ul>
-        </div>
-        <!-- /ko -->
 
         <!-- Once a pickup point is chosen the city has done its work and only
              gets in the way of the answer. Hidden rather than torn down, so
@@ -119,20 +97,22 @@
 
                 <!-- ko ifnot: selectedLocation() -->
 
-                <!-- ko ifnot: selectedCity() -->
+                <!-- ko if: !selectedCity() && !nearestRows().length -->
                 <p class="pe-message _warn" data-bind="i18n: 'Choose a city first'"></p>
                 <!-- /ko -->
 
-                <!-- ko if: selectedCity() -->
+                <!-- ko if: selectedCity() || nearestRows().length -->
                 <p class="pe-hint" data-bind="visible: isLoading, i18n: 'Looking...'"></p>
 
+                <!-- The filter and the count belong to a city's list; the five
+                     nearest alone need neither. -->
                 <input type="text"
                        class="input-text pigeonexpress-location-filter"
                        data-bind="
                            attr: { id: uid, placeholder: getPlaceholder() },
                            value: locationFilter,
                            valueUpdate: 'afterkeydown',
-                           visible: !isLoading() && locations().length > 0
+                           visible: selectedCity() && !isLoading() && pickerRows().length > 0
                        "
                        autocomplete="off" />
 
@@ -141,22 +121,36 @@
                     role="listbox">
                     <li role="option"
                         class="pigeonexpress-suggest-item"
-                        data-bind="click: $parent.selectLocation.bind($parent, $data)">
+                        data-bind="css: { '-nearest': $parent.isNearestRow($data), '-nearest-end': $parent.endsNearest($index()) },
+                                   click: $parent.selectLocation.bind($parent, $data)">
+                        <!-- ko if: $parent.isNearestRow($data) -->
+                        <!-- ko if: $index() === 0 -->
+                        <span class="pe-nearest-label" data-bind="text: $parent.texts.nearestHeading"></span>
+                        <!-- /ko -->
+                        <span class="pe-nearest-top">
+                            <span class="pigeonexpress-suggest-name" data-bind="text: $data.name"></span>
+                            <span class="pe-nearest-distance"
+                                  data-bind="visible: $data.distance, text: $data.distance"></span>
+                        </span>
+                        <span class="pigeonexpress-suggest-meta" data-bind="text: $parent.locationMeta($data)"></span>
+                        <!-- /ko -->
+                        <!-- ko ifnot: $parent.isNearestRow($data) -->
                         <span class="pigeonexpress-suggest-name" data-bind="text: $data.name"></span>
                         <span class="pigeonexpress-suggest-meta" data-bind="text: $data.address"></span>
+                        <!-- /ko -->
                     </li>
                 </ul>
 
                 <p class="pe-hint"
-                   data-bind="visible: !isLoading() && filteredLocations().length > 0,
+                   data-bind="visible: selectedCity() && !isLoading() && filteredLocations().length > 0,
                               text: resultCountLabel()"></p>
 
                 <p class="pe-message _warn"
-                   data-bind="visible: !isLoading() && locations().length > 0 && filteredLocations().length === 0,
+                   data-bind="visible: !isLoading() && pickerRows().length > 0 && filteredLocations().length === 0,
                               i18n: 'Nothing here matches. Clear the filter to see them all.'"></p>
 
                 <p class="pe-message _warn"
-                   data-bind="visible: !isLoading() && locations().length === 0,
+                   data-bind="visible: selectedCity() && !isLoading() && locations().length === 0,
                               i18n: 'Pigeon Express has nowhere to collect from in this city.'"></p>
                 <!-- /ko -->
 

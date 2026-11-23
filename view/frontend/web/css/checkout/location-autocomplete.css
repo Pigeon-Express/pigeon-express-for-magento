@@ -112,55 +112,16 @@ body.pigeonexpress-shipping-active .shipping-address-item:not(:last-child) {
 
 /* -- Nearest to you ("Nearest office" setting) ---------------------------- */
 
-/* A short list that stands in the page, above the city: the five nearest the
-   shopper, each a button, with the distance on the right of the name. */
-.pigeonexpress-location-autocomplete .pe-nearest-list {
-    background: #fff;
-    border: 1px solid #c2c2c2;
-    border-radius: 2px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.pigeonexpress-location-autocomplete .pe-nearest-list > li {
-    border-bottom: 1px solid #f0f0f0;
-    margin: 0;
-    padding: 0;
-}
-
-.pigeonexpress-location-autocomplete .pe-nearest-list > li:last-child {
-    border-bottom: 0;
-}
-
-/* Luma styles every button as a grey action; this one is a row of a list. */
-.pigeonexpress-location-autocomplete .pe-nearest-item {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-    color: #333;
-    cursor: pointer;
+/* The five nearest lead the list of pickup points rather than standing apart
+   from it: the distance sits on the right of the name, a small label on the
+   first says why they are there, and a thin line under the last is where the
+   city's own list begins. */
+.pigeonexpress-location-autocomplete .pe-nearest-label {
+    color: #666;
     display: block;
-    font: inherit;
-    font-weight: 400;
-    line-height: 1.4;
-    margin: 0;
-    padding: .9rem 1.2rem;
-    text-align: left;
-    width: 100%;
-}
-
-.pigeonexpress-location-autocomplete .pe-nearest-item:hover,
-.pigeonexpress-location-autocomplete .pe-nearest-item:focus {
-    background: #e0f6fe;
-    border: 0;
-    color: #333;
-}
-
-.pigeonexpress-location-autocomplete .pe-nearest-item:focus-visible {
-    outline: 2px solid #006bb4;
-    outline-offset: -2px;
+    font-size: 1.1rem;
+    line-height: 1.3;
+    margin-bottom: .2rem;
 }
 
 .pigeonexpress-location-autocomplete .pe-nearest-top {
@@ -171,6 +132,7 @@ body.pigeonexpress-shipping-active .shipping-address-item:not(:last-child) {
 
 .pigeonexpress-location-autocomplete .pe-nearest-top .pigeonexpress-suggest-name {
     flex: 1 1 auto;
+    min-width: 0;
 }
 
 .pigeonexpress-location-autocomplete .pe-nearest-distance {
@@ -179,6 +141,10 @@ body.pigeonexpress-shipping-active .shipping-address-item:not(:last-child) {
     font-size: 1.3rem;
     font-weight: 600;
     white-space: nowrap;
+}
+
+.pigeonexpress-location-autocomplete .pigeonexpress-suggest-item.-nearest-end {
+    border-bottom-color: #adadad;
 }
 
 /* -- Choose on the map ("Map of offices and lockers" setting) ------------- */
