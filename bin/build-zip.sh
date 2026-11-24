@@ -149,8 +149,11 @@ fi
 
 # The archive must be able to reach the carrier. Checking the entry class is
 # present catches a vendoring step that silently copied nothing.
+# The listing is read once: with pipefail, `grep -q` closing the pipe early
+# turns a successful match into a failed pipeline.
+ARCHIVE_LISTING="$(unzip -Z1 "$OUT_FILE" | sed "s|^$PACKAGE_NAME/||")"
 for required in "$SDK_DEST_REL/src/PigeonExpress.php" "$SDK_DEST_REL/src/Configuration.php"; do
-  if ! unzip -Z1 "$OUT_FILE" | sed "s|^$PACKAGE_NAME/||" | grep -qx "$required"; then
+  if ! grep -qx "$required" <<<"$ARCHIVE_LISTING"; then
     echo "REFUSING TO SHIP: the archive has no $required, so it cannot call the API."
     rm -f "$OUT_FILE"
     exit 1
